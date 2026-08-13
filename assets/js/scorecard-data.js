@@ -57,6 +57,10 @@ RWG.scorecardData = (function () {
     teardown();
     started = true;
 
+    // Money follows the case rate, then the (possibly overridden) default —
+    // wake the rates listener wherever the cases wake. Idempotent.
+    if (RWG.scorecard && RWG.scorecard.initRates) RWG.scorecard.initRates();
+
     // Cases: the whole team (client names visible to all, per the current model).
     unsubs.push(db().collection('cases').onSnapshot(
       s => { cache.cases = s.docs.map(d => Object.assign({ recordId: d.id }, d.data())); onChange(); },

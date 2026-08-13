@@ -141,6 +141,7 @@ RWG.pipelines = (function () {
   return {
     DEFAULTS, init,
     pipelines, pipeline, pipelineForProduct, lostReasons,
-    stageOf, bucketOf, stageLabel, boardStages, stageForCase, neighborStage
+    stageOf, bucketOf, stageLabel, boardStages, stageForCase, neighborStage,
+    current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();

@@ -285,6 +285,7 @@ RWG.wf = (function () {
   return {
     DEFAULTS, init,
     templates, template, resolveOwner,
-    launch, autoLaunch, hasRun, blockers, instancesFor
+    launch, autoLaunch, hasRun, blockers, instancesFor,
+    current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();

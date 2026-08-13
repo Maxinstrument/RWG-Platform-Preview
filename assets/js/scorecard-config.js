@@ -151,11 +151,36 @@ RWG.scorecard = (function () {
 
      A rate of 0/null/'' counts as unset: zeroing a rate is always a
      clearing, never a real commission schedule. */
-  function defaultRate(prodId) {
+  function builtinRate(prodId) {
     if (FYC_PRODUCTS.indexOf(prodId) >= 0) return COMMISSION_RATE;
     if (prodId === 'annuity') return ANNUITY_REVENUE_RATE;
     if (prodId === 'inv') return INVESTMENT_REVENUE_RATE;
     return null;   // ltc, plan: the amount typed IS the money, no rate
+  }
+
+  /* Settings (phase 5.5) can override a DEFAULT rate per product, via
+     config/rates. An override steers every case that carries no rate of
+     its own — including old open ones, which is said out loud in the
+     editor. The built-ins above stay in code and reproduce every
+     historical number the moment an override is cleared. Cases closed
+     through the close review are frozen in their `applied` snapshot and
+     never move either way. */
+  let RATE_OVERRIDES = null;
+  let ratesUnsub = null;
+  function initRates() {
+    if (ratesUnsub || !window.RWG || !RWG.fb) return;
+    ratesUnsub = RWG.fb.db.collection('config').doc('rates').onSnapshot(
+      d => {
+        RATE_OVERRIDES = (d.exists && d.data() && d.data().value) || null;
+        if (RWG.app && RWG.app.renderMain) RWG.app.renderMain();
+      },
+      e => console.error('rates config listener:', e && e.message));
+  }
+  const rateOverrides = () => RATE_OVERRIDES;
+
+  function defaultRate(prodId) {
+    if (RATE_OVERRIDES && Number(RATE_OVERRIDES[prodId]) > 0) return Number(RATE_OVERRIDES[prodId]);
+    return builtinRate(prodId);
   }
   function caseRate(c) {
     const r = c && c.rate != null && c.rate !== '' ? Number(c.rate) : 0;
@@ -370,7 +395,8 @@ RWG.scorecard = (function () {
     FYC_PRODUCTS, PREMIUM_PRODUCTS, CLUB_PRODUCTS, countsForClub,
     fyc, annualizedPremium, monthlyPremium, revenue, weightedProduction,
     INPUTS, inputFor, usesAum, derive, normalizeMoney, dataWarnings,
-    defaultRate, caseRate, caseAnnualizedPremium, caseRevenue, deriveCase,
+    defaultRate, builtinRate, initRates, rateOverrides,
+    caseRate, caseAnnualizedPremium, caseRevenue, deriveCase,
     CHAIRMAN, FYC_PER_WEEK_AT_TARGET, ANNUALIZED_PREMIUM_PER_WEEK_AT_TARGET,
     ACTIVITY_POINTS, WEEKLY_MIN, WEEKLY_MIN_PARTNER,
     AGENT_GOALS, goalsFor, firmShare, scorecardRole, weeklyFloor,
