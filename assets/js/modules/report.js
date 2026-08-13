@@ -38,8 +38,8 @@ window.RWG = window.RWG || {};
         annClosed: 0, revClosed: 0, fycClosed: 0, annSub: 0, revSub: 0
       });
       if (b === 'Opened') a.opened++;
-      else if (b === 'Submitted') { a.submitted++; a.annSub += sc.annualizedPremium(c.product, c.amount); a.revSub += sc.revenue(c.product, c.amount, c.aum); }
-      else if (b === 'Closed') { a.closed++; a.annClosed += sc.annualizedPremium(c.product, c.amount); a.revClosed += sc.revenue(c.product, c.amount, c.aum); a.fycClosed += sc.fyc(c.product, c.amount); }
+      else if (b === 'Submitted') { a.submitted++; a.annSub += sc.deriveCase(c).annualizedPremium; a.revSub += sc.deriveCase(c).revenue; }
+      else if (b === 'Closed') { a.closed++; a.annClosed += sc.deriveCase(c).annualizedPremium; a.revClosed += sc.deriveCase(c).revenue; a.fycClosed += sc.fyc(c.product, c.amount); }
     });
     return agents;
   }
@@ -65,9 +65,9 @@ window.RWG = window.RWG || {};
     cases.forEach(c => { if (!sc.activeInWeek(c, week)) return; const k = sc.bucketForWeek(c, week); if (b[k]) b[k].push(c); });
     const sum = (list, fn) => list.reduce((a, c) => a + fn(c), 0);
     const rows = [
-      { label: 'Annualized premium', fn: c => sc.annualizedPremium(c.product, c.amount) },
+      { label: 'Annualized premium', fn: c => sc.deriveCase(c).annualizedPremium },
       { label: 'FYC', fn: c => sc.fyc(c.product, c.amount) },
-      { label: 'Revenue', fn: c => sc.revenue(c.product, c.amount, c.aum) },
+      { label: 'Revenue', fn: c => sc.deriveCase(c).revenue },
       { label: 'AUM', fn: c => Number(c.aum) || 0 },
       { label: 'Annuity deposits', fn: c => c.product === 'annuity' ? (Number(c.amount) || 0) : 0 }
     ];
@@ -87,7 +87,7 @@ window.RWG = window.RWG || {};
       const k = sc.bucketForWeek(c, week);
       const p = byP[c.product] || (byP[c.product] = { o: 0, s: 0, cl: 0, rev: 0 });
       if (k === 'Opened') p.o++; else if (k === 'Submitted') p.s++; else if (k === 'Closed') p.cl++;
-      p.rev += sc.revenue(c.product, c.amount, c.aum);
+      p.rev += sc.deriveCase(c).revenue;
     });
     const order = sc.PRODUCTS.map(p => p.id).filter(id => byP[id]);
     if (!order.length) return '';
@@ -102,7 +102,7 @@ window.RWG = window.RWG || {};
     if (!g) return '';
     const b = { Opened: [], Submitted: [], Closed: [] };
     cases.forEach(c => { if (!sc.activeInWeek(c, week)) return; const k = sc.bucketForWeek(c, week); if (b[k]) b[k].push(c); });
-    const annClosed = b.Closed.reduce((a, c) => a + sc.annualizedPremium(c.product, c.amount), 0);
+    const annClosed = b.Closed.reduce((a, c) => a + sc.deriveCase(c).annualizedPremium, 0);
     const rows = [
       { label: 'Opportunities opened', val: b.Opened.length, target: g.opps },
       { label: 'New business submitted', val: b.Submitted.length, target: g.nbSub },
@@ -226,8 +226,8 @@ window.RWG = window.RWG || {};
     const b = { Opened: [], Submitted: [], Closed: [] };
     cases.forEach(c => { const k = sc.bucketForWeek(c, week); if (b[k]) b[k].push(c); });
     const sum = (list, fn) => list.reduce((a, c) => a + fn(c), 0);
-    const annClosed = sum(b.Closed, c => sc.annualizedPremium(c.product, c.amount));
-    const revClosed = sum(b.Closed, c => sc.revenue(c.product, c.amount, c.aum));
+    const annClosed = sum(b.Closed, c => sc.deriveCase(c).annualizedPremium);
+    const revClosed = sum(b.Closed, c => sc.deriveCase(c).revenue);
     const fycClosed = sum(b.Closed, c => sc.fyc(c.product, c.amount));
     const g = sc.goalsFor(name); const target = (g && g.closeAnnualizedPremium) || 0;
     const pct = target ? Math.min(100, Math.round(100 * annClosed / target)) : 0;
@@ -245,8 +245,8 @@ window.RWG = window.RWG || {};
         <thead><tr><th>Client</th><th>Product</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th></tr></thead>
         <tbody>${list.map(c => `<tr><td>${esc(c.clientName || '(no name)')}</td><td>${esc(sc.productName(c.product))}</td>
           <td class="num">${money(sc.usesAum(c.product) ? c.aum : c.amount)}</td>
-          <td class="num">${sc.annualizedPremium(c.product, c.amount) ? money(sc.annualizedPremium(c.product, c.amount)) : '—'}</td>
-          <td class="num">${money(sc.revenue(c.product, c.amount, c.aum))}</td></tr>`).join('')}</tbody>
+          <td class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</td>
+          <td class="num">${money(sc.deriveCase(c).revenue)}</td></tr>`).join('')}</tbody>
       </table></div>` : '';
 
     const body = (b.Closed.length + b.Submitted.length + b.Opened.length)

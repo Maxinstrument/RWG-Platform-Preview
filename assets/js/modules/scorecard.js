@@ -87,11 +87,11 @@ window.RWG = window.RWG || {};
 
     return {
       cases: mine, opened, submitted: sub, closed,
-      annualizedClosed: sum(closed, c => sc.annualizedPremium(c.product, c.amount)),
-      annualizedSubmitted: sum(sub, c => sc.annualizedPremium(c.product, c.amount)),
+      annualizedClosed: sum(closed, c => sc.deriveCase(c).annualizedPremium),
+      annualizedSubmitted: sum(sub, c => sc.deriveCase(c).annualizedPremium),
       fycClosed: sum(closed, c => sc.fyc(c.product, c.amount)),
-      revClosed: sum(closed, c => sc.revenue(c.product, c.amount, c.aum)),
-      revSubmitted: sum(sub, c => sc.revenue(c.product, c.amount, c.aum)),
+      revClosed: sum(closed, c => sc.deriveCase(c).revenue),
+      revSubmitted: sum(sub, c => sc.deriveCase(c).revenue),
       aumClosed: sum(closed, c => Number(c.aum) || 0)
     };
   }
@@ -325,7 +325,11 @@ window.RWG = window.RWG || {};
 
       const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === st.draftProduct ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
       const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
-      const stateOpts = sc.STATES.map(s => `<option value="${s}" ${s === 'Opened' ? 'selected' : ''}>${s}</option>`).join('');
+      // Closing is a partner's confirmation — agents write and submit here,
+      // then push the case to Won on the Pipeline board when it lands.
+      const stateOpts = sc.STATES
+        .filter(s => s !== 'Closed' || RWG.app.effectiveRole() === 'admin')
+        .map(s => `<option value="${s}" ${s === 'Opened' ? 'selected' : ''}>${s}</option>`).join('');
 
       const rows = vm.r.cases.length
         ? vm.r.cases.map(caseRow).join('')

@@ -33,7 +33,16 @@ RWG.scorecardData = (function () {
     'state', 'amount', 'aum', 'coCreditUids', 'coCreditNames',
     'openedWeek', 'submittedAt', 'closedAt', 'createdAt', 'createdBy', 'updatedAt',
     // the spine + granular pipeline (phase 2)
-    'householdId', 'stageId', 'lostReason', 'pendingClose'];
+    'householdId', 'stageId', 'lostReason', 'pendingClose',
+    // money detail + the close (phase 2, slice 2)
+    'rate', 'premiumAnnual', 'benefit', 'renewalAnnual', 'applied',
+    'pendingCloseAt', 'closeNote', 'a360Recorded', 'lostBy', 'lostAt'];
+
+  // Passed through buildCase untouched (null when absent), so no edit
+  // modal anywhere can silently strip them.
+  const PASSTHROUGH = ['householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
+    'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
+    'a360Recorded', 'lostBy', 'lostAt'];
 
   const cache = { cases: [], weeks: [], agents: {} };
   let onChange = () => {};
@@ -72,7 +81,11 @@ RWG.scorecardData = (function () {
 
   // ── reads (synchronous, from the live cache) ──
   const cases = () => cache.cases.slice();
-  const withMoney = (c) => Object.assign({}, c, S().derive(c.product, c.amount, c.aum), S().deriveWeeks(c));
+  // Rate-aware since phase 2: deriveCase honors a per-case rate/premium and
+  // falls back to the product defaults, which reproduce the old numbers exactly.
+  const withMoney = (c) => Object.assign({}, c,
+    (S().deriveCase ? S().deriveCase(c) : S().derive(c.product, c.amount, c.aum)),
+    S().deriveWeeks(c));
   const casesWithMoney = () => cache.cases.map(withMoney);
   function casesForAgent(uid) {
     return cache.cases.filter(c => c.agentUid === uid || (c.coCreditUids || []).indexOf(uid) >= 0);
@@ -106,7 +119,7 @@ RWG.scorecardData = (function () {
     if (!submittedAt && (state === 'Submitted' || state === 'Closed')) submittedAt = nowISO();
     if (!closedAt && state === 'Closed') closedAt = nowISO();
 
-    return {
+    const out = {
       recordId: existing.recordId || input.recordId || newRecordId(),
       agentUid: existing.agentUid || input.agentUid || null,
       agentName: input.agentName != null ? input.agentName : (existing.agentName || ''),
@@ -118,10 +131,6 @@ RWG.scorecardData = (function () {
       aum: m.aum,
       coCreditUids: input.coCreditUids || existing.coCreditUids || [],
       coCreditNames: input.coCreditNames || existing.coCreditNames || [],
-      // spine + granular stage: pass through, never invented here
-      householdId: input.householdId !== undefined ? input.householdId : (existing.householdId || null),
-      stageId: input.stageId !== undefined ? input.stageId : (existing.stageId || null),
-      lostReason: input.lostReason !== undefined ? input.lostReason : (existing.lostReason || null),
       pendingClose: input.pendingClose !== undefined ? !!input.pendingClose : !!existing.pendingClose,
       openedWeek: openedWeek,
       submittedAt: submittedAt,
@@ -130,6 +139,10 @@ RWG.scorecardData = (function () {
       createdBy: existing.createdBy || input.createdBy || (me && me.id) || null,
       updatedAt: nowISO()
     };
+    PASSTHROUGH.forEach(k => {
+      out[k] = input[k] !== undefined ? input[k] : (existing[k] !== undefined ? existing[k] : null);
+    });
+    return out;
   }
 
   function saveCase(input) {
@@ -179,13 +192,15 @@ RWG.scorecardData = (function () {
   }
 
   // Mark a case lost, always with a reason — the only honest signal
-  // about why business does not close.
+  // about why business does not close. Stamped with who and when, so
+  // advisor-marked losses surface in the partner inbox.
   function markLost(recordId, reason, note) {
     const existing = caseById(recordId);
     if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
     const row = Object.assign({}, existing, {
-      stageId: 'lost', state: 'Lost',
+      stageId: 'lost', state: 'Lost', pendingClose: false,
       lostReason: (reason || 'Other') + (note ? ' — ' + note : ''),
+      lostBy: (me && me.id) || null, lostAt: nowISO(),
       updatedAt: nowISO()
     });
     const i = cache.cases.findIndex(c => c.recordId === recordId);
@@ -193,6 +208,81 @@ RWG.scorecardData = (function () {
     onChange();
     return db().collection('cases').doc(recordId).set(row)
       .catch(e => { console.error('mark lost:', e && e.message); throw e; });
+  }
+
+  // ── the close (phase 2, slice 2) ──────────────────────────
+  // An advisor pushes a case to Won; it moves on the board but does NOT
+  // count — no stamp is written. A partner's confirmation is the only
+  // writer of closedAt.
+  function pushWon(recordId) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    if (existing.closedAt) return Promise.reject(new Error('already closed'));
+    const row = Object.assign({}, existing, {
+      stageId: 'won', pendingClose: true,
+      pendingCloseAt: existing.pendingCloseAt || nowISO(),
+      updatedAt: nowISO()
+    });
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('push won:', e && e.message); throw e; });
+  }
+
+  // Partner-only (rules enforce it): confirm the close. Snapshots the
+  // applied-for money once, writes the finals, and stamps closedAt into
+  // the chosen week — defaulting to when the advisor pushed it, so a
+  // Friday push verified on Monday still lands in the week it was won.
+  // fin: { amount|aum, rate, premiumAnnual, benefit, renewalAnnual,
+  //        closedWeek ('yyyy-mm-dd' Friday), a360 (bool), note }
+  function confirmClose(recordId, fin) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    fin = fin || {};
+    const row = Object.assign({}, existing);
+    if (!row.applied) {
+      row.applied = {
+        amount: existing.amount || 0, aum: existing.aum || 0,
+        rate: existing.rate != null ? existing.rate : null,
+        premiumAnnual: existing.premiumAnnual != null ? existing.premiumAnnual : null
+      };
+    }
+    ['amount', 'aum', 'rate', 'premiumAnnual', 'benefit', 'renewalAnnual'].forEach(k => {
+      if (fin[k] !== undefined) row[k] = fin[k];
+    });
+    // closedAt is write-once: confirming an already-closed case never moves its week.
+    row.closedAt = existing.closedAt ||
+      (fin.closedWeek ? fin.closedWeek + 'T12:00:00.000-05:00' : nowISO());
+    if (!row.submittedAt) row.submittedAt = row.closedAt;
+    row.state = 'Closed'; row.stageId = 'won'; row.pendingClose = false;
+    row.closeNote = fin.note || row.closeNote || null;
+    if (fin.a360) row.a360Recorded = { by: (me && me.id) || null, at: nowISO() };
+    row.updatedAt = nowISO();
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('confirm close:', e && e.message); throw e; });
+  }
+
+  // Not ready after all: back to the last working stage of its track,
+  // pending flag off. The partner talks to the advisor; the case waits
+  // where the work actually is.
+  function sendBack(recordId) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    const pl = RWG.pipelines.pipelineForProduct(existing.product);
+    const sub = pl.stages.filter(s => s.bucket === 'Submitted');
+    const backTo = sub.length ? sub[sub.length - 1].id : pl.stages[0].id;
+    const row = Object.assign({}, existing, {
+      stageId: backTo, pendingClose: false, updatedAt: nowISO()
+    });
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('send back:', e && e.message); throw e; });
   }
 
   function deleteCase(recordId) {
@@ -290,7 +380,8 @@ RWG.scorecardData = (function () {
     cases, casesWithMoney, casesForAgent, caseById, withMoney,
     weeks, weekFor, weeksForWeek, weekId,
     agentsConfig, agentConfig,
-    buildCase, saveCase, setCaseState, setPipelineStage, markLost, deleteCase, adminSetStamps,
+    buildCase, saveCase, setCaseState, setPipelineStage, markLost,
+    pushWon, confirmClose, sendBack, deleteCase, adminSetStamps,
     saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek,
     CASE_FIELDS, _cache: cache
   };

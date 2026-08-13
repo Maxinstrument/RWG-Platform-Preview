@@ -71,11 +71,20 @@ service cloud.firestore {
           && request.resource.data.get('openedWeek', '') == resource.data.get('openedWeek', '')
           && (resource.data.get('submittedAt', null) == null
               || request.resource.data.get('submittedAt', null) == resource.data.get('submittedAt', null))
-          && (resource.data.get('closedAt', null) == null
-              || request.resource.data.get('closedAt', null) == resource.data.get('closedAt', null))
+          // Closing is a partner's confirmation (2026-08-13): an advisor can
+          // push a case to Won, but only an admin may ever WRITE closedAt.
+          && request.resource.data.get('closedAt', null) == resource.data.get('closedAt', null)
         )
       );
       allow delete: if isAdmin();
+    }
+
+    // ── Money attribution: credit splits (phase 2) ──────────────
+    // Partner-only by decision. Rules are per-document, which is exactly
+    // why the percentages live in their own collection instead of on the
+    // team-readable case.
+    match /splits/{caseId} {
+      allow read, write: if isAdmin();
     }
 
     // ── Spine: households + contacts (the Resilient CRM book) ──

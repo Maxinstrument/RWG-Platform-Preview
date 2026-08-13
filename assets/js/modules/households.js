@@ -399,7 +399,7 @@ window.RWG = window.RWG || {};
             <div class="cell-sub">${esc(SC.sourceLabel(c.source) || '')}</div></td>
         <td>${stageChip2(c)}</td>
         <td class="num">${U().money(money)}</td>
-        <td class="num">${U().money(Math.round(SC.revenue(c.product, c.amount, c.aum)))}</td>
+        <td class="num">${U().money(Math.round(SC.deriveCase(c).revenue))}</td>
         <td><span class="cell-sub">${esc((c.agentName || '').split(' ')[0])}</span></td>
         <td><span class="cell-sub">${esc(c.openedWeek || '')}</span></td>
       </tr>`;
@@ -435,11 +435,16 @@ window.RWG = window.RWG || {};
         <div class="field-group"><label class="lbl" id="op-money-label">${esc(inp.label)}</label>
           <input id="op-money" type="number" step="any" placeholder="0">
           <div class="hint" id="op-money-hint">${esc(inp.hint)}</div></div>
+        <div class="field-group" id="op-rate-wrap"><label class="lbl">Rate % <span class="pill-soft" style="font-size:10.5px">optional</span></label>
+          <input id="op-rate" type="number" step="any">
+          <div class="hint" id="op-rate-hint"></div></div>
+      </div>
+      <div class="field-row">
         <div class="field-group"><label class="lbl">Source</label>
           <select id="op-src">${srcOpts}</select></div>
+        <div class="field-group"><label class="lbl">Agent on the case</label>
+          <select id="op-agent">${advisorOptions(h.advisorUid || me.id)}</select></div>
       </div>
-      <div class="field-group"><label class="lbl">Agent on the case</label>
-        <select id="op-agent">${advisorOptions(h.advisorUid || me.id)}</select></div>
       <p class="hint" id="op-track"></p>`,
       `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
        <button class="btn btn-gold" data-action="hh-opp-save" data-id="${esc(hhId)}">Open opportunity ✦</button>`);
@@ -452,6 +457,14 @@ window.RWG = window.RWG || {};
       const hn = document.getElementById('op-money-hint'); if (hn) hn.textContent = i.hint;
       const tr = document.getElementById('op-track');
       if (tr) tr.textContent = 'Track: ' + RWG.pipelines.pipelineForProduct(p).name + ' · starts at Uncovered';
+      // rate: only products that have one; placeholder shows the default
+      const def = SC.defaultRate(p);
+      const wrap = document.getElementById('op-rate-wrap');
+      const ri = document.getElementById('op-rate');
+      const rh = document.getElementById('op-rate-hint');
+      if (wrap) wrap.style.display = def == null ? 'none' : '';
+      if (ri && def != null) ri.placeholder = +(def * 100).toFixed(2) + '% default';
+      if (rh && def != null) rh.textContent = 'Blank uses the default. A 401(k) is often 0.17%.';
     };
     if (prod) { prod.addEventListener('change', paint); paint(); }
   }
@@ -608,12 +621,14 @@ window.RWG = window.RWG || {};
         const money = Number(gv('op-money')) || 0;
         const agentUid = gv('op-agent');
         const agent = D().user(agentUid);
+        const ratePct = Number(gv('op-rate'));
         RWG.scorecardData.saveCase({
           agentUid: agentUid, agentName: (agent && agent.name) || '',
           clientName: clientName, product: product, source: gv('op-src'),
           state: 'Opened',
           amount: SC.usesAum(product) ? 0 : money,
           aum: SC.usesAum(product) ? money : 0,
+          rate: ratePct > 0 ? ratePct / 100 : null,
           householdId: el.dataset.id, stageId: 'uncovered'
         }).then(() => {
           mount().innerHTML = '';

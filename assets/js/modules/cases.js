@@ -27,8 +27,8 @@ window.RWG = window.RWG || {};
       { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, filter: true },
       { key: 'state', label: 'Stage', val: c => c.state || '', str: true, filter: true, cell: c => `<span class="chip ${stageChipClass(c.state)}">${esc(c.state || '')}</span>` },
       { key: 'money', label: 'Amount / AUM', num: true, val: c => sc.usesAum(c.product) ? (Number(c.aum) || 0) : (Number(c.amount) || 0), cell: c => `<span class="num">${money(sc.usesAum(c.product) ? c.aum : c.amount)}</span>` },
-      { key: 'ann', label: 'Ann. premium', num: true, val: c => sc.annualizedPremium(c.product, c.amount), cell: c => `<span class="num">${sc.annualizedPremium(c.product, c.amount) ? money(sc.annualizedPremium(c.product, c.amount)) : '—'}</span>` },
-      { key: 'rev', label: 'Revenue', num: true, val: c => sc.revenue(c.product, c.amount, c.aum), cell: c => `<span class="num">${money(sc.revenue(c.product, c.amount, c.aum))}</span>` },
+      { key: 'ann', label: 'Ann. premium', num: true, val: c => sc.deriveCase(c).annualizedPremium, cell: c => `<span class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</span>` },
+      { key: 'rev', label: 'Revenue', num: true, val: c => sc.deriveCase(c).revenue, cell: c => `<span class="num">${money(sc.deriveCase(c).revenue)}</span>` },
       { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', filter: true },
       { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '' },
       { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '' }
@@ -89,7 +89,11 @@ window.RWG = window.RWG || {};
     const sc = S(), editable = canEdit(c, user), isAdmin = user.role === 'admin';
     const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === c.product ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}" ${s.id === c.source ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
-    const stateOpts = sc.STATES.map(s => `<option value="${s}" ${s === c.state ? 'selected' : ''}>${s}</option>`).join('');
+    // Closing is a partner's confirmation, not a dropdown choice. Agents
+    // lose the Closed option (a closed case shows it read-only instead).
+    const stateList = sc.STATES.filter(s => s !== 'Closed' || isAdmin || c.state === 'Closed');
+    const stateLocked = !isAdmin && c.state === 'Closed';
+    const stateOpts = stateList.map(s => `<option value="${s}" ${s === c.state ? 'selected' : ''}>${s}</option>`).join('');
     const inp = sc.inputFor(c.product), moneyVal = sc.usesAum(c.product) ? c.aum : c.amount;
     const w = sc.deriveWeeks(c);
     const weekOpts = (sel) => ['<option value="">—</option>'].concat(recentWeeks(20).map(fri => `<option value="${fri}" ${fri === sel ? 'selected' : ''}>${fri}</option>`)).join('');
@@ -99,7 +103,7 @@ window.RWG = window.RWG || {};
         <div><label>Client</label><input id="cm-client" value="${esc(c.clientName || '')}" ${editable ? '' : 'disabled'}></div>
         <div><label>Product</label><select id="cm-prod" ${editable ? '' : 'disabled'}>${prodOpts}</select></div>
         <div><label>Source</label><select id="cm-src" ${editable ? '' : 'disabled'}>${srcOpts}</select></div>
-        <div><label>Stage</label><select id="cm-state" ${editable ? '' : 'disabled'}>${stateOpts}</select></div>
+        <div><label>Stage</label><select id="cm-state" ${editable && !stateLocked ? '' : 'disabled'}>${stateOpts}</select>${!isAdmin ? '<div class="hint">Closing is confirmed by a partner.</div>' : ''}</div>
         <div><label id="cm-money-label">${esc(inp.label)}</label><input id="cm-money" type="number" value="${esc(moneyVal || 0)}" ${editable ? '' : 'disabled'}><div class="hint" id="cm-money-hint">${esc(inp.hint)}</div></div>
       </div>`;
 

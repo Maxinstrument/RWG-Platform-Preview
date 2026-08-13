@@ -47,7 +47,7 @@ window.RWG = window.RWG || {};
     return rows.length;
   }
 
-  function card(c, stage) {
+  function card(c, stage, isAdmin) {
     const sc = SC();
     const money = sc.usesAum(c.product) ? c.aum : c.amount;
     const closed = !!c.closedAt;
@@ -57,6 +57,8 @@ window.RWG = window.RWG || {};
     const canMove = stage.bucket !== 'Closed';
     const prev = canMove ? P().neighborStage(c, -1) : null;
     const next = canMove ? P().neighborStage(c, +1) : null;
+    // At the last working stage, the arrow's place is taken by the push to Won.
+    const lastStop = canMove && !next && stage.bucket === 'Submitted';
     return `<div class="card tight pl-card${canMove ? '' : ' pl-done'}" ${canMove ? 'draggable="true"' : ''} data-case="${esc(c.recordId)}"
         style="cursor:pointer;border-left:3px solid ${closed ? 'var(--good)' : (stage.bucket === 'Submitted' ? 'var(--gold)' : 'var(--line-strong)')}">
       <div class="flex" style="justify-content:space-between;gap:8px;align-items:flex-start" data-action="cs-open" data-id="${esc(c.recordId)}">
@@ -70,18 +72,23 @@ window.RWG = window.RWG || {};
       <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <span class="pill-soft" style="font-size:11px">${esc(first || '—')}</span>
         ${closed ? '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>'
-          : (stage.bucket === 'Closed' ? '<span class="chip tier-medium" style="font-size:10.5px">Pending</span>' : '')}
+          : (stage.bucket === 'Closed'
+              ? (isAdmin
+                  ? `<button class="chip tier-medium" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Verify the money and confirm the close">Pending — Review ✓</button>`
+                  : '<span class="chip tier-medium" style="font-size:10.5px" title="A partner verifies before it counts">Pending partner</span>')
+              : '')}
         <span class="topbar-spacer"></span>
         ${canMove ? `
           ${prev ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Back to ${esc(prev.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(prev.id)}">‹</button>` : ''}
           ${next ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Advance to ${esc(next.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(next.id)}">›</button>` : ''}
+          ${lastStop ? `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Push to Won — a partner verifies before it counts" data-action="pl-won" data-id="${esc(c.recordId)}">Won ✓</button>` : ''}
           <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Mark lost…" data-action="pl-lost" data-id="${esc(c.recordId)}">✕</button>` : ''}
         <span class="cell-sub" style="font-size:11px;${stale ? 'color:var(--bad);font-weight:700' : ''}">${days}d</span>
       </div>
     </div>`;
   }
 
-  function boardHtml() {
+  function boardHtml(isAdmin) {
     const pl = P().pipeline(st.pl) || P().pipelines()[0];
     const rows = casesFor(pl.id);
     const byStage = {};
@@ -98,7 +105,7 @@ window.RWG = window.RWG || {};
           <span class="cnt">${items.length}${sum ? ' · ' + U().moneyK(sum) : ''}</span>
         </div>
         <div class="board-col-body">
-          ${items.map(c => card(c, stage)).join('') || `<p class="muted center drop-hint" style="font-size:12.5px;padding:14px 0">${isWon ? 'Closes land here' : 'Drop here'}</p>`}
+          ${items.map(c => card(c, stage, isAdmin)).join('') || `<p class="muted center drop-hint" style="font-size:12.5px;padding:14px 0">${isWon ? 'Closes land here' : 'Drop here'}</p>`}
         </div>
       </div>`;
     }).join('');
@@ -120,7 +127,8 @@ window.RWG = window.RWG || {};
       </div>
       <p class="muted" style="font-size:12.5px;margin:0 0 12px">
         Drag a card, or use ‹ › on the card. Entering <b style="color:var(--gold)">Application</b> (or any gold-dot stage)
-        counts the case as written — permanently, on the week it happens. Closing runs through the close review, coming next.
+        counts the case as written — permanently, on the week it happens. Dropping on
+        <b style="color:var(--good)">Close / Won</b> sends it for a partner's confirmation; it counts once confirmed.
       </p>
       <div class="board">${cols}</div>`;
   }
@@ -175,14 +183,24 @@ window.RWG = window.RWG || {};
     const id = dragId; dragId = null; clearHighlights();
     if (!col) return;
     e.preventDefault();
-    if (col.hasAttribute('data-plwon')) {
-      U().toast('Closing goes through the close review — next push. Until then, close it from the case (All Cases → stage).');
-      return;
-    }
+    if (col.hasAttribute('data-plwon')) { toWon(id); return; }
     SD().setPipelineStage(id, col.dataset.plstage)
       .then(() => RWG.app.renderMain())
       .catch(err => U().toast('Could not move: ' + err.message));
   });
+
+  // Push to Won. A partner lands straight in the close review — confirming
+  // their own case is one motion. An advisor's case waits in the inbox.
+  function toWon(id) {
+    SD().pushWon(id).then(() => {
+      if (RWG.app.effectiveRole() === 'admin') {
+        const inbox = RWG.modules.get('inbox');
+        if (inbox) { inbox.state.reviewId = id; RWG.app.nav('close-review'); return; }
+      }
+      RWG.app.renderMain();
+      U().toast('Sent for a partner to verify — it counts once confirmed', true);
+    }).catch(err => U().toast('Could not push: ' + err.message));
+  }
 
   RWG.modules.register({
     id: 'pipeline',
@@ -219,6 +237,11 @@ window.RWG = window.RWG || {};
           .then(() => RWG.app.renderMain())
           .catch(err => U().toast('Could not move: ' + err.message));
       },
+      'pl-won': (el) => toWon(el.dataset.id),
+      'pl-review': (el) => {
+        const inbox = RWG.modules.get('inbox');
+        if (inbox) { inbox.state.reviewId = el.dataset.id; RWG.app.nav('close-review'); }
+      },
       'pl-lost': (el) => lostModal(el.dataset.id),
       'pl-lost-save': (el) => {
         const reason = (document.getElementById('pl-lost-reason') || {}).value || 'Other';
@@ -231,7 +254,7 @@ window.RWG = window.RWG || {};
 
     render(view, user, ctx) {
       if (!SD().isStarted()) return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Loading the book…</h3></div>`;
-      return boardHtml();
+      return boardHtml(ctx.isAdmin);
     }
   });
 })();

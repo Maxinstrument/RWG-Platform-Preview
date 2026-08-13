@@ -140,6 +140,56 @@ RWG.scorecard = (function () {
   const inputFor = (prodId) => INPUTS[prodId] || { field: 'amount', label: '$ Amount', hint: '' };
   const usesAum  = (prodId) => inputFor(prodId).field === 'aum';
 
+  /* ── Per-case rates (phase 2) ─────────────────────────────
+     Carlos's rule: you override the RATE, never the revenue. A case may
+     carry `rate` (a fraction: 0.55, 0.0017…) and, on insurance,
+     `premiumAnnual` (the real annual premium from the illustration).
+     Blank means the product default below — which reproduces every
+     historical number exactly, because the defaults ARE the old
+     constants. Revenue is still calculated, every time, from a basis
+     and a rate that are both on the record.
+
+     A rate of 0/null/'' counts as unset: zeroing a rate is always a
+     clearing, never a real commission schedule. */
+  function defaultRate(prodId) {
+    if (FYC_PRODUCTS.indexOf(prodId) >= 0) return COMMISSION_RATE;
+    if (prodId === 'annuity') return ANNUITY_REVENUE_RATE;
+    if (prodId === 'inv') return INVESTMENT_REVENUE_RATE;
+    return null;   // ltc, plan: the amount typed IS the money, no rate
+  }
+  function caseRate(c) {
+    const r = c && c.rate != null && c.rate !== '' ? Number(c.rate) : 0;
+    return r > 0 ? r : defaultRate(c ? c.product : null);
+  }
+  function caseAnnualizedPremium(c) {
+    if (PREMIUM_PRODUCTS.indexOf(c.product) < 0) return 0;
+    const entered = Number(c.premiumAnnual);
+    if (entered > 0) return entered;               // the real premium wins
+    const r = caseRate(c);
+    return r ? n(c.amount) / r : 0;
+  }
+  function caseRevenue(c) {
+    if (c.product === 'annuity') return n(c.amount) * (caseRate(c) || 0);
+    if (c.product === 'inv') return n(c.aum) * (caseRate(c) || 0);
+    return n(c.amount);   // wl, term, di, ltc, plan: the amount typed is the money
+  }
+  // Same shape as derive(), so withMoney() and every consumer stay
+  // compatible — plus the resolved rate for display.
+  function deriveCase(c) {
+    const ann = caseAnnualizedPremium(c);
+    const rev = caseRevenue(c);
+    const p = PRODUCT_BY_ID[c.product];
+    return {
+      fyc: fyc(c.product, c.amount),
+      annualizedPremium: ann,
+      monthlyPremium: ann / 12,
+      revenue: rev,
+      weightedProduction: p ? rev * p.mult : 0,
+      countsForClub: countsForClub(c.product),
+      rate: caseRate(c)
+    };
+  }
+
   // Everything a case is worth, from the one number the agent entered.
   function derive(prodId, amount, aum) {
     return {
@@ -320,6 +370,7 @@ RWG.scorecard = (function () {
     FYC_PRODUCTS, PREMIUM_PRODUCTS, CLUB_PRODUCTS, countsForClub,
     fyc, annualizedPremium, monthlyPremium, revenue, weightedProduction,
     INPUTS, inputFor, usesAum, derive, normalizeMoney, dataWarnings,
+    defaultRate, caseRate, caseAnnualizedPremium, caseRevenue, deriveCase,
     CHAIRMAN, FYC_PER_WEEK_AT_TARGET, ANNUALIZED_PREMIUM_PER_WEEK_AT_TARGET,
     ACTIVITY_POINTS, WEEKLY_MIN, WEEKLY_MIN_PARTNER,
     AGENT_GOALS, goalsFor, firmShare, scorecardRole, weeklyFloor,
