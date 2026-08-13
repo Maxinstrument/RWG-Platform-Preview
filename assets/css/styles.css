@@ -34,6 +34,14 @@
   --shadow-pop:0 18px 50px -20px rgba(10,26,48,.45);
   --radius:14px;
   --sidebar-w:248px;
+
+  /* ── One spacing scale. Every gap, pad and margin should be one of
+        these six numbers; that regularity IS the feeling of polish. ── */
+  --s1:6px; --s2:10px; --s3:14px; --s4:18px; --s5:24px; --s6:34px;
+  --radius-sm:10px;          /* inner things: controls, chips, small cards */
+  --radius-lg:16px;          /* outer things: modals, sheets */
+  --ctl-h:42px;              /* every text control is exactly this tall */
+  --ctl-h-sm:38px;           /* toolbar-sized controls */
 }
 
 *{box-sizing:border-box;}
@@ -66,7 +74,8 @@ a{color:inherit;}
    ============================================================ */
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:10px 16px;border-radius:10px;border:1px solid transparent;
+  min-height:var(--ctl-h);                       /* buttons match field height exactly */
+  padding:10px 16px;border-radius:var(--radius-sm);border:1px solid transparent;
   font-size:14px;font-weight:600;letter-spacing:.2px;
   transition:transform .08s ease,box-shadow .15s,background .15s,border-color .15s,color .15s;
   white-space:nowrap;text-decoration:none;
@@ -80,7 +89,9 @@ a{color:inherit;}
 .btn-ghost:hover{border-color:var(--gold);background:rgba(194,161,77,.06);}
 .btn-quiet{background:rgba(14,36,64,.05);color:var(--ink);}
 .btn-quiet:hover{background:rgba(14,36,64,.10);}
-.btn-sm{padding:7px 12px;font-size:13px;border-radius:8px;}
+.btn-sm{min-height:34px;padding:7px 12px;font-size:13px;border-radius:8px;}
+/* Inside a toolbar, small buttons line up with the selects beside them */
+.filterbar .btn-sm,.cs-bar .btn-sm{min-height:var(--ctl-h-sm);}
 .btn-block{width:100%;}
 .btn-danger{background:transparent;border-color:rgba(178,58,72,.4);color:var(--bad);}
 .btn-danger:hover{background:rgba(178,58,72,.08);}
@@ -129,7 +140,7 @@ a{color:inherit;}
 .linklike{background:none;border:none;color:#8a6f24;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;text-decoration-color:rgba(194,161,77,.5);}
 .linklike:hover{color:var(--gold);}
 .remember-lbl{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;}
-.remember-lbl input{width:auto;accent-color:var(--gold);cursor:pointer;}
+.remember-lbl input{accent-color:var(--gold);cursor:pointer;}
 .gate-note{color:var(--muted);font-size:12px;margin:18px 0 0;line-height:1.5;}
 .gate-success{
   background:var(--tier-high-bg);border:1px solid rgba(46,125,91,.3);
@@ -145,18 +156,60 @@ a{color:inherit;}
 /* ============================================================
    Forms
    ============================================================ */
-label.lbl{display:block;font-size:12.5px;font-weight:600;color:var(--ink);margin:0 0 6px;}
-.input,input[type=text],input[type=email],input[type=password],input[type=date],
-input[type=datetime-local],input[type=number],input[type=tel],select,textarea{
-  width:100%;padding:11px 12px;border:1px solid var(--line-strong);border-radius:9px;
-  background:var(--field);font:inherit;font-size:14px;color:var(--ink);
-  transition:border-color .15s,box-shadow .15s;
+/* Every label in the app looks the same. (Two competing label styles —
+   sentence-case here, UPPERCASE in the case grids — was the single most
+   visible inconsistency: both appeared inside one modal.) */
+label.lbl,.cs-modal-grid label,.sc-add-grid label,.sc-act label{
+  display:block;font-size:12.5px;font-weight:600;color:var(--ink);
+  letter-spacing:0;text-transform:none;margin:0 0 var(--s1);
 }
-textarea{resize:vertical;min-height:78px;}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,161,77,.18);}
+
+/* ── One control system ──────────────────────────────────────
+   Every text-ish control, whatever its type — including a bare
+   <input> with no type at all, which used to fall through this list
+   and render as a raw browser box next to its styled neighbours. */
+.input,
+input:not([type]),input[type=text],input[type=email],input[type=password],
+input[type=date],input[type=datetime-local],input[type=time],input[type=month],
+input[type=week],input[type=number],input[type=tel],input[type=search],input[type=url],
+select,textarea{
+  width:100%;min-height:var(--ctl-h);padding:10px 12px;
+  border:1px solid var(--line-strong);border-radius:var(--radius-sm);
+  background:var(--field);font:inherit;font-size:14px;line-height:1.35;color:var(--ink);
+  transition:border-color .15s,box-shadow .15s,background-color .15s;
+}
+/* Selects carry our own chevron so they match across browsers */
+select{
+  padding-right:34px;cursor:pointer;-webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235C6B7E' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat;background-position:right 12px center;
+}
+textarea{resize:vertical;min-height:96px;padding:12px;line-height:1.5;}
+input:hover:not(:disabled),select:hover:not(:disabled),textarea:hover:not(:disabled){border-color:rgba(14,36,64,.34);}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,161,77,.18);background:#fff;}
 input::placeholder,textarea::placeholder{color:#9aa6b4;}
-.field-group{margin-bottom:14px;}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+input:disabled,select:disabled,textarea:disabled{background:rgba(14,36,64,.045);color:var(--muted);cursor:not-allowed;border-color:var(--line);}
+input[type=date]::-webkit-calendar-picker-indicator{opacity:.5;cursor:pointer;}
+input[type=date]:hover::-webkit-calendar-picker-indicator{opacity:.85;}
+/* Ticks and radios: one size, one colour, everywhere */
+input[type=checkbox],input[type=radio]{
+  width:16px;height:16px;min-height:0;flex:none;margin:0;padding:0;
+  accent-color:var(--gold);cursor:pointer;
+}
+input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
+
+/* The small grey line under a field. Had no global style at all, so it
+   rendered at full body size wherever it appeared. */
+.hint{font-size:12px;line-height:1.45;color:var(--muted);margin-top:5px;}
+.hint b{color:var(--ink);font-weight:600;}
+
+.field-group{margin-bottom:var(--s3);}
+.field-group:last-child{margin-bottom:0;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-bottom:var(--s3);}
+.field-row:last-child{margin-bottom:0;}
+.field-row .field-group{margin-bottom:0;}
+/* Below ~560px two fields side by side stop being readable */
+@media (max-width:600px){ .field-row{grid-template-columns:1fr;} }
 
 /* ============================================================
    App shell
@@ -178,7 +231,7 @@ input::placeholder,textarea::placeholder{color:#9aa6b4;}
 .topbar-search{
   position:relative;width:280px;max-width:32vw;
 }
-.topbar-search input{padding-left:36px;background:#fff;border-radius:10px;height:40px;}
+.topbar-search input{padding-left:36px;background:#fff;border-radius:var(--radius-sm);min-height:var(--ctl-h-sm);}
 .topbar-search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);}
 
 .user-chip{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 6px;border-radius:30px;border:1px solid var(--line);background:#fff;}
@@ -307,7 +360,7 @@ input::placeholder,textarea::placeholder{color:#9aa6b4;}
 .fbar-tier.on .tier-dot{box-shadow:0 0 0 2px rgba(255,255,255,.35);}
 .fbar-sep{width:1px;height:26px;background:var(--line);}
 .fbar-select{
-  width:auto;min-width:120px;padding:8px 28px 8px 11px;font-size:13px;border-radius:9px;
+  width:auto;min-width:120px;min-height:var(--ctl-h-sm);padding:8px 28px 8px 11px;font-size:13px;border-radius:9px;
   background:var(--field) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235C6B7E' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>") no-repeat right 10px center;
   -webkit-appearance:none;appearance:none;cursor:pointer;
 }
@@ -326,7 +379,7 @@ input::placeholder,textarea::placeholder{color:#9aa6b4;}
 .pop-h{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:6px 8px 8px;}
 .pop-row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;user-select:none;white-space:nowrap;}
 .pop-row:hover{background:rgba(194,161,77,.09);}
-.pop-row input{width:auto;accent-color:var(--gold);}
+.pop-row input{accent-color:var(--gold);}
 .pop-row input:disabled{opacity:.5;}
 .pop-f{border-top:1px solid var(--line);margin-top:6px;padding-top:7px;display:flex;justify-content:flex-end;}
 .ms-btn{cursor:pointer;text-align:left;display:inline-flex;align-items:center;gap:4px;}
@@ -347,7 +400,7 @@ table.data thead th.th-cell{white-space:nowrap;}
 .pop-sort{display:block;width:100%;text-align:left;border:none;background:transparent;padding:8px 9px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;}
 .pop-sort:hover{background:rgba(194,161,77,.10);}
 .pop-sep{height:1px;background:var(--line);margin:6px 4px;}
-.pop-search{width:100%;margin:2px 0 8px;padding:7px 10px;font-size:13px;}
+input.pop-search{width:100%;min-height:34px;margin:2px 0 8px;padding:7px 10px;font-size:13px;}
 .pop-actions{display:flex;justify-content:space-between;padding:0 4px 6px;}
 .pop-actions button{border:none;background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;padding:3px 4px;}
 .pop-actions button:hover{text-decoration:underline;}
@@ -631,8 +684,11 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    ============================================================ */
 @media (max-width:760px){
   /* Stop iOS Safari from zooming in every time a field is focused (needs >=16px) */
-  .input,input[type=text],input[type=email],input[type=password],input[type=date],
-  input[type=datetime-local],input[type=number],input[type=tel],select,textarea{font-size:16px;}
+  .input,
+  input:not([type]),input[type=text],input[type=email],input[type=password],
+  input[type=date],input[type=datetime-local],input[type=time],input[type=month],
+  input[type=week],input[type=number],input[type=tel],input[type=search],input[type=url],
+  select,textarea{font-size:16px;}
 
   /* Tighter screen edges → more room for content */
   .main{padding:18px 14px 84px;}
@@ -747,7 +803,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .sc-dayh span{display:block;font-weight:700;color:var(--navy);}
 .sc-dayh small{display:block;font-weight:500;color:var(--muted);font-size:10.5px;margin-top:1px;}
 .sc-weektot{text-align:right;}
-.sc-daycell{width:54px;text-align:center;padding:6px 4px;margin:0;}
+input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;margin:0;}
 .sc-daily td{text-align:center;padding:6px 5px;}
 .sc-daily .is-today{background:rgba(194,161,77,.10);}
 .sc-dayh.is-today span{color:var(--gold-dark,#8a6d1f);}

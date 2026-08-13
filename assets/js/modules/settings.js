@@ -179,7 +179,7 @@ window.RWG = window.RWG || {};
       <label class="flex" style="gap:4px;align-items:center;flex:none;font-size:11px;color:var(--muted);cursor:pointer"
         title="A required step blocks the push to Won until it is done">
         <input type="checkbox" ${s.required ? 'checked' : ''} data-set="wfstep" data-sid="${esc(s.id)}" data-sf="required"
-          style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">required</label>
+          style="accent-color:var(--gold)">required</label>
       <button class="btn btn-quiet btn-sm" style="padding:2px 8px;flex:none" data-action="set-wf-step-del" data-id="${esc(s.id)}">✕</button>
     </div>`;
   }
@@ -213,7 +213,7 @@ window.RWG = window.RWG || {};
             <div class="flex" style="gap:10px;flex-wrap:wrap;margin-top:4px">
               ${SC().PRODUCTS.map(p => `<label class="flex" style="gap:5px;align-items:center;font-size:12.5px;cursor:pointer">
                 <input type="checkbox" ${(tpl.trigger.products || []).indexOf(p.id) >= 0 ? 'checked' : ''}
-                  data-set="wf" data-sf="product" data-prod="${esc(p.id)}" style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">${esc(p.name)}</label>`).join('')}
+                  data-set="wf" data-sf="product" data-prod="${esc(p.id)}" style="accent-color:var(--gold)">${esc(p.name)}</label>`).join('')}
             </div></div>` : ''}
         </div>
         ${tpl.steps.map((s, i) => stepRow(tpl, s, i)).join('')}

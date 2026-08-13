@@ -302,7 +302,7 @@ window.RWG = window.RWG || {};
     const due = T().openFor(ctx.eff.id).filter(t => t.dueDate && t.dueDate <= today)
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
     const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
-        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="width:15px;height:15px;margin-top:2px;flex:none;cursor:pointer;accent-color:var(--gold)">
+        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">
         <span style="min-width:0;flex:1;font-size:13px;color:var(--ink)">${esc(t.title)}
           ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10px;margin-left:4px">⚙ ${esc(t.workflowName)}</span>` : ''}</span>
         <span style="flex:none;font-size:11px;${t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--warn);font-weight:700'}">${t.dueDate < today ? 'late' : 'today'}</span>
@@ -468,7 +468,7 @@ window.RWG = window.RWG || {};
     const item = (w, isOn) => `<div class="flex cz-item" ${isOn ? 'draggable="true"' : ''} data-czid="${esc(w.id)}"
         style="gap:8px;align-items:center;padding:5px 13px;font-size:12px;color:var(--ink);${isOn ? 'cursor:grab' : ''}">
       <span style="color:var(--muted);font-size:12px;${isOn ? '' : 'opacity:.3'}">⠿</span>
-      <input type="checkbox" data-action="hm-w" data-id="${esc(w.id)}" ${isOn ? 'checked' : ''} style="width:13px;height:13px;flex:none;cursor:pointer;accent-color:var(--gold)">
+      <input type="checkbox" data-action="hm-w" data-id="${esc(w.id)}" ${isOn ? 'checked' : ''}>
       <span>${esc(w.title)}</span></div>`;
     return `<div class="card" style="padding:0;overflow:hidden;position:sticky;top:14px">
       <div style="padding:12px 13px;border-bottom:1px solid var(--line)"><b style="font-size:13px;color:var(--navy)">Customize home</b>

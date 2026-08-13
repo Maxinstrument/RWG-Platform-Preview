@@ -83,7 +83,7 @@ window.RWG = window.RWG || {};
     const age = Math.max(0, Math.floor((Date.now() - (t.createdAt || Date.now())) / dayMs));
     return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
       <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
-        style="width:16px;height:16px;margin-top:3px;flex:none;cursor:pointer;accent-color:var(--gold)">
+        style="margin-top:3px">
       <div style="min-width:0;flex:1">
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>

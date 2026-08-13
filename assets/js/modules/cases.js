@@ -223,7 +223,7 @@ window.RWG = window.RWG || {};
               <div class="flex" style="gap:9px;flex-wrap:wrap;margin-top:6px">
                 ${users.map(u => u.id === ownerUid ? '' : `<label class="flex" style="gap:4px;align-items:center;font-size:12px;cursor:pointer">
                   <input type="checkbox" id="op2-co-${esc(u.id)}" data-op2co="${esc(u.id)}" ${coUids.indexOf(u.id) >= 0 ? 'checked' : ''} ${dis}
-                    style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">${esc((u.name || '').split(' ')[0])}</label>`).join('')}
+                    style="accent-color:var(--gold)">${esc((u.name || '').split(' ')[0])}</label>`).join('')}
               </div>
               <div class="hint">First is the owner. Others ride along from day one — the split itself is set at close.</div></div>
           </div>

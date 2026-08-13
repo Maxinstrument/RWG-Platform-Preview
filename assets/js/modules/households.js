@@ -406,7 +406,7 @@ window.RWG = window.RWG || {};
         <span class="topbar-spacer"></span>
         <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button></div>
       ${open.map(t => `<div class="flex" style="align-items:flex-start;gap:11px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06)">
-        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="width:16px;height:16px;margin-top:2px;flex:none;cursor:pointer;accent-color:var(--gold)">
+        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">
         <span style="min-width:0;flex:1;font-size:13.5px;color:var(--ink)"><span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span>
           <span class="pill-soft" style="font-size:11px;margin-left:6px">${esc((t.assigneeName || '').split(' ')[0])}</span></span>
         <span style="flex:none;font-size:12px;${t.dueDate && t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${t.dueDate && t.dueDate < today ? 'late' : (t.dueDate === today ? 'today' : esc(t.dueDate || ''))}</span>
