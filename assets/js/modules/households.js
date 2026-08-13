@@ -1,0 +1,532 @@
+/* ============================================================
+   RWG Platform — Households module (the spine, phase 1)
+
+   Two views:
+     households   the book — every client family, searchable
+     household    one family: people, key dates, connections, notes
+
+   Plus the conversion flow: a lead becomes a contact on a household
+   without anything being retyped. Reached from the lead drawer
+   ("Convert to household ✦") or from this module's own picker.
+
+   Data from RWG.hh (households-data.js). Leads stay owned by
+   RWG.data — this module only reads them, except through
+   RWG.hh.convertLead which stamps the pointer.
+   ============================================================ */
+window.RWG = window.RWG || {};
+
+(function () {
+  const H = () => RWG.hh;
+  const U = () => RWG.ui;
+  const D = () => RWG.data;
+  const esc = (s) => U().esc(s);
+
+  const st = { q: '', currentId: null, convertQ: '' };
+
+  // Advisor choices: admins see the whole team, agents only themselves
+  // (that is all their user cache holds, and all they may assign).
+  function advisorOptions(selUid) {
+    const users = D().users().filter(u => u.status === 'active');
+    const me = RWG.auth.currentUser();
+    const list = users.length ? users : [me];
+    return list.map(u => `<option value="${esc(u.id)}" ${u.id === selUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+  }
+  const userName = (uid) => { const u = D().user(uid); return u ? u.name : ''; };
+
+  // ── modals ─────────────────────────────────────────────────
+  const mount = () => document.getElementById('modal-mount');
+  function modal(title, sub, bodyHtml, footHtml) {
+    mount().innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card">
+        <div class="modal-head"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div>
+        <div class="modal-body">${bodyHtml}</div>
+        <div class="modal-foot">${footHtml}</div>
+      </div>`;
+  }
+  const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+
+  function newHouseholdModal() {
+    const me = RWG.auth.currentUser();
+    modal('New household', 'The account a client family lives under.', `
+      <div class="field-group"><label class="lbl">Household name</label>
+        <input id="hh-name" placeholder="e.g. Delgado Household"></div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Advisor</label>
+          <select id="hh-advisor">${advisorOptions(me.id)}</select></div>
+        <div class="field-group"><label class="lbl">Source</label>
+          <input id="hh-source" placeholder="e.g. FRS Seminar, Referral"></div>
+      </div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-save-new">Create household</button>`);
+    const inp = document.getElementById('hh-name'); if (inp) inp.focus();
+  }
+
+  function editHouseholdModal(h) {
+    modal('Edit household', '', `
+      <div class="field-group"><label class="lbl">Household name</label>
+        <input id="hh-name" value="${esc(h.name)}"></div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Advisor</label>
+          <select id="hh-advisor">${advisorOptions(h.advisorUid)}</select></div>
+        <div class="field-group"><label class="lbl">Source</label>
+          <input id="hh-source" value="${esc(h.source || '')}"></div>
+      </div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-save-edit" data-id="${esc(h.id)}">Save</button>`);
+  }
+
+  // One form for add + edit person. FRS block collapsed into two rows —
+  // same fields the lead drawer knows, so a converted person looks familiar.
+  function personModal(hhId, c) {
+    const v = (k) => c && c[k] != null ? c[k] : '';
+    const relOpts = H().RELATIONSHIPS.map(r =>
+      `<option ${c && c.relationship === r ? 'selected' : ''}>${r}</option>`).join('');
+    const planOpts = ['', ...D().PLAN_TYPES].map(p =>
+      `<option value="${esc(p)}" ${c && c.planType === p ? 'selected' : ''}>${esc(p || '—')}</option>`).join('');
+    modal(c ? 'Edit person' : 'Add a person', c ? '' : 'Spouses, children, anyone who belongs to this family.', `
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">First name</label><input id="p-first" value="${esc(v('firstName'))}"></div>
+        <div class="field-group"><label class="lbl">Last name</label><input id="p-last" value="${esc(v('lastName'))}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Relationship</label><select id="p-rel">${relOpts}</select></div>
+        <div class="field-group"><label class="lbl">Date of birth</label><input id="p-dob" type="date" value="${esc(v('dob'))}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Phone</label><input id="p-phone" type="tel" value="${esc(v('phone'))}"></div>
+        <div class="field-group"><label class="lbl">Email</label><input id="p-email" type="email" value="${esc(v('email'))}"></div>
+      </div>
+      <div class="section-title">FRS profile <span class="pill-soft" style="font-size:11px">optional</span></div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Employer</label><input id="p-employer" value="${esc(v('employer'))}"></div>
+        <div class="field-group"><label class="lbl">Plan type</label><select id="p-plan">${planOpts}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Years of service</label><input id="p-yos" type="number" value="${esc(v('yos'))}"></div>
+        <div class="field-group"><label class="lbl">AFC / Salary</label><input id="p-afc" type="number" value="${esc(v('afc'))}"></div>
+      </div>
+      <div id="p-dup" class="hint" style="color:var(--warn)"></div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-person-save" data-hh="${esc(hhId)}" ${c ? `data-id="${esc(c.id)}"` : ''}>${c ? 'Save' : 'Add person'}</button>`);
+  }
+
+  function linkModal(hhId) {
+    const others = H().households().filter(x => x.id !== hhId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (!others.length) { U().toast('No other households to link yet'); return; }
+    const opts = others.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
+    const kinds = H().LINK_KINDS.map(k => `<option value="${k.id}">${k.label}</option>`).join('');
+    modal('Connect households', 'Family ties and referrals, made durable.', `
+      <div class="field-group"><label class="lbl">This household…</label><select id="lk-kind">${kinds}</select></div>
+      <div class="field-group"><label class="lbl">…the household</label><select id="lk-other">${opts}</select></div>
+      <div class="field-group"><label class="lbl">Note (optional)</label><input id="lk-note" placeholder="e.g. Ana referred them, Jun 2026"></div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-link-save" data-id="${esc(hhId)}">Connect</button>`);
+  }
+
+  // ── the conversion flow ───────────────────────────────────
+  // Step 1 (optional): pick an eligible lead. Step 2: confirm the household.
+  function eligibleLeads() {
+    return D().leads().filter(l =>
+      !l.householdId && ['Appointment Kept', 'Opportunity Opened'].indexOf(l.stage) >= 0);
+  }
+
+  function convertPickerModal() {
+    const rows = eligibleLeads()
+      .filter(l => !st.convertQ || D().fullName(l).toLowerCase().indexOf(st.convertQ.toLowerCase()) >= 0)
+      .sort((a, b) => D().fullName(a).localeCompare(D().fullName(b)));
+    const list = rows.length ? rows.map(l => `
+      <button class="btn btn-ghost" style="display:flex;width:100%;justify-content:flex-start;gap:10px;margin-bottom:8px;text-align:left"
+        data-action="hh-convert" data-id="${esc(l.id)}">
+        <span style="font-weight:700">${esc(D().fullName(l))}</span>
+        <span class="cell-sub">${esc(l.employer || '')}</span>
+        <span class="topbar-spacer"></span>${U().stageChip(l.stage)}
+      </button>`).join('')
+      : `<p class="muted" style="font-size:13.5px">No leads at Appointment Kept or Opportunity Opened are waiting to convert.</p>`;
+    modal('Convert a lead', 'A kept appointment becomes a client family.', `
+      <div class="field-group"><input id="hh-convert-q" placeholder="Search by name…" value="${esc(st.convertQ)}"></div>
+      <div style="max-height:320px;overflow:auto">${list}</div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>`);
+  }
+
+  function convertFormModal(leadId) {
+    const l = D().lead(leadId);
+    if (!l) { U().toast('Lead not found'); return; }
+    if (l.householdId) { U().toast('Already converted'); return; }
+    const suggested = (`${l.lastName || l.firstName || 'New'} Household`).trim();
+    const existing = H().households().slice().sort((a, b) => a.name.localeCompare(b.name))
+      .map(h => `<option value="${esc(h.id)}">${esc(h.name)}</option>`).join('');
+    modal('Convert to household', `${esc(D().fullName(l))} keeps every call, note and score — nothing is retyped.`, `
+      <div class="field-group"><label class="lbl">Create new household</label>
+        <input id="cv-name" value="${esc(suggested)}"></div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Advisor</label>
+          <select id="cv-advisor">${advisorOptions(l.assignedTo || RWG.auth.currentUser().id)}</select></div>
+        <div class="field-group"><label class="lbl">Source</label>
+          <input id="cv-source" value="${esc(l.listName || l.source || '')}"></div>
+      </div>
+      ${existing ? `
+      <div class="section-title">or join an existing household</div>
+      <div class="field-group">
+        <select id="cv-existing"><option value="">— No, create the new one above —</option>${existing}</select>
+        <div class="hint">Use this when the spouse is already a client.</div>
+      </div>
+      <div class="field-group" id="cv-rel-wrap" hidden><label class="lbl">Relationship to that household</label>
+        <select id="cv-rel">${H().RELATIONSHIPS.map(r => `<option ${r === 'Spouse' ? 'selected' : ''}>${r}</option>`).join('')}</select></div>` : ''}
+      <p class="hint" style="margin-top:8px">Converting also marks the lead <b>Opportunity Opened</b> — the same hand-off as today, plus the client record.</p>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-convert-save" data-id="${esc(l.id)}">Convert ✦</button>`);
+    // Wired directly: the kernel only routes change events to the module that
+    // owns the CURRENT VIEW, and this modal can open from a Leads view (the drawer).
+    const sel = document.getElementById('cv-existing');
+    if (sel) sel.addEventListener('change', () => {
+      const wrap = document.getElementById('cv-rel-wrap');
+      if (wrap) wrap.hidden = !sel.value;
+    });
+  }
+
+  function doConvert(leadId) {
+    const l = D().lead(leadId); if (!l) return;
+    const existingId = g('cv-existing');
+    const advisorUid = g('cv-advisor');
+    const opts = existingId
+      ? { householdId: existingId, relationship: g('cv-rel') || 'Spouse' }
+      : { name: g('cv-name').trim() || undefined, advisorUid: advisorUid || undefined,
+          advisorName: userName(advisorUid), source: g('cv-source') };
+    H().convertLead(leadId, opts).then(res => {
+      mount().innerHTML = '';
+      // close the lead drawer if it was underneath
+      RWG.app.state.leadId = null;
+      const dm = document.getElementById('drawer-mount'); if (dm) dm.innerHTML = '';
+      st.currentId = res.householdId;
+      RWG.app.nav('household');
+      U().toast('Converted — welcome to the book', true);
+    }).catch(err => U().toast('Could not convert: ' + err.message));
+  }
+
+  // ── pieces of the two views ───────────────────────────────
+  const fmtDob = (dob) => {
+    if (!dob) return '—';
+    const [y, m, d] = dob.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  function listRows() {
+    const q = st.q.trim().toLowerCase();
+    let rows = H().households();
+    if (q) {
+      rows = rows.filter(h =>
+        h.name.toLowerCase().indexOf(q) >= 0 ||
+        H().contactsFor(h.id).some(c => H().contactName(c).toLowerCase().indexOf(q) >= 0));
+    }
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function listHtml(user, ctx) {
+    const rows = listRows();
+    const total = H().households().length;
+    const body = rows.length ? rows.map(h => {
+      const people = H().contactsFor(h.id);
+      const prim = H().primaryContact(h.id);
+      return `<tr class="cs-row" data-action="hh-open" data-id="${esc(h.id)}">
+        <td><div class="cell-name">${esc(h.name)}</div><div class="cell-sub">${esc(h.source || '')}</div></td>
+        <td>${prim ? esc(H().contactName(prim)) : '<span class="muted">—</span>'}</td>
+        <td class="num">${people.length}</td>
+        <td>${h.advisorName ? esc(h.advisorName) : (h.advisorUid ? esc(userName(h.advisorUid)) : '<span class="muted">—</span>')}</td>
+        <td>${h.a360Complete ? '<span class="chip tier-high">A360 ✓</span>' : '<span class="pill-soft">A360 pending</span>'}</td>
+        <td><span class="cell-sub">${U().fmtRelative(h.createdAt)}</span></td>
+      </tr>`;
+    }).join('') : '';
+
+    const empty = `<div class="empty" style="padding:48px 16px"><div class="ec">🏠</div>
+      <h3>${total ? 'No households match' : 'The book starts here'}</h3>
+      <p>${total ? 'Adjust the search.' : 'Convert a lead whose appointment was kept, or create a household by hand.'}</p></div>`;
+
+    return `<div class="card">
+      <div class="card-head"><h3>Households</h3><span class="sub">${rows.length}${total !== rows.length ? ' of ' + total : ''}</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>
+        <button class="btn btn-gold btn-sm" data-action="hh-new">＋ New household</button>
+      </div>
+      <div class="filterbar" style="flex-direction:row;align-items:center">
+        <input id="hh-q" class="input" type="search" placeholder="Search household or person…" value="${esc(st.q)}" style="max-width:340px">
+      </div>
+      ${rows.length
+        ? `<div class="table-wrap"><table class="data cs-table">
+             <thead><tr><th>Household</th><th>Primary contact</th><th class="num">People</th><th>Advisor</th><th>A360</th><th>Created</th></tr></thead>
+             <tbody id="hh-body">${body}</tbody></table></div>`
+        : empty}
+    </div>`;
+  }
+
+  function detailHtml(h, user, ctx) {
+    const people = H().contactsFor(h.id).slice().sort((a, b) =>
+      (a.relationship === 'Primary client' ? 0 : 1) - (b.relationship === 'Primary client' ? 0 : 1)
+      || H().contactName(a).localeCompare(H().contactName(b)));
+    const isAdmin = ctx.isAdmin;
+
+    const peopleRows = people.map(c => `
+      <tr>
+        <td><div class="cell-name">${esc(H().contactName(c) || '(no name)')}</div>
+            <div class="cell-sub">${esc(c.employer || '')}</div></td>
+        <td>${esc(c.relationship || '—')}</td>
+        <td>${fmtDob(c.dob)}${!c.dob && c.age != null ? ` <span class="cell-sub">(age ${c.age})</span>` : ''}</td>
+        <td><div class="cell-sub" style="color:var(--ink)">${esc(c.phone || '—')}</div><div class="cell-sub">${esc(c.email || '')}</div></td>
+        <td>${c.email
+          ? `<button class="chip ${c.advisorstream ? 'tier-high' : 'tier-low'}" style="cursor:pointer;border-width:1px" title="Toggle: is this person on the AdvisorStream newsletter list?"
+               data-action="hh-as-toggle" data-id="${esc(c.id)}">${c.advisorstream ? 'On list ✓' : 'Not on list'}</button>`
+          : '<span class="pill-soft">no email</span>'}</td>
+        <td style="white-space:nowrap">
+          ${c.leadId && D().lead(c.leadId) ? `<button class="btn btn-quiet btn-sm" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record this person came from — full call history">History</button>` : ''}
+          <button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">Edit</button>
+          ${isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Remove this person (admin)">✕</button>` : ''}
+        </td>
+      </tr>`).join('');
+
+    // key dates: birthdays in the next 60 days for THIS household
+    const ids = {}; people.forEach(p => ids[p.id] = 1);
+    const bdays = H().upcomingBirthdays(60).filter(b => ids[b.contact.id]);
+    const bdayRows = bdays.length ? bdays.map(b => `
+      <div class="tl-item"><div class="tl-ic">🎂</div><div class="tl-body">
+        <div class="tl-h">${esc(H().contactName(b.contact))} turns <b>${b.turning}</b></div>
+        <div class="tl-meta">${b.inDays === 0 ? 'today' : 'in ' + b.inDays + ' day' + (b.inDays === 1 ? '' : 's')} · ${b.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</div>
+      </div></div>`).join('')
+      : `<p class="muted" style="font-size:13px">No birthdays in the next 60 days${people.some(p => !p.dob) ? ' — add dates of birth to power the reminders' : ''}.</p>`;
+
+    const links = (h.links || []).map(l => {
+      const other = H().household(l.householdId);
+      if (!other) return '';
+      return `<div class="tl-item"><div class="tl-ic">🔗</div><div class="tl-body">
+        <div class="tl-h"><a href="#" data-action="hh-open" data-id="${esc(other.id)}" style="color:var(--navy)">${esc(other.name)}</a></div>
+        <div class="tl-meta">${esc(H().linkLabel(l.kind))}${l.note ? ' · ' + esc(l.note) : ''}
+          <button class="btn btn-quiet btn-sm" data-action="hh-unlink" data-id="${esc(other.id)}" style="margin-left:6px">unlink</button></div>
+      </div></div>`;
+    }).join('');
+
+    const a360 = h.a360Complete
+      ? `<button class="chip tier-high" style="cursor:pointer" data-action="hh-a360-toggle" data-id="${esc(h.id)}"
+           title="Checked by ${esc(h.a360Complete.byName || '')} · ${U().fmtDate(h.a360Complete.at)}">A360 profile complete ✓</button>`
+      : `<button class="chip tier-medium" style="cursor:pointer" data-action="hh-a360-toggle" data-id="${esc(h.id)}"
+           title="Click once the full profile is entered in A360">A360 profile pending</button>`;
+
+    return `
+      <button class="btn btn-quiet btn-sm" data-action="hh-back" style="margin-bottom:14px">← All households</button>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-head" style="align-items:flex-start">
+          <div>
+            <h3 style="font-size:24px">${esc(h.name)}</h3>
+            <div class="tag-row" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+              <span class="pill-soft">Advisor: ${esc(h.advisorName || userName(h.advisorUid) || '—')}</span>
+              ${h.source ? `<span class="pill-soft">Source: ${esc(h.source)}</span>` : ''}
+              <span class="pill-soft">Client since ${U().fmtDate(h.createdAt)}</span>
+              ${a360}
+            </div>
+          </div>
+          <span class="topbar-spacer"></span>
+          <div class="flex" style="gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" data-action="hh-link" data-id="${esc(h.id)}">🔗 Connect</button>
+            <button class="btn btn-ghost btn-sm" data-action="hh-edit" data-id="${esc(h.id)}">✎ Edit</button>
+            <button class="btn btn-gold btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-head"><h3>People</h3><span class="sub">${people.length}</span></div>
+        ${people.length
+          ? `<div class="table-wrap"><table class="data">
+              <thead><tr><th>Name</th><th>Relationship</th><th>Born</th><th>Contact</th><th>AdvisorStream</th><th></th></tr></thead>
+              <tbody>${peopleRows}</tbody></table></div>`
+          : `<p class="muted" style="font-size:13.5px;padding:6px 2px">Nobody here yet — add the family.</p>`}
+      </div>
+
+      <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+        <div class="card">
+          <div class="card-head"><h3>Key dates</h3><span class="sub">next 60 days</span></div>
+          ${bdayRows}
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Connected to</h3><span class="sub">${(h.links || []).length}</span></div>
+          ${links || '<p class="muted" style="font-size:13px">No connections recorded. Referrals and family ties go here so they outlive anyone’s memory.</p>'}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="card-head"><h3>Notes</h3></div>
+        <textarea id="hh-notes" style="min-height:90px" placeholder="Anything the whole team should know about this family…">${esc(h.notes || '')}</textarea>
+        <div class="flex" style="justify-content:flex-end;margin-top:10px">
+          <button class="btn btn-navy btn-sm" data-action="hh-notes-save" data-id="${esc(h.id)}">Save notes</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px;border-style:dashed;background:transparent;box-shadow:none">
+        <div class="card-head"><h3 style="color:var(--muted)">Opportunities</h3></div>
+        <p class="muted" style="font-size:13px;margin:0">Phase 2 attaches this family's opportunities, stages and revenue right here.</p>
+      </div>
+
+      ${isAdmin && !people.length ? `
+      <div style="margin-top:18px">
+        <button class="btn btn-danger btn-sm" data-action="hh-delete" data-id="${esc(h.id)}">🗑 Delete this empty household</button>
+      </div>` : ''}`;
+  }
+
+  // live repaint of just the list body while typing
+  function refreshList() {
+    const c = document.getElementById('main-content');
+    if (c && RWG.app.state.view === 'households') {
+      const user = RWG.app.effectiveUser ? RWG.app.effectiveUser() : RWG.auth.currentUser();
+      c.innerHTML = listHtml(user, { isAdmin: RWG.app.effectiveRole() === 'admin' });
+      const q = document.getElementById('hh-q');
+      if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    }
+  }
+
+  // ── the module ────────────────────────────────────────────
+  RWG.modules.register({
+    id: 'households',
+    title: 'Households',
+    enabled: true,
+    roles: ['admin', 'agent'],
+    nav: [{ view: 'households', label: 'Households', icon: 'team' }],
+    views: ['household'],
+    meta: {
+      households: { t: 'Households', s: 'The book — every client family in one place' },
+      household:  { t: 'Household',  s: 'People, dates, connections and history' }
+    },
+    state: st,
+
+    home: {
+      tile: () => ({
+        icon: 'team', title: 'Households',
+        desc: 'The client book: families, their people, and how they connect.',
+        view: 'households'
+      })
+    },
+
+    onEnter(view, ctx) {
+      if (!H().isStarted()) H().init(RWG.auth.currentUser(), RWG.app.renderMain);
+    },
+
+    onInput(e) {
+      if (e.target.id === 'hh-q') { st.q = e.target.value; refreshList(); }
+      if (e.target.id === 'hh-convert-q') { st.convertQ = e.target.value; convertPickerModal(); const i = document.getElementById('hh-convert-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+      if (e.target.id === 'p-phone' || e.target.id === 'p-email') {
+        const dup = H().findDupContact(g('p-phone'), g('p-email'), null);
+        const el = document.getElementById('p-dup');
+        if (el) el.textContent = dup ? `Heads up: ${H().contactName(dup)} already has this ${phoneMatches(dup) ? 'phone' : 'email'} — same person?` : '';
+        function phoneMatches(d) { return String(d.phone || '').replace(/\D/g, '').slice(-10) === String(g('p-phone')).replace(/\D/g, '').slice(-10) && g('p-phone'); }
+      }
+    },
+
+
+    actions: {
+      // list
+      'hh-new': () => newHouseholdModal(),
+      'hh-save-new': () => {
+        const name = g('hh-name').trim();
+        if (!name) { U().toast('Give the household a name'); return; }
+        const uid = g('hh-advisor');
+        const h = H().addHousehold({ name, advisorUid: uid || null, advisorName: userName(uid), source: g('hh-source').trim() });
+        mount().innerHTML = '';
+        st.currentId = h.id;
+        RWG.app.nav('household');
+        U().toast('Household created', true);
+      },
+      'hh-open': (el, e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        st.currentId = el.dataset.id;
+        mount().innerHTML = '';
+        RWG.app.nav('household');
+      },
+      'hh-back': () => { st.currentId = null; RWG.app.nav('households'); },
+
+      // household head
+      'hh-edit': (el) => { const h = H().household(el.dataset.id); if (h) editHouseholdModal(h); },
+      'hh-save-edit': (el) => {
+        const uid = g('hh-advisor');
+        H().saveHousehold({ id: el.dataset.id, name: g('hh-name').trim() || '(unnamed)', advisorUid: uid || null, advisorName: userName(uid), source: g('hh-source').trim() });
+        mount().innerHTML = '';
+        RWG.app.renderMain();
+        U().toast('Saved', true);
+      },
+      'hh-a360-toggle': (el) => {
+        const h = H().household(el.dataset.id); if (!h) return;
+        H().setA360(h.id, !h.a360Complete);
+        RWG.app.renderMain();
+      },
+      'hh-notes-save': (el) => {
+        const ta = document.getElementById('hh-notes');
+        H().saveHousehold({ id: el.dataset.id, notes: ta ? ta.value : '' });
+        U().toast('Notes saved', true);
+      },
+      'hh-delete': (el) => {
+        const h = H().household(el.dataset.id); if (!h) return;
+        if (H().contactsFor(h.id).length) { U().toast('Move its people out first'); return; }
+        if (!confirm(`Delete "${h.name}"? Admins only, and it cannot be undone.`)) return;
+        H().deleteHousehold(h.id).then(() => { st.currentId = null; RWG.app.nav('households'); U().toast('Household deleted'); });
+      },
+
+      // people
+      'hh-person-add': (el) => personModal(el.dataset.id, null),
+      'hh-person-edit': (el) => { const c = H().contact(el.dataset.id); if (c) personModal(c.householdId, c); },
+      'hh-person-save': (el) => {
+        const fields = {
+          firstName: g('p-first').trim(), lastName: g('p-last').trim(),
+          relationship: g('p-rel'), dob: g('p-dob'), phone: g('p-phone').trim(),
+          email: g('p-email').trim(), employer: g('p-employer').trim(),
+          planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc')
+        };
+        if (!fields.firstName && !fields.lastName) { U().toast('A person needs a name'); return; }
+        if (el.dataset.id) H().saveContact(Object.assign({ id: el.dataset.id }, fields));
+        else H().addContact(Object.assign({ householdId: el.dataset.hh }, fields));
+        mount().innerHTML = '';
+        RWG.app.renderMain();
+        U().toast('Saved', true);
+      },
+      'hh-person-remove': (el) => {
+        const c = H().contact(el.dataset.id); if (!c) return;
+        if (!confirm(`Remove ${H().contactName(c)} from this household?`)) return;
+        H().removeContact(c.id).then(() => RWG.app.renderMain());
+      },
+      'hh-as-toggle': (el) => {
+        const c = H().contact(el.dataset.id); if (!c) return;
+        H().setAdvisorstream(c.id, !c.advisorstream);
+        RWG.app.renderMain();
+      },
+
+      // connections
+      'hh-link': (el) => linkModal(el.dataset.id),
+      'hh-link-save': (el) => {
+        H().linkHouseholds(el.dataset.id, g('lk-other'), g('lk-kind'), g('lk-note').trim())
+          .then(() => { mount().innerHTML = ''; RWG.app.renderMain(); U().toast('Connected', true); })
+          .catch(err => U().toast(err.message));
+      },
+      'hh-unlink': (el) => {
+        H().unlinkHouseholds(st.currentId, el.dataset.id).then(() => RWG.app.renderMain());
+      },
+
+      // conversion
+      'hh-convert-pick': () => { st.convertQ = ''; convertPickerModal(); },
+      'hh-convert': (el) => convertFormModal(el.dataset.id),
+      'hh-convert-save': (el) => doConvert(el.dataset.id),
+      'hh-goto': (el) => {
+        st.currentId = el.dataset.id;
+        RWG.app.state.leadId = null;
+        const dm = document.getElementById('drawer-mount'); if (dm) dm.innerHTML = '';
+        RWG.app.nav('household');
+      }
+    },
+
+    render(view, user, ctx) {
+      if (!H().isStarted()) return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Loading the book…</h3></div>`;
+      if (view === 'household') {
+        const h = st.currentId && H().household(st.currentId);
+        if (!h) { return listHtml(user, ctx); }
+        return detailHtml(h, user, ctx);
+      }
+      return listHtml(user, ctx);
+    }
+  });
+})();

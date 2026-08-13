@@ -78,6 +78,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Spine: households + contacts (the Resilient CRM book) ──
+    // Open visibility by decision (2026-08-12): the whole team sees
+    // and maintains every household and person — NDAs cover it, and
+    // per-person money never lives on these documents. Split
+    // percentages will get their OWN collection with a partner-only
+    // rule in phase 2, precisely because rules are per-document.
+    match /households/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    match /contacts/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
     // ── Scorecard: weekly submissions ───────────────────────────
     // Aggregate production, team-readable. Doc id is agentUid_weekEnding, so an
     // agent may only write a doc whose agentUid is their own account.

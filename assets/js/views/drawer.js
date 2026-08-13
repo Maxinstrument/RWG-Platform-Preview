@@ -87,10 +87,19 @@ RWG.views.drawer = function (leadId, opts) {
                     <button class="btn btn-ghost btn-sm" data-action="toggle-appt">Reschedule</button>`;
   } else if (l.stage === 'Appointment Kept') {
     stageActions = `<span class="muted" style="font-size:13px;align-self:center">Outcome:</span>
-                    <button class="btn btn-gold btn-sm" data-action="graduate" data-id="${l.id}" data-stage="Opportunity Opened">Opportunity Opened ✦</button>
+                    <button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}" title="Creates the household and the client record — the lead's history comes along">Convert to household ✦</button>
+                    <button class="btn btn-navy btn-sm" data-action="graduate" data-id="${l.id}" data-stage="Opportunity Opened">Opportunity Opened only</button>
                     <button class="btn btn-ghost btn-sm" data-action="graduate" data-id="${l.id}" data-stage="No Opportunity">No Opportunity</button>`;
   } else {
+    // Graduated. If the spine knows this person, point at their household;
+    // if not, offer the conversion that should have happened.
+    const spine = l.householdId
+      ? `<button class="btn btn-navy btn-sm" data-action="hh-goto" data-id="${l.householdId}">View household →</button>`
+      : (l.stage === 'Opportunity Opened'
+          ? `<button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}">Convert to household ✦</button>`
+          : '');
     stageActions = `<span class="chip ${l.stage === 'Opportunity Opened' ? 'tier-gold' : 'tier-low'}">Graduated · ${U.esc(l.stage)}</span>
+      ${spine}
       <span class="muted" style="font-size:12.5px;align-self:center">This lead has left the CRM workflow.</span>`;
   }
 
