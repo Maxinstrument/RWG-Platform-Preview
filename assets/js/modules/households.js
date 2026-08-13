@@ -335,6 +335,7 @@ window.RWG = window.RWG || {};
             <button class="btn btn-ghost btn-sm" data-action="hh-link" data-id="${esc(h.id)}">🔗 Connect</button>
             <button class="btn btn-ghost btn-sm" data-action="hh-edit" data-id="${esc(h.id)}">✎ Edit</button>
             <button class="btn btn-ghost btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
+            <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button>
             <button class="btn btn-gold btn-sm" data-action="hh-opp-add" data-id="${esc(h.id)}">＋ Opportunity</button>
           </div>
         </div>
@@ -360,6 +361,8 @@ window.RWG = window.RWG || {};
         </div>
       </div>
 
+      ${openTasksCard(h)}
+
       <div class="card" style="margin-top:18px">
         <div class="card-head"><h3>Notes</h3></div>
         <textarea id="hh-notes" style="min-height:90px" placeholder="Anything the whole team should know about this family…">${esc(h.notes || '')}</textarea>
@@ -374,6 +377,29 @@ window.RWG = window.RWG || {};
       <div style="margin-top:18px">
         <button class="btn btn-danger btn-sm" data-action="hh-delete" data-id="${esc(h.id)}">🗑 Delete this empty household</button>
       </div>` : ''}`;
+  }
+
+  // ── open tasks on the household (phase 3) ─────────────────
+  // The checkbox and the row edit route to the My Work module's global
+  // actions (tk-done / tk-edit) — one task engine, many doors.
+  function openTasksCard(h) {
+    const T = RWG.tasks;
+    if (!T || !T.isStarted()) return '';
+    const open = T.open().filter(t => t.relatedType === 'household' && t.relatedId === h.id)
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    if (!open.length) return '';
+    const today = T.todayKey();
+    return `<div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Open tasks</h3><span class="sub">${open.length}</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button></div>
+      ${open.map(t => `<div class="flex" style="align-items:flex-start;gap:11px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06)">
+        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="width:16px;height:16px;margin-top:2px;flex:none;cursor:pointer;accent-color:var(--gold)">
+        <span style="min-width:0;flex:1;font-size:13.5px;color:var(--ink)"><span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span>
+          <span class="pill-soft" style="font-size:11px;margin-left:6px">${esc((t.assigneeName || '').split(' ')[0])}</span></span>
+        <span style="flex:none;font-size:12px;${t.dueDate && t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${t.dueDate && t.dueDate < today ? 'late' : (t.dueDate === today ? 'today' : esc(t.dueDate || ''))}</span>
+      </div>`).join('')}
+    </div>`;
   }
 
   // ── opportunities on the household (phase 2) ──────────────
@@ -510,6 +536,7 @@ window.RWG = window.RWG || {};
         RWG.scorecardData.init(RWG.auth.currentUser(), RWG.app.renderMain);
       }
       if (RWG.pipelines) RWG.pipelines.init();
+      if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
     },
 
     onInput(e) {

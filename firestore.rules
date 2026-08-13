@@ -79,6 +79,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Tasks (phase 3) ─────────────────────────────────────────
+    // Team-wide: anyone can create a task for anyone, complete it, or
+    // reassign it — visibility is open by decision, and Kathy manages
+    // every case's tasks. Delete stays admin (done is the normal end).
+    match /tasks/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
     // ── Money attribution: credit splits (phase 2) ──────────────
     // Partner-only by decision. Rules are per-document, which is exactly
     // why the percentages live in their own collection instead of on the
