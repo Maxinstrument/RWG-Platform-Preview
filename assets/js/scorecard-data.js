@@ -31,7 +31,9 @@ RWG.scorecardData = (function () {
 
   const CASE_FIELDS = ['recordId', 'agentUid', 'agentName', 'clientName', 'product', 'source',
     'state', 'amount', 'aum', 'coCreditUids', 'coCreditNames',
-    'openedWeek', 'submittedAt', 'closedAt', 'createdAt', 'createdBy', 'updatedAt'];
+    'openedWeek', 'submittedAt', 'closedAt', 'createdAt', 'createdBy', 'updatedAt',
+    // the spine + granular pipeline (phase 2)
+    'householdId', 'stageId', 'lostReason', 'pendingClose'];
 
   const cache = { cases: [], weeks: [], agents: {} };
   let onChange = () => {};
@@ -116,6 +118,11 @@ RWG.scorecardData = (function () {
       aum: m.aum,
       coCreditUids: input.coCreditUids || existing.coCreditUids || [],
       coCreditNames: input.coCreditNames || existing.coCreditNames || [],
+      // spine + granular stage: pass through, never invented here
+      householdId: input.householdId !== undefined ? input.householdId : (existing.householdId || null),
+      stageId: input.stageId !== undefined ? input.stageId : (existing.stageId || null),
+      lostReason: input.lostReason !== undefined ? input.lostReason : (existing.lostReason || null),
+      pendingClose: input.pendingClose !== undefined ? !!input.pendingClose : !!existing.pendingClose,
       openedWeek: openedWeek,
       submittedAt: submittedAt,
       closedAt: closedAt,
@@ -142,6 +149,50 @@ RWG.scorecardData = (function () {
     const existing = caseById(recordId);
     if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
     return saveCase(Object.assign({}, existing, { state: state }));
+  }
+
+  // ── granular pipeline moves (phase 2) ─────────────────────
+  // Move a case to a stage on its track. Entering a Submitted-bucket
+  // stage stamps submittedAt exactly once — the same write-once stamp
+  // the weekly numbers already run on. Moving backward never clears a
+  // stamp (the rules would refuse anyway), so history is safe from a
+  // mis-drag. Won is NOT reachable here: closing goes through the
+  // close review, which is the only writer of closedAt.
+  function setPipelineStage(recordId, stageId) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    const P = RWG.pipelines;
+    const bucket = P.bucketOf(existing.product, stageId);
+    if (!bucket) return Promise.reject(new Error('no such stage on this track: ' + stageId));
+    if (bucket === 'Closed') return Promise.reject(new Error('closing goes through the close review'));
+
+    const row = Object.assign({}, existing, { stageId: stageId, updatedAt: nowISO() });
+    if (bucket === 'Submitted' && !row.submittedAt) row.submittedAt = nowISO();
+    if (bucket === 'Submitted' && row.state === 'Opened') row.state = 'Submitted';
+    if (bucket === 'Lost') { row.state = 'Lost'; }
+
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('set pipeline stage:', e && e.message); throw e; });
+  }
+
+  // Mark a case lost, always with a reason — the only honest signal
+  // about why business does not close.
+  function markLost(recordId, reason, note) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    const row = Object.assign({}, existing, {
+      stageId: 'lost', state: 'Lost',
+      lostReason: (reason || 'Other') + (note ? ' — ' + note : ''),
+      updatedAt: nowISO()
+    });
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('mark lost:', e && e.message); throw e; });
   }
 
   function deleteCase(recordId) {
@@ -239,7 +290,7 @@ RWG.scorecardData = (function () {
     cases, casesWithMoney, casesForAgent, caseById, withMoney,
     weeks, weekFor, weeksForWeek, weekId,
     agentsConfig, agentConfig,
-    buildCase, saveCase, setCaseState, deleteCase, adminSetStamps,
+    buildCase, saveCase, setCaseState, setPipelineStage, markLost, deleteCase, adminSetStamps,
     saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek,
     CASE_FIELDS, _cache: cache
   };
