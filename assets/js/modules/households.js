@@ -337,6 +337,7 @@ window.RWG = window.RWG || {};
             <button class="btn btn-ghost btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
             <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button>
             <button class="btn btn-ghost btn-sm" data-action="wf-launch" data-hh="${esc(h.id)}">▶ Workflow</button>
+            <button class="btn btn-ghost btn-sm" data-action="sv-new" data-hh="${esc(h.id)}">🛠 Service</button>
             <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(h.id)}">＋ Opportunity</button>
           </div>
         </div>

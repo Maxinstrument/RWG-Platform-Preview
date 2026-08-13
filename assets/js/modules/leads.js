@@ -32,7 +32,8 @@ RWG.modules.register({
       { view: 'reports',   label: 'Lead Reports',   icon: 'reports' },
       { view: 'upload',    label: 'Upload & Assign',icon: 'upload' },
       { view: 'archive',   label: 'Deleted Leads',  icon: 'archive' },
-      { view: 'settings',  label: 'Scoring & Settings', icon: 'settings' }
+      // Lead scoring moved into CRM Settings (phase 7); the old view
+      // stays registered so a stale deep-link still renders.
     ],
     agent: [
       { view: 'board',  label: 'My Board',       icon: 'board' },

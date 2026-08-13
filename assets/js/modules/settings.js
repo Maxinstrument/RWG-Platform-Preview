@@ -308,6 +308,36 @@ window.RWG = window.RWG || {};
       ${saveBar('p', 'set-save-pl', 'Save lost reasons')}`;
   }
 
+  /* ══ Lead scoring tab (phase 7) ════════════════════════════
+     The same rules that lived under "Scoring & Settings" in the
+     Leads nav, moved home. The fields keep their cfg-* ids and the
+     buttons keep their kernel actions (save-scoring / reset-scoring),
+     so the save path is byte-for-byte the one that always worked. */
+  function scoringTab() {
+    const c = D().scoringConfig();
+    const f = (label, id, val, hint) => `<div class="field-group"><label class="lbl">${label}</label>
+      <input type="number" step="any" id="${id}" value="${val}">${hint ? `<div class="cell-sub mt-8">${hint}</div>` : ''}</div>`;
+    return `
+      <div class="card" style="max-width:640px">
+        <div class="card-head"><h3>Lead scoring rules</h3><span class="sub">tune what makes a lead "Gold" — leads re-score on save</span></div>
+        <div class="field-row">${f('DROP — Regular: Years of Service', 'cfg-reg-yos', c.drop.regular.yos)}${f('DROP — Regular: Age', 'cfg-reg-age', c.drop.regular.age)}</div>
+        <div class="field-row">${f('DROP — Special Risk: YOS', 'cfg-sr-yos', c.drop.specialRisk.yos)}${f('DROP — Special Risk: Age', 'cfg-sr-age', c.drop.specialRisk.age)}</div>
+        ${f('In-service rollover age', 'cfg-inservice', c.inServiceAge, 'Age that unlocks in-service rollover → annuity.')}
+        ${f('High-tenure Investment Plan (YOS)', 'cfg-invhi', c.investmentHighYos, 'YOS that implies a large Investment Plan account.')}
+        <div class="field-row">${f('AFC: High ($)', 'cfg-afc-hi', c.afc.high)}${f('AFC: Mid ($)', 'cfg-afc-mid', c.afc.mid)}</div>
+        <div class="section-title">Tier cutoffs (0–100 score)</div>
+        <div class="field-row">${f('Gold ≥', 'cfg-cut-gold', c.tierCutoffs.gold)}${f('High ≥', 'cfg-cut-high', c.tierCutoffs.high)}</div>
+        ${f('Medium ≥', 'cfg-cut-med', c.tierCutoffs.medium, 'Below this = Low.')}
+        <div class="mt-8" style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" data-action="reset-scoring">Reset to defaults</button>
+          <button class="btn btn-gold btn-sm" data-action="save-scoring">Save scoring rules</button>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 2px 0;max-width:640px">
+        Moved here from the old "Scoring & Settings" — same rules, same save, one settings screen.
+      </p>`;
+  }
+
   /* ══ shared chrome ═════════════════════════════════════════ */
 
   function saveBar(which, action, label) {
@@ -320,11 +350,12 @@ window.RWG = window.RWG || {};
   }
 
   function screenHtml() {
-    const tabs = [['pipelines', 'Pipelines'], ['workflows', 'Workflows'], ['rates', 'Rates'], ['reasons', 'Lost reasons']]
+    const tabs = [['pipelines', 'Pipelines'], ['workflows', 'Workflows'], ['rates', 'Rates'], ['reasons', 'Lost reasons'], ['scoring', 'Lead scoring']]
       .map(t => `<button class="btn btn-sm ${st.tab === t[0] ? 'btn-navy' : 'btn-ghost'}" data-action="set-tab" data-tab="${t[0]}">${t[1]}</button>`).join('');
     const body = st.tab === 'workflows' ? workflowsTab()
       : st.tab === 'rates' ? ratesTab()
       : st.tab === 'reasons' ? reasonsTab()
+      : st.tab === 'scoring' ? scoringTab()
       : pipelinesTab();
     return `<div class="flex" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">${tabs}</div>${body}`;
   }

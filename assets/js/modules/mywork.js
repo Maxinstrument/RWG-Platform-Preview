@@ -99,6 +99,8 @@ window.RWG = window.RWG || {};
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
           ${relatedChip(t)}
           ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10.5px" title="Step ${(t.workflowStep || 0) + 1} of the ${esc(t.workflowName)} workflow">⚙ ${esc(t.workflowName)}</span>` : ''}
+          ${t.kind === 'service' ? `<span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">🛠 ${esc(t.serviceType || 'Service')}</span>` : ''}
+          ${t.kind === 'service' && t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.required ? '<span class="chip tier-medium" style="font-size:10.5px" title="A required step — the case cannot be pushed to Won until this is done">required</span>' : ''}
           ${showAssignee ? `<span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>` : ''}
           ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}

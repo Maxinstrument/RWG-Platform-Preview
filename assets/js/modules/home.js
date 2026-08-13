@@ -403,6 +403,25 @@ window.RWG = window.RWG || {};
       + hint('Partner-only, like everything per-person.'));
   }
 
+  // 15 · Service desk — the post-close queue at a glance.
+  function wService(ctx) {
+    const sv = RWG._serviceModule;
+    if (!sv || !T().isStarted()) return card('Service desk', '', emptyRow('Loading…'));
+    const open = sv.openQ(), waiting = sv.waitingQ();
+    if (!open.length && !waiting.length) return card('Service desk', '', emptyRow('The desk is clear — nothing open, nothing waiting.'));
+    const today = T().todayKey();
+    const rows = open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 6)
+      .map(t => `<div class="flex" style="gap:9px;padding:8px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
+        <span style="flex:none">🛠</span>
+        <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${t.relatedId ? 'cursor:pointer' : ''}"
+          ${t.relatedId ? `data-action="hh-goto" data-id="${esc(t.relatedId)}"` : ''}>${esc(t.title)}</span>
+        <span class="cell-sub" style="display:block;font-size:11px">${esc(t.serviceType || '')} · ${esc(firstName(t.assigneeName))}</span></span>
+        <span style="flex:none;font-size:11.5px;${t.dueDate && t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${t.dueDate && t.dueDate < today ? 'late' : esc(t.dueDate || '')}</span>
+      </div>`).join('');
+    return card('Service desk', open.length + ' open' + (waiting.length ? ' · ' + waiting.length + ' waiting' : ''), rows,
+      `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="service">Queue →</button>`);
+  }
+
   // 14 · Chairman's Club pace — the $1M sprint.
   function wClub(ctx) {
     const CH = SC().CHAIRMAN;
@@ -438,7 +457,8 @@ window.RWG = window.RWG || {};
     { id: 'leadsidle',   title: 'Leads not worked',     render: wLeadsIdle },
     { id: 'asqueue',     title: 'AdvisorStream queue',  render: wAsQueue },
     { id: 'leaderboard', title: 'Team leaderboard',     render: wLeaderboard, admin: true },
-    { id: 'club',        title: 'Chairman’s Club pace', render: wClub }
+    { id: 'club',        title: 'Chairman’s Club pace', render: wClub },
+    { id: 'service',     title: 'Service desk',         render: wService }
   ];
   const widget = (id) => WIDGETS.find(w => w.id === id) || null;
 
