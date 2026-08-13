@@ -243,21 +243,26 @@ window.RWG = window.RWG || {};
       + hint('Occupancy, not conversion. A pile-up here is a bottleneck.'));
   }
 
-  // 5 · Important dates — birthdays across the whole book, 30 days out.
+  // 5 · Important dates — the whole merged feed (birthdays with milestone
+  // flags, policy anniversaries, custom dates), same truth as the Key
+  // dates screen. Falls back to plain birthdays if that module is absent.
   function wDates(ctx) {
     if (!H().isStarted()) return card('Important dates', 'next 30 days', emptyRow('Loading the book…'));
-    const bdays = H().upcomingBirthdays(30).slice(0, 8);
-    if (!bdays.length) return card('Important dates', 'next 30 days', emptyRow('No key dates inside 30 days. Birthdays appear as they are added to households.'));
-    const rows = bdays.map(b => {
-      const hh = H().household(b.contact.householdId);
-      return `<div class="flex" style="gap:9px;padding:9px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
-        <span style="flex:none">🎂</span>
-        <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${hh ? 'cursor:pointer' : ''}" ${hh ? `data-action="hh-goto" data-id="${esc(hh.id)}"` : ''}>${esc(H().contactName(b.contact))}</span>
-        <span class="cell-sub" style="display:block">turns ${b.turning}${hh && hh.advisorName ? ' · ' + esc(firstName(hh.advisorName)) : ''}</span></span>
-        <span class="cell-sub" style="flex:none">${b.inDays === 0 ? 'today' : 'in ' + b.inDays + 'd'}</span>
-      </div>`;
-    }).join('');
-    return card('Important dates', 'next 30 days · whole book', rows);
+    const feed = RWG.dates ? RWG.dates.upcoming(30).slice(0, 8)
+      : H().upcomingBirthdays(30).slice(0, 8).map(b => ({
+          icon: '🎂', title: H().contactName(b.contact) + ' turns ' + b.turning,
+          sub: '', advisor: '', hhId: b.contact.householdId, inDays: b.inDays, milestone: null
+        }));
+    if (!feed.length) return card('Important dates', 'next 30 days', emptyRow('No key dates inside 30 days. Birthdays, anniversaries and custom dates appear as the book fills in.'));
+    const rows = feed.map(e => `<div class="flex" style="gap:9px;padding:9px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+      <span style="flex:none">${e.icon}</span>
+      <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${e.hhId ? 'cursor:pointer' : ''}" ${e.hhId ? `data-action="hh-goto" data-id="${esc(e.hhId)}"` : ''}>${esc(e.title)}</span>
+      <span class="cell-sub" style="display:block">${esc(e.sub || '')}${e.advisor ? (e.sub ? ' · ' : '') + esc(firstName(e.advisor)) : ''}</span>
+      ${e.milestone ? `<span class="chip tier-gold" style="font-size:10px;margin-top:2px">✦ ${esc(e.milestone)}</span>` : ''}</span>
+      <span class="cell-sub" style="flex:none">${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</span>
+    </div>`).join('');
+    return card('Important dates', 'next 30 days · whole book', rows,
+      `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="dates">All dates →</button>`);
   }
 
   // 6 · Team activity — synthesised from the stamps already on the data.

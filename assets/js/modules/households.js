@@ -353,8 +353,16 @@ window.RWG = window.RWG || {};
 
       <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
         <div class="card">
-          <div class="card-head"><h3>Key dates</h3><span class="sub">next 60 days</span></div>
+          <div class="card-head"><h3>Key dates</h3><span class="sub">next 60 days</span>
+            <span class="topbar-spacer"></span>
+            <button class="btn btn-ghost btn-sm" data-action="kd-add" data-hh="${esc(h.id)}">＋ Key date</button></div>
           ${bdayRows}
+          ${(h.keyDates || []).map(k => `
+            <div class="tl-item"><div class="tl-ic">⭐</div><div class="tl-body">
+              <div class="tl-h">${esc(k.label)}</div>
+              <div class="tl-meta">${esc(k.date)}${k.repeat === 'yearly' ? ' · every year' : ''}${k.note ? ' · ' + esc(k.note) : ''}
+                <button class="btn btn-quiet btn-sm" data-action="kd-del" data-hh="${esc(h.id)}" data-kd="${esc(k.id)}" style="margin-left:6px">✕</button></div>
+            </div></div>`).join('')}
         </div>
         <div class="card">
           <div class="card-head"><h3>Connected to</h3><span class="sub">${(h.links || []).length}</span></div>

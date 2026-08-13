@@ -1,0 +1,351 @@
+/* ============================================================
+   RWG Platform — Key dates & AdvisorStream queue (phase 6a)
+
+   One screen, two tabs.
+
+   KEY DATES: every date the book knows how to pay attention to,
+   merged into one feed — birthdays (with the milestone ages that
+   matter in this business flagged), policy anniversaries derived
+   from confirmed closes (year one = the first annual review), and
+   custom dates typed onto a household (a DROP window, a retirement
+   date, an RMD deadline). Nothing here nags by itself: the ⏰
+   button turns a date into an ordinary task on the advisor's My
+   Work, due three days ahead — reminders live where work lives.
+
+   ADVISORSTREAM QUEUE: every prospect goes on the weekly
+   newsletter — that was decided on day one. AdvisorStream is a
+   separate tool and the bridge is a person, by design (same rule
+   as A360): this tab is the worklist. Copy the emails, subscribe
+   them over there, mark them done here.
+
+   RWG.dates exposes the merged feed so the Home dashboard's
+   Important dates widget shows the same truth.
+   ============================================================ */
+window.RWG = window.RWG || {};
+
+(function () {
+  const H  = () => RWG.hh;
+  const SD = () => RWG.scorecardData;
+  const SC = () => RWG.scorecard;
+  const T  = () => RWG.tasks;
+  const U  = () => RWG.ui;
+  const esc = (s) => U().esc(s);
+  const dayMs = 86400000;
+
+  const st = { tab: 'dates', range: 60, kind: '', entries: {} };
+
+  // ── the date math ─────────────────────────────────────────
+  function nextOccur(dateStr, today) {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(String(dateStr))) return null;
+    const t = today || new Date();
+    const t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    const p = String(dateStr).slice(0, 10).split('-').map(Number);
+    let next = new Date(t0.getFullYear(), p[1] - 1, p[2]);
+    if (next < t0) next = new Date(t0.getFullYear() + 1, p[1] - 1, p[2]);
+    return { when: next, inDays: Math.round((next - t0) / dayMs), years: next.getFullYear() - p[0] };
+  }
+
+  // The ages a planning practice actually watches. Soft phrasing on
+  // purpose — a flag to start a conversation, not advice.
+  const MILESTONES = {
+    50: 'catch-up contributions unlock',
+    59: 'turns 59½ this year — in-service rollover territory',
+    62: 'FRS normal retirement age',
+    65: 'Medicare enrollment window',
+    73: 'RMDs begin'
+  };
+  const milestone = (turning) => MILESTONES[turning] || null;
+  const fmtShort = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  // ── the merged feed ───────────────────────────────────────
+  function upcoming(days, today) {
+    days = days || 30;
+    const out = [];
+    const t = today || new Date();
+    const t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+
+    if (H() && H().isStarted()) {
+      H().upcomingBirthdays(days).forEach(b => {
+        const hh = b.contact.householdId ? H().household(b.contact.householdId) : null;
+        out.push({
+          kind: 'birthday', icon: '🎂', when: b.date, inDays: b.inDays,
+          title: H().contactName(b.contact) + ' turns ' + b.turning,
+          sub: hh ? hh.name : '', advisor: (hh && hh.advisorName) || '',
+          hhId: b.contact.householdId || null, milestone: milestone(b.turning),
+          key: 'bd:' + b.contact.id + ':' + b.date.getFullYear(),
+          remindTitle: 'Call ' + H().contactName(b.contact) + ' — birthday ' + fmtShort(b.date)
+        });
+      });
+      H().households().forEach(h => (h.keyDates || []).forEach(k => {
+        let when, inDays;
+        if (k.repeat === 'yearly') {
+          const n = nextOccur(k.date, t); if (!n) return;
+          when = n.when; inDays = n.inDays;
+        } else {
+          const n = nextOccur(k.date, t); if (!n) return;
+          // one-time: only the literal date, never a repeat of it
+          const lit = new Date(Number(k.date.slice(0, 4)), Number(k.date.slice(5, 7)) - 1, Number(k.date.slice(8, 10)));
+          inDays = Math.round((lit - t0) / dayMs);
+          if (inDays < 0) return;
+          when = lit;
+        }
+        if (inDays > days) return;
+        out.push({
+          kind: 'custom', icon: '⭐', when, inDays,
+          title: k.label || 'Key date',
+          sub: h.name + (k.note ? ' · ' + k.note : ''), advisor: h.advisorName || '',
+          hhId: h.id, kdId: k.id,
+          key: 'kd:' + h.id + ':' + k.id + ':' + when.getFullYear(),
+          remindTitle: (k.label || 'Key date') + ' — ' + h.name
+        });
+      }));
+    }
+
+    if (SD() && SD().isStarted()) {
+      SD().cases().filter(c => c.closedAt).forEach(c => {
+        const n = nextOccur(String(c.closedAt).slice(0, 10), t);
+        if (!n || n.years < 1 || n.inDays > days) return;
+        out.push({
+          kind: 'anniversary', icon: '📜', when: n.when, inDays: n.inDays,
+          title: (c.title || c.clientName || '(no name)') + ' — policy anniversary, year ' + n.years,
+          sub: SC().productName(c.product) + ' · a review is due', advisor: c.agentName || '',
+          hhId: c.householdId || null,
+          key: 'an:' + c.recordId + ':' + n.when.getFullYear(),
+          remindTitle: 'Annual review — ' + (c.clientName || c.title || '') + ' (policy year ' + n.years + ')'
+        });
+      });
+    }
+
+    return out.sort((a, b) => a.inDays - b.inDays || String(a.title).localeCompare(String(b.title)));
+  }
+
+  // ── reminders: a date becomes a task, once ────────────────
+  function remind(e) {
+    const t = T();
+    if (!t.isStarted()) t.init(RWG.auth.currentUser(), RWG.app.renderMain);
+    if (t.open().some(x => x.title === e.remindTitle)) { U().toast('Already on the list'); return; }
+    const me = RWG.auth.currentUser();
+    const hh = e.hhId && H().isStarted() ? H().household(e.hhId) : null;
+    const due = Math.max(e.when.getTime() - 3 * dayMs, Date.now());
+    t.addTask({
+      title: e.remindTitle,
+      note: 'from Key dates · ' + fmtShort(e.when),
+      assigneeUid: (hh && hh.advisorUid) || me.id,
+      assigneeName: (hh && hh.advisorName) || me.name || '',
+      dueDate: t.todayKey(due),
+      relatedType: hh ? 'household' : null,
+      relatedId: hh ? hh.id : null,
+      relatedLabel: hh ? hh.name : ''
+    });
+    U().toast('Reminder set — it is on ' + esc((hh && hh.advisorName) ? hh.advisorName.split(' ')[0] : 'your') + (hh && hh.advisorName ? '’s' : '') + ' My Work', true);
+  }
+
+  // ── custom-date modal (from here or a household's card) ───
+  const mount = () => document.getElementById('modal-mount');
+  const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+
+  function kdModal(presetHh) {
+    const hhs = H().households().slice().sort((a, b) => a.name.localeCompare(b.name));
+    const opts = hhs.map(h => `<option value="${esc(h.id)}" ${h.id === presetHh ? 'selected' : ''}>${esc(h.name)}</option>`).join('');
+    mount().innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card">
+        <div class="modal-head"><h2>New key date</h2>
+          <p>A DROP window, a retirement date, an RMD deadline — anything the book should never forget.</p></div>
+        <div class="modal-body">
+          <div class="field-group"><label class="lbl">Household</label><select id="kd-hh">${opts}</select></div>
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">What is it</label>
+              <input id="kd-label" placeholder="e.g. DROP window ends"></div>
+            <div class="field-group"><label class="lbl">Date</label>
+              <input id="kd-date" type="date"></div>
+          </div>
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">Repeats</label>
+              <select id="kd-repeat"><option value="yearly">Every year</option><option value="once">One time</option></select></div>
+            <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
+              <input id="kd-note"></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+          <button class="btn btn-gold" data-action="kd-add-save">Add date</button>
+        </div>
+      </div>`;
+    const inp = document.getElementById('kd-label'); if (inp) inp.focus();
+  }
+
+  // ── the screen ────────────────────────────────────────────
+  function group(label, list, tone) {
+    if (!list.length) return '';
+    return `<div style="padding:9px 16px;background:${tone === 'hot' ? 'rgba(194,161,77,.10)' : 'var(--field)'};border-bottom:1px solid var(--line);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--muted)">
+      ${label} <span style="opacity:.7">· ${list.length}</span></div>` + list.map(row).join('');
+  }
+  function row(e) {
+    st.entries[e.key] = e;
+    return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+      <span style="flex:none;font-size:15px">${e.icon}</span>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13.5px;color:var(--ink);font-weight:600;${e.hhId ? 'cursor:pointer' : ''}"
+          ${e.hhId ? `data-action="hh-goto" data-id="${esc(e.hhId)}"` : ''}>${esc(e.title)}</div>
+        <div class="flex" style="gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
+          ${e.sub ? `<span class="cell-sub" style="font-size:11.5px">${esc(e.sub)}</span>` : ''}
+          ${e.advisor ? `<span class="pill-soft" style="font-size:11px">${esc(e.advisor.split(' ')[0])}</span>` : ''}
+          ${e.milestone ? `<span class="chip tier-gold" style="font-size:10.5px">✦ ${esc(e.milestone)}</span>` : ''}
+          ${e.kind === 'custom' ? `<button class="btn btn-quiet btn-sm" style="padding:1px 7px;font-size:10.5px" title="Remove this date" data-action="kd-del" data-hh="${esc(e.hhId)}" data-kd="${esc(e.kdId)}">✕</button>` : ''}
+        </div>
+      </div>
+      <div style="flex:none;text-align:right">
+        <div style="font-size:12px;color:var(--ink)">${esc(fmtShort(e.when))}</div>
+        <div class="cell-sub" style="font-size:11px">${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="flex:none;margin-top:2px" title="Create a reminder task, due 3 days ahead"
+        data-action="kd-remind" data-key="${esc(e.key)}">⏰ Remind</button>
+    </div>`;
+  }
+
+  function datesTab() {
+    st.entries = {};
+    const all = upcoming(st.range);
+    const list = st.kind ? all.filter(e => e.kind === st.kind) : all;
+    const week = list.filter(e => e.inDays <= 7);
+    const month = list.filter(e => e.inDays > 7 && e.inDays <= 31);
+    const later = list.filter(e => e.inDays > 31);
+    const chips = [['', 'All'], ['birthday', '🎂 Birthdays'], ['anniversary', '📜 Anniversaries'], ['custom', '⭐ Custom']]
+      .map(k => `<button class="btn btn-sm ${st.kind === k[0] ? 'btn-navy' : 'btn-ghost'}" data-action="kd-kind" data-kind="${k[0]}">${k[1]}</button>`).join('');
+    const ranges = [30, 60, 90, 180].map(r => `<option value="${r}" ${r === st.range ? 'selected' : ''}>Next ${r} days</option>`).join('');
+    return `
+      <div class="flex" style="gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        ${chips}<span class="topbar-spacer"></span>
+        <select id="kd-range" class="fbar-select" style="width:auto">${ranges}</select>
+        <button class="btn btn-gold btn-sm" data-action="kd-add">＋ Key date</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        ${group('This week', week, 'hot') + group('This month', month) + group('Further out', later)
+          || `<div class="empty" style="padding:44px 16px"><div class="ec">🗓</div><h3>Nothing inside ${st.range} days</h3>
+              <p>Dates appear as births, closes and custom dates land in the book.</p></div>`}
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 2px 0">
+        ⏰ turns a date into a task on the advisor's My Work, due three days ahead — set it once, it will not duplicate.
+        Anniversaries come from confirmed closes; year one is the first annual review.
+      </p>`;
+  }
+
+  function streamTab() {
+    const contacts = H().contacts();
+    const queue = contacts.filter(c => !c.advisorstream)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const onList = contacts.length - queue.length;
+    const emails = queue.map(c => (c.email || '').trim()).filter(Boolean);
+    const rows = queue.map(c => {
+      const hh = c.householdId ? H().household(c.householdId) : null;
+      return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13.5px;color:var(--ink);font-weight:600;${hh ? 'cursor:pointer' : ''}"
+            ${hh ? `data-action="hh-goto" data-id="${esc(hh.id)}"` : ''}>${esc(H().contactName(c))}</div>
+          <div class="cell-sub" style="font-size:11.5px">${hh ? esc(hh.name) : '—'}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
+        </div>
+        <div style="flex:none;min-width:0;max-width:220px">
+          ${c.email ? `<span class="cell-sub" style="font-size:12px">${esc(c.email)}</span>`
+            : '<span class="chip tier-low" style="font-size:10.5px" title="AdvisorStream needs an email — add one on the household">no email</span>'}
+        </div>
+        <button class="btn btn-ghost btn-sm" style="flex:none" data-action="as-done" data-id="${esc(c.id)}">Subscribed ✓</button>
+      </div>`;
+    }).join('');
+    return `
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="flex" style="padding:13px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px">
+          <b style="font-size:13px;color:var(--navy)">Waiting for the newsletter</b>
+          <span class="cell-sub">${queue.length} to add · ${onList} already on</span>
+          <span class="topbar-spacer"></span>
+          ${emails.length ? `<button class="btn btn-ghost btn-sm" data-action="as-copy">⧉ Copy ${emails.length} email${emails.length === 1 ? '' : 's'}</button>` : ''}
+        </div>
+        ${rows || `<div class="empty" style="padding:44px 16px"><div class="ec">✓</div><h3>Everyone is on the newsletter</h3>
+          <p>New people land here until they are subscribed.</p></div>`}
+      </div>
+      <p class="muted" style="font-size:12px;margin:10px 2px 0">
+        The bridge is you, by design: copy the emails, subscribe them in AdvisorStream, then mark each
+        one Subscribed ✓ here. The toggle on a household's people table is the same switch.
+      </p>`;
+  }
+
+  RWG.dates = { nextOccur, milestone, upcoming, MILESTONES };
+
+  RWG.modules.register({
+    id: 'dates',
+    title: 'Key dates',
+    enabled: true,
+    roles: ['admin', 'agent'],
+    nav: [{ view: 'dates', label: 'Key dates', icon: 'today' }],
+    meta: { dates: { t: 'Key dates', s: 'What the book must never forget' } },
+    state: st,
+
+    home: {
+      tile: () => ({ icon: 'today', title: 'Key dates', desc: 'Birthdays, anniversaries and the AdvisorStream queue.', view: 'dates' })
+    },
+
+    onEnter() {
+      const me = RWG.auth.currentUser();
+      if (!H().isStarted()) H().init(me, RWG.app.renderMain);
+      if (!SD().isStarted()) SD().init(me, RWG.app.renderMain);
+      if (!T().isStarted()) T().init(me, RWG.app.renderMain);
+      RWG.pipelines.init();
+    },
+
+    onChange(e) {
+      if (e.target.id === 'kd-range') { st.range = Number(e.target.value) || 60; RWG.app.renderMain(); }
+    },
+
+    actions: {
+      'kd-tab': (el) => { st.tab = el.dataset.tab; RWG.app.renderMain(); },
+      'kd-kind': (el) => { st.kind = el.dataset.kind; RWG.app.renderMain(); },
+      'kd-remind': (el) => { const e = st.entries[el.dataset.key]; if (e) remind(e); },
+      'kd-add': (el) => kdModal(el.dataset.hh || null),
+      'kd-add-save': () => {
+        const hhId = g('kd-hh'), label = g('kd-label').trim(), date = g('kd-date');
+        if (!hhId || !label || !date) { U().toast('Household, name and date — all three'); return; }
+        const h = H().household(hhId); if (!h) return;
+        const kds = (h.keyDates || []).concat([{
+          id: 'kd' + Date.now(), label: label, date: date,
+          repeat: g('kd-repeat') || 'yearly', note: g('kd-note').trim()
+        }]);
+        H().saveHousehold({ id: hhId, keyDates: kds });
+        mount().innerHTML = '';
+        RWG.app.renderMain();
+        U().toast('On the book — it will surface as it approaches', true);
+      },
+      'kd-del': (el) => {
+        const h = H().household(el.dataset.hh); if (!h) return;
+        H().saveHousehold({ id: h.id, keyDates: (h.keyDates || []).filter(k => k.id !== el.dataset.kd) });
+        RWG.app.renderMain();
+      },
+      'as-done': (el) => {
+        H().setAdvisorstream(el.dataset.id, true);
+        RWG.app.renderMain();
+        U().toast('On the newsletter ✓', true);
+      },
+      'as-copy': () => {
+        const emails = H().contacts().filter(c => !c.advisorstream && (c.email || '').trim())
+          .map(c => c.email.trim()).join(', ');
+        const done = () => U().toast('Copied — paste into AdvisorStream', true);
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(emails).then(done, () => U().toast('Could not copy'));
+        else {
+          const ta = document.createElement('textarea');
+          ta.value = emails; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); done(); } catch (e) { U().toast('Could not copy'); }
+          ta.remove();
+        }
+      }
+    },
+
+    render(view, user, ctx) {
+      if (!H().isStarted()) return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Loading the book…</h3></div>`;
+      const queueN = H().contacts().filter(c => !c.advisorstream).length;
+      const tabs = `<div class="flex" style="gap:8px;margin-bottom:16px">
+        <button class="btn btn-sm ${st.tab === 'dates' ? 'btn-navy' : 'btn-ghost'}" data-action="kd-tab" data-tab="dates">Key dates</button>
+        <button class="btn btn-sm ${st.tab === 'stream' ? 'btn-navy' : 'btn-ghost'}" data-action="kd-tab" data-tab="stream">AdvisorStream queue${queueN ? ` · ${queueN}` : ''}</button>
+      </div>`;
+      return tabs + (st.tab === 'stream' ? streamTab() : datesTab());
+    }
+  });
+})();
