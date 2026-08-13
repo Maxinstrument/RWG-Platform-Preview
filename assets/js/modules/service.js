@@ -81,10 +81,10 @@ window.RWG = window.RWG || {};
     const today = T().todayKey();
     const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
     const age = Math.max(0, Math.floor((Date.now() - (t.createdAt || Date.now())) / dayMs));
-    return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+    return `<div class="list-row">
       <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
         style="margin-top:3px">
-      <div style="min-width:0;flex:1">
+      <div class="grow">
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
@@ -96,7 +96,7 @@ window.RWG = window.RWG || {};
           ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}
         </div>
       </div>
-      <div style="flex:none;text-align:right;padding-top:2px">
+      <div class="end" style="padding-top:2px">
         <div style="font-size:12px;${late ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${late ? 'late' : esc(t.dueDate || '')}</div>
         <div class="cell-sub" style="font-size:10.5px">${age}d old</div>
       </div>
@@ -129,7 +129,7 @@ window.RWG = window.RWG || {};
         <select id="sv-fwho" class="fbar-select" style="width:auto">${whoOpts}</select>
         <button class="btn btn-gold btn-sm" data-action="sv-new">＋ Service request</button>
       </div>
-      <div class="card" style="padding:0;overflow:hidden">
+      <div class="card flush">
         ${list.map(row).join('') || `<div class="empty" style="padding:44px 16px"><div class="ec">🛠</div><h3>${empty}</h3>
           <p>Service requests are tasks with a type — they show on My Work and on the household, same as everything.</p></div>`}
       </div>

@@ -199,13 +199,15 @@ window.RWG = window.RWG || {};
 
     const details = cleanHtml((c && c.details) || '');
     const toolBtn = (cmd, label, title) =>
-      `<button type="button" class="btn btn-quiet btn-sm op2-tool" data-cmd="${cmd}" title="${esc(title)}" style="padding:3px 9px;font-size:12px">${label}</button>`;
+      `<button type="button" class="btn btn-quiet btn-sm op2-tool" data-cmd="${cmd}" title="${esc(title)}">${label}</button>`;
 
     const mount = document.getElementById('modal-mount');
     mount.innerHTML = `<div class="scrim" data-action="close-modal"></div>
-      <div class="modal-card" style="max-width:680px">
-        <div class="modal-head"><h3>${c ? (editable ? 'Opportunity' : 'Opportunity (read-only)') : 'Add Opportunity'}</h3>
-          <button class="drawer-close" data-action="close-modal">✕</button></div>
+      <div class="modal-card modal-lg">
+        <div class="modal-head">
+          <div><h2>${c ? (editable ? 'Opportunity' : 'Opportunity (read-only)') : 'Add opportunity'}</h2>
+            <p>${c ? esc(c.clientName || '') + (hh ? ' · ' + esc(hh.name) : '') : 'What you are working on, who is on it, and what it is worth.'}</p></div>
+          <button class="drawer-close" data-action="close-modal" title="Close">✕</button></div>
         <div class="modal-body">
 
           <div class="field-group"><label class="lbl">Opportunity name <span style="color:var(--bad)">*</span></label>
@@ -220,12 +222,12 @@ window.RWG = window.RWG || {};
               ${hh ? `<div class="hint">${esc(hh.name)}</div>` : '<div class="hint">Not linked to a household yet.</div>'}</div>
             <div class="field-group"><label class="lbl">Agents involved</label>
               <select id="op2-agent" ${dis}>${ownerOpts}</select>
-              <div class="flex" style="gap:9px;flex-wrap:wrap;margin-top:6px">
-                ${users.map(u => u.id === ownerUid ? '' : `<label class="flex" style="gap:4px;align-items:center;font-size:12px;cursor:pointer">
-                  <input type="checkbox" id="op2-co-${esc(u.id)}" data-op2co="${esc(u.id)}" ${coUids.indexOf(u.id) >= 0 ? 'checked' : ''} ${dis}
-                    style="accent-color:var(--gold)">${esc((u.name || '').split(' ')[0])}</label>`).join('')}
+              <div class="checkrow">
+                ${users.map(u => u.id === ownerUid ? '' : `<label class="checkitem">
+                  <input type="checkbox" id="op2-co-${esc(u.id)}" data-op2co="${esc(u.id)}" ${coUids.indexOf(u.id) >= 0 ? 'checked' : ''} ${dis}>
+                  ${esc((u.name || '').split(' ')[0])}</label>`).join('')}
               </div>
-              <div class="hint">First is the owner. Others ride along from day one — the split itself is set at close.</div></div>
+              <div class="hint">The select names the owner; ticks ride along. Splits are set at close.</div></div>
           </div>
 
           <div class="field-row">
@@ -237,7 +239,7 @@ window.RWG = window.RWG || {};
               <div class="hint" id="op2-stage-hint"></div>`}</div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <div class="op2-money">
             <div class="field-group"><label class="lbl">Benefit amount</label>
               <input id="op2-benefit" type="number" step="any" value="${esc(c && c.benefit != null && c.benefit !== '' ? c.benefit : '')}" ${dis}></div>
             <div class="field-group"><label class="lbl" id="op2-prem-label">${esc(L.premium)}</label>
@@ -258,15 +260,16 @@ window.RWG = window.RWG || {};
           </div>
 
           <div class="field-group"><label class="lbl">Details</label>
-            ${editable ? `<div class="flex" style="gap:4px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;background:var(--field)">
+            ${editable ? `<div class="rt-toolbar">
               ${toolBtn('bold', '<b>B</b>', 'Bold')}${toolBtn('italic', '<i>I</i>', 'Italic')}${toolBtn('underline', '<u>U</u>', 'Underline')}
               ${toolBtn('insertUnorderedList', '•≡', 'Bullet list')}${toolBtn('insertOrderedList', '1≡', 'Numbered list')}
               ${toolBtn('link', '🔗', 'Insert link')}
               <span class="topbar-spacer"></span>
               ${toolBtn('date', 'Insert date', 'Stamp today into the notes')}
             </div>` : ''}
-            <div id="op2-details" ${editable ? 'contenteditable="true"' : ''}
-              style="min-height:110px;max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:${editable ? '0 0 10px 10px' : '10px'};padding:10px 13px;font-size:13.5px;background:#fff;color:var(--ink)">${details}</div></div>
+            <div id="op2-details" class="rt-body" data-ph="Anything worth remembering about this opportunity…"
+              ${editable ? 'contenteditable="true"' : ''}
+              style="${editable ? '' : 'border-radius:var(--radius-sm)'}">${details}</div></div>
 
           ${correct}
           ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}

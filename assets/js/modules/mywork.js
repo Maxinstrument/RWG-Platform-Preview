@@ -90,10 +90,10 @@ window.RWG = window.RWG || {};
     return `<span class="cell-sub">${U().fmtDate(Date.parse(t.dueDate + 'T12:00:00'))}</span>`;
   }
   function taskRow(t, today, showAssignee) {
-    return `<div class="flex" style="align-items:flex-start;gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06)">
+    return `<div class="list-row">
       <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
         style="margin-top:3px">
-      <div style="min-width:0;flex:1">
+      <div class="grow">
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
@@ -106,12 +106,12 @@ window.RWG = window.RWG || {};
           ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}
         </div>
       </div>
-      <div style="flex:none;padding-top:3px">${dueLabel(t, today)}</div>
+      <div class="end" style="padding-top:3px">${dueLabel(t, today)}</div>
     </div>`;
   }
   function group(label, list, today, showAssignee, tone) {
     if (!list.length) return '';
-    return `<div style="padding:9px 16px;background:${tone === 'bad' ? 'rgba(178,58,72,.07)' : 'var(--field)'};border-bottom:1px solid var(--line);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:${tone === 'bad' ? 'var(--bad)' : 'var(--muted)'}">
+    return `<div class="list-group${tone === 'bad' ? ' bad' : ''}">
         ${label} <span style="opacity:.7">· ${list.length}</span></div>
       ${list.map(t => taskRow(t, today, showAssignee)).join('')}`;
   }
@@ -128,17 +128,17 @@ window.RWG = window.RWG || {};
       const calls = D().leadsRaw().filter(l => mine(l) && l.callbackAt && l.callbackAt <= endOfToday.getTime());
       const appts = D().leadsRaw().filter(l => mine(l) && l.apptDate && l.apptDate >= startOfToday.getTime() && l.apptDate <= endOfToday.getTime());
       if (calls.length || appts.length) {
-        const rows = appts.map(l => `<div class="flex" style="gap:9px;padding:9px 14px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+        const rows = appts.map(l => `<div class="list-row" style="gap:9px">
             <span style="flex:none">📅</span>
             <span style="min-width:0"><span style="font-size:13px;color:var(--ink);cursor:pointer;font-weight:600" data-action="open-lead" data-id="${esc(l.id)}">${esc(D().fullName(l))}</span>
             <span class="cell-sub" style="display:block">Appointment ${new Date(l.apptDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span></span></div>`)
-          .concat(calls.map(l => `<div class="flex" style="gap:9px;padding:9px 14px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+          .concat(calls.map(l => `<div class="list-row" style="gap:9px">
             <span style="flex:none">📞</span>
             <span style="min-width:0"><span style="font-size:13px;color:var(--ink);cursor:pointer;font-weight:600" data-action="open-lead" data-id="${esc(l.id)}">${esc(D().fullName(l))}</span>
             <span class="cell-sub" style="display:block">Callback ${l.callbackAt < startOfToday.getTime() ? 'overdue' : 'today'}</span></span></div>`))
           .join('');
-        cards.push(`<div class="card" style="padding:0;overflow:hidden">
-          <div style="padding:13px 16px;border-bottom:1px solid var(--line)"><b style="font-size:13px;color:var(--navy)">Today from your leads</b></div>${rows}</div>`);
+        cards.push(`<div class="card flush">
+          <div class="list-head"><span class="t">Today from your leads</span></div>${rows}</div>`);
       }
     }
 
@@ -146,11 +146,11 @@ window.RWG = window.RWG || {};
     if (H().isStarted()) {
       const bdays = H().upcomingBirthdays(14).slice(0, 6);
       if (bdays.length) {
-        cards.push(`<div class="card" style="padding:0;overflow:hidden">
-          <div style="padding:13px 16px;border-bottom:1px solid var(--line)"><b style="font-size:13px;color:var(--navy)">Key dates ahead</b> <span class="cell-sub">14 days</span></div>
+        cards.push(`<div class="card flush">
+          <div class="list-head"><span class="t">Key dates ahead</span> <span class="cell-sub">14 days</span></div>
           ${bdays.map(b => {
             const hh = H().household(b.contact.householdId);
-            return `<div class="flex" style="gap:9px;padding:9px 14px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+            return `<div class="list-row" style="gap:9px">
               <span style="flex:none">🎂</span>
               <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${hh ? 'cursor:pointer' : ''}" ${hh ? `data-action="hh-goto" data-id="${esc(hh.id)}"` : ''}>${esc(H().contactName(b.contact))}</span>
               <span class="cell-sub" style="display:block">turns ${b.turning}</span></span>
@@ -168,9 +168,9 @@ window.RWG = window.RWG || {};
         .filter(x => x.days >= 14)
         .sort((a, b) => b.days - a.days).slice(0, 6);
       if (stale.length) {
-        cards.push(`<div class="card" style="padding:0;overflow:hidden">
-          <div style="padding:13px 16px;border-bottom:1px solid var(--line)"><b style="font-size:13px;color:var(--navy)">Going quiet</b> <span class="cell-sub">no touch in 14+ days</span></div>
-          ${stale.map(x => `<div class="flex" style="gap:9px;padding:9px 14px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+        cards.push(`<div class="card flush">
+          <div class="list-head"><span class="t">Going quiet</span> <span class="cell-sub">no touch in 14+ days</span></div>
+          ${stale.map(x => `<div class="list-row" style="gap:9px">
             <span style="flex:none;width:7px;height:7px;background:var(--bad);border-radius:50%;margin-top:6px"></span>
             <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;cursor:pointer" data-action="cs-open" data-id="${esc(x.c.recordId)}">${esc(x.c.clientName || '(no name)')}</span>
             <span class="cell-sub" style="display:block">${esc(SC().productName(x.c.product))} · ${esc(RWG.pipelines.stageLabel(x.c.product, RWG.pipelines.stageForCase(x.c)))}</span></span>
@@ -201,10 +201,10 @@ window.RWG = window.RWG || {};
       <h3>Clear${st.who === 'me' ? '' : ' across the team'}</h3><p>Nothing open. Add a task, or enjoy it while it lasts.</p></div>`;
 
     return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start" class="mw-grid">
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="card-head" style="padding:16px 16px 12px;margin:0;border-bottom:1px solid var(--line)">
-          <h3>My Work</h3>
-          <span class="sub">${gps.overdue.length ? gps.overdue.length + ' overdue · ' : ''}${gps.today.length} due today</span>
+      <div class="card flush">
+        <div class="list-head">
+          <span class="t" style="font-size:17px">My Work</span>
+          <span class="s">${gps.overdue.length ? gps.overdue.length + ' overdue · ' : ''}${gps.today.length} due today</span>
           <span class="topbar-spacer"></span>
           <div class="flex" style="gap:6px">
             <button class="btn btn-sm ${st.who === 'me' ? 'btn-navy' : 'btn-ghost'}" data-action="tk-who" data-who="me">Mine</button>
@@ -213,7 +213,7 @@ window.RWG = window.RWG || {};
           </div>
         </div>
         ${body || empty}
-        ${doneWk.length ? `<div style="padding:11px 16px;border-top:1px solid var(--line)"><span class="cell-sub">✓ ${doneWk.length} done in the last 7 days</span></div>` : ''}
+        ${doneWk.length ? `<div class="list-foot"><span class="cell-sub">✓ ${doneWk.length} done in the last 7 days</span></div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:16px">${rail || '<div class="card"><p class="muted" style="font-size:13px;margin:0">Follow-ups, birthdays and stale cases will appear here as the book fills in.</p></div>'}</div>
     </div>`;

@@ -103,15 +103,15 @@ window.RWG = window.RWG || {};
 
   // ── card + row scaffolding (matches My Work's cards) ──────
   function card(title, sub, body, headExtra) {
-    return `<div class="card" style="padding:0;overflow:hidden">
-      <div class="flex" style="padding:13px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px">
-        <b style="font-size:13px;color:var(--navy)">${esc(title)}</b>
-        ${sub ? `<span class="cell-sub">${sub}</span>` : ''}
+    return `<div class="card flush">
+      <div class="list-head">
+        <span class="t">${esc(title)}</span>
+        ${sub ? `<span class="s">${sub}</span>` : ''}
         ${headExtra ? `<span class="topbar-spacer"></span>${headExtra}` : ''}
       </div>${body}</div>`;
   }
-  const hint = (t) => `<p class="muted" style="font-size:11.5px;margin:0;padding:9px 16px 12px">${t}</p>`;
-  const emptyRow = (t) => `<p class="muted" style="font-size:13px;margin:0;padding:16px">${t}</p>`;
+  const hint = (t) => `<p class="list-hint">${t}</p>`;
+  const emptyRow = (t) => `<p class="list-empty">${t}</p>`;
 
   /* ══ the widgets ══════════════════════════════════════════ */
 
@@ -254,7 +254,7 @@ window.RWG = window.RWG || {};
           sub: '', advisor: '', hhId: b.contact.householdId, inDays: b.inDays, milestone: null
         }));
     if (!feed.length) return card('Important dates', 'next 30 days', emptyRow('No key dates inside 30 days. Birthdays, anniversaries and custom dates appear as the book fills in.'));
-    const rows = feed.map(e => `<div class="flex" style="gap:9px;padding:9px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+    const rows = feed.map(e => `<div class="list-row" style="gap:9px">
       <span style="flex:none">${e.icon}</span>
       <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${e.hhId ? 'cursor:pointer' : ''}" ${e.hhId ? `data-action="hh-goto" data-id="${esc(e.hhId)}"` : ''}>${esc(e.title)}</span>
       <span class="cell-sub" style="display:block">${esc(e.sub || '')}${e.advisor ? (e.sub ? ' · ' : '') + esc(firstName(e.advisor)) : ''}</span>
@@ -286,7 +286,7 @@ window.RWG = window.RWG || {};
     ev.sort((a, b) => b.ts - a.ts);
     const top = ev.slice(0, 9);
     if (!top.length) return card('Team activity', 'last 30 days', emptyRow('Quiet so far — moves, closes and completed steps land here as they happen.'));
-    const rows = top.map(e => `<div class="flex" style="gap:9px;padding:8px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+    const rows = top.map(e => `<div class="list-row" style="gap:9px">
       ${avatar(e.who)}
       <span style="min-width:0;flex:1"><span style="font-size:12.5px;color:var(--ink)">${esc(firstName(e.who))} ${e.txt}</span>
       ${e.sub ? `<span class="cell-sub" style="display:block;font-size:11px">${esc(e.sub)}</span>` : ''}</span>
@@ -361,7 +361,7 @@ window.RWG = window.RWG || {};
     if (!idle.length) return card('Leads not worked', '', emptyRow('Every lead has at least one attempt. As it should be.'));
     const rows = idle.slice(0, 6).map(l => {
       const days = Math.floor((Date.now() - toMs(l.createdAt)) / dayMs);
-      return `<div class="flex" style="gap:9px;padding:8px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
+      return `<div class="list-row mid" style="gap:9px">
         <span style="min-width:0;flex:1;font-size:13px;color:var(--ink);font-weight:600;cursor:pointer" data-action="open-lead" data-id="${esc(l.id)}">${esc(D().fullName(l))}</span>
         <span class="cell-sub" style="flex:none">${days}d untouched</span></div>`;
     }).join('');
@@ -373,7 +373,7 @@ window.RWG = window.RWG || {};
     if (!H().isStarted()) return card('AdvisorStream queue', '', emptyRow('Loading the book…'));
     const q = H().contacts().filter(c => !c.advisorstream);
     if (!q.length) return card('AdvisorStream queue', '', emptyRow('Everyone in the book is on the newsletter. ✓'));
-    const rows = q.slice(0, 6).map(c => `<div class="flex" style="gap:9px;padding:8px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
+    const rows = q.slice(0, 6).map(c => `<div class="list-row mid" style="gap:9px">
       <span style="min-width:0;flex:1;font-size:13px;color:var(--ink);font-weight:600;${c.householdId ? 'cursor:pointer' : ''}" ${c.householdId ? `data-action="hh-goto" data-id="${esc(c.householdId)}"` : ''}>${esc(H().contactName(c))}</span>
       <span class="cell-sub" style="flex:none">not subscribed</span></div>`).join('');
     return card('AdvisorStream queue', String(q.length) + ' to add', rows
@@ -411,7 +411,7 @@ window.RWG = window.RWG || {};
     if (!open.length && !waiting.length) return card('Service desk', '', emptyRow('The desk is clear — nothing open, nothing waiting.'));
     const today = T().todayKey();
     const rows = open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 6)
-      .map(t => `<div class="flex" style="gap:9px;padding:8px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
+      .map(t => `<div class="list-row mid" style="gap:9px">
         <span style="flex:none">🛠</span>
         <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${t.relatedId ? 'cursor:pointer' : ''}"
           ${t.relatedId ? `data-action="hh-goto" data-id="${esc(t.relatedId)}"` : ''}>${esc(t.title)}</span>
@@ -470,8 +470,8 @@ window.RWG = window.RWG || {};
       <span style="color:var(--muted);font-size:12px;${isOn ? '' : 'opacity:.3'}">⠿</span>
       <input type="checkbox" data-action="hm-w" data-id="${esc(w.id)}" ${isOn ? 'checked' : ''}>
       <span>${esc(w.title)}</span></div>`;
-    return `<div class="card" style="padding:0;overflow:hidden;position:sticky;top:14px">
-      <div style="padding:12px 13px;border-bottom:1px solid var(--line)"><b style="font-size:13px;color:var(--navy)">Customize home</b>
+    return `<div class="card flush" style="position:sticky;top:14px">
+      <div style="padding:12px 13px;border-bottom:1px solid var(--line)"><span class="t">Customize home</span>
         <div class="cell-sub" style="margin-top:2px">Drag to reorder · per person</div></div>
       <div style="padding:9px 13px 3px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700">On your home</div>
       ${on.map(id => widget(id)).filter(Boolean).map(w => item(w, true)).join('')}

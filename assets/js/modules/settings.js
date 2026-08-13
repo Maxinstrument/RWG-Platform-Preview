@@ -120,9 +120,9 @@ window.RWG = window.RWG || {};
         ${tabs}<span class="topbar-spacer"></span>
         <span class="cell-sub">Products on this track: ${prods}</span>
       </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="flex" style="padding:12px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px">
-          <b style="font-size:13px;color:var(--navy)">Stages</b>
+      <div class="card flush">
+        <div class="list-head">
+          <span class="t">Stages</span>
           <span class="cell-sub">drag to reorder · the bucket decides where a stage reports</span>
           <span class="topbar-spacer"></span>
           <button class="btn btn-ghost btn-sm" data-action="set-st-add" data-pl="${esc(pl.id)}">＋ Add stage</button>
@@ -196,7 +196,7 @@ window.RWG = window.RWG || {};
         data-action="set-wf-pick" data-id="${esc(t.id)}">${esc(t.name)}<span style="opacity:.6;margin-left:6px;font-size:10.5px">${t.trigger ? (t.trigger.bucket === 'Closed' ? 'on close' : 'on written') : 'manual'}</span></button>`).join('');
 
     const editor = !tpl ? '<div class="card"><p class="muted" style="margin:0">No templates. Add one.</p></div>' : `
-      <div class="card" style="padding:0;overflow:hidden">
+      <div class="card flush">
         <div style="padding:14px 16px;border-bottom:1px solid var(--line)">
           <div class="field-row">
             <div class="field-group" style="margin:0"><label class="lbl">Name</label>
@@ -264,9 +264,9 @@ window.RWG = window.RWG || {};
       </div>`;
     }).join('');
     return `
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:12px 16px;border-bottom:1px solid var(--line)">
-          <b style="font-size:13px;color:var(--navy)">Default rates</b>
+      <div class="card flush">
+        <div class="list-head">
+          <span class="t">Default rates</span>
           <span class="cell-sub" style="margin-left:8px">what a case earns when no rate is typed on it</span>
         </div>
         ${rows}
@@ -292,9 +292,9 @@ window.RWG = window.RWG || {};
         <button class="btn btn-quiet btn-sm" style="padding:2px 8px;flex:none" data-action="set-lr-del" data-i="${i}">✕</button>
       </div>`).join('');
     return `
-      <div class="card" style="padding:0;overflow:hidden;max-width:520px">
-        <div class="flex" style="padding:12px 16px;border-bottom:1px solid var(--line);align-items:center">
-          <b style="font-size:13px;color:var(--navy)">Lost reasons</b>
+      <div class="card flush" style="max-width:520px">
+        <div class="list-head">
+          <span class="t">Lost reasons</span>
           <span class="cell-sub" style="margin-left:8px">the choices in the “Mark lost” dialog</span>
           <span class="topbar-spacer"></span>
           <button class="btn btn-ghost btn-sm" data-action="set-lr-add">＋ Add</button>

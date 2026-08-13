@@ -178,14 +178,14 @@ window.RWG = window.RWG || {};
   // ── the screen ────────────────────────────────────────────
   function group(label, list, tone) {
     if (!list.length) return '';
-    return `<div style="padding:9px 16px;background:${tone === 'hot' ? 'rgba(194,161,77,.10)' : 'var(--field)'};border-bottom:1px solid var(--line);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--muted)">
+    return `<div class="list-group"${tone === 'hot' ? ' style="background:rgba(194,161,77,.10)"' : ''}>
       ${label} <span style="opacity:.7">· ${list.length}</span></div>` + list.map(row).join('');
   }
   function row(e) {
     st.entries[e.key] = e;
-    return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
-      <span style="flex:none;font-size:15px">${e.icon}</span>
-      <div style="min-width:0;flex:1">
+    return `<div class="list-row">
+      <span class="ic">${e.icon}</span>
+      <div class="grow">
         <div style="font-size:13.5px;color:var(--ink);font-weight:600;${e.hhId ? 'cursor:pointer' : ''}"
           ${e.hhId ? `data-action="hh-goto" data-id="${esc(e.hhId)}"` : ''}>${esc(e.title)}</div>
         <div class="flex" style="gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
@@ -195,7 +195,7 @@ window.RWG = window.RWG || {};
           ${e.kind === 'custom' ? `<button class="btn btn-quiet btn-sm" style="padding:1px 7px;font-size:10.5px" title="Remove this date" data-action="kd-del" data-hh="${esc(e.hhId)}" data-kd="${esc(e.kdId)}">✕</button>` : ''}
         </div>
       </div>
-      <div style="flex:none;text-align:right">
+      <div class="end">
         <div style="font-size:12px;color:var(--ink)">${esc(fmtShort(e.when))}</div>
         <div class="cell-sub" style="font-size:11px">${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</div>
       </div>
@@ -220,7 +220,7 @@ window.RWG = window.RWG || {};
         <select id="kd-range" class="fbar-select" style="width:auto">${ranges}</select>
         <button class="btn btn-gold btn-sm" data-action="kd-add">＋ Key date</button>
       </div>
-      <div class="card" style="padding:0;overflow:hidden">
+      <div class="card flush">
         ${group('This week', week, 'hot') + group('This month', month) + group('Further out', later)
           || `<div class="empty" style="padding:44px 16px"><div class="ec">🗓</div><h3>Nothing inside ${st.range} days</h3>
               <p>Dates appear as births, closes and custom dates land in the book.</p></div>`}
@@ -253,9 +253,9 @@ window.RWG = window.RWG || {};
       </div>`;
     }).join('');
     return `
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="flex" style="padding:13px 16px;border-bottom:1px solid var(--line);align-items:center;gap:8px">
-          <b style="font-size:13px;color:var(--navy)">Waiting for the newsletter</b>
+      <div class="card flush">
+        <div class="list-head">
+          <span class="t">Waiting for the newsletter</span>
           <span class="cell-sub">${queue.length} to add · ${onList} already on</span>
           <span class="topbar-spacer"></span>
           ${emails.length ? `<button class="btn btn-ghost btn-sm" data-action="as-copy">⧉ Copy ${emails.length} email${emails.length === 1 ? '' : 's'}</button>` : ''}

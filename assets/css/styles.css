@@ -547,18 +547,85 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* ============================================================
    Modal
    ============================================================ */
+/* Width is a token so a form that needs more room can ask for it —
+   a hard `width:560px` here used to beat any inline max-width, which
+   is why the widest window in the app (the opportunity) rendered
+   squeezed into four wrapping columns. */
 .modal-card{
+  --modal-w:560px;
   position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:130;
-  width:560px;max-width:94vw;max-height:calc(100vh - 48px);overflow-y:auto;
-  background:var(--paper);border-radius:16px;box-shadow:var(--shadow-pop);border-top:3px solid var(--gold);
-  animation:modalrise .2s ease both;
+  width:min(var(--modal-w),94vw);max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column;                 /* head/foot pinned, body scrolls */
+  background:var(--paper);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);
+  border-top:3px solid var(--gold);animation:modalrise .2s ease both;
 }
+.modal-card.modal-lg{--modal-w:760px;}
+.modal-card.modal-sm{--modal-w:460px;}
 @keyframes modalrise{from{opacity:0;transform:translateX(-50%) translateY(-8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
-.modal-head{padding:22px 26px 0;}
-.modal-head h2{font-size:21px;}
-.modal-head p{color:var(--muted);font-size:13.5px;margin:6px 0 0;}
-.modal-body{padding:18px 26px;}
-.modal-foot{padding:0 26px 24px;display:flex;gap:10px;justify-content:flex-end;}
+/* Grid, not flex, so it fits both shapes: a bare <h2>+<p>, and a
+   <div> wrapping them next to a close button. */
+.modal-head{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:var(--s3);
+  padding:var(--s5) var(--s5) var(--s3);flex:none;
+  border-bottom:1px solid var(--line);
+}
+.modal-head > *{grid-column:1;min-width:0;}
+.modal-head h2,.modal-head h3{font-size:21px;font-family:'Fraunces',Georgia,serif;font-weight:500;color:var(--navy);}
+.modal-head p{color:var(--muted);font-size:13.5px;margin:5px 0 0;line-height:1.5;max-width:62ch;}
+/* The drawer's close button is white-on-navy; on a cream modal it read
+   as a blank grey square. Modals get their own. */
+.modal-head .drawer-close{
+  grid-column:2;grid-row:1;width:32px;height:32px;border-radius:9px;
+  background:rgba(14,36,64,.06);color:var(--muted);font-size:16px;
+}
+.modal-head .drawer-close:hover{background:rgba(14,36,64,.12);color:var(--navy);}
+.modal-body{padding:var(--s4) var(--s5);overflow-y:auto;flex:1;min-height:0;}
+.modal-foot{
+  padding:var(--s3) var(--s5) var(--s5);flex:none;
+  display:flex;gap:var(--s2);justify-content:flex-end;align-items:center;flex-wrap:wrap;
+  border-top:1px solid var(--line);
+}
+.modal-foot .topbar-spacer{flex:1;min-width:0;}
+@media (max-width:600px){
+  .modal-card{top:12px;max-height:calc(100vh - 24px);}
+  .modal-head{padding:var(--s4) var(--s4) var(--s2);}
+  .modal-body{padding:var(--s3) var(--s4);}
+  .modal-foot{padding:var(--s3) var(--s4) var(--s4);}
+}
+
+/* ============================================================
+   List surfaces — one skeleton for every "card full of rows"
+   (My Work, Key dates, Service, the dashboard widgets, the inbox).
+   Before this each screen hand-rolled its own paddings, which is
+   what made the app feel like several apps.
+   ============================================================ */
+.card.flush{padding:0;overflow:hidden;}
+.list-head{
+  display:flex;align-items:center;gap:var(--s2);
+  padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);
+}
+.list-head .t{font-family:'Fraunces',Georgia,serif;font-size:14.5px;color:var(--navy);font-weight:500;}
+.list-head .s{font-size:12px;color:var(--muted);}
+.list-group{
+  padding:var(--s2) var(--s4);background:var(--field);border-bottom:1px solid var(--line);
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--muted);
+}
+.list-group.bad{background:rgba(178,58,72,.07);color:var(--bad);}
+.list-row{
+  display:flex;align-items:flex-start;gap:11px;
+  padding:var(--s2) var(--s4);border-bottom:1px solid rgba(14,36,64,.06);
+}
+.list-row:last-child{border-bottom:none;}
+.list-row.mid{align-items:center;}
+.list-row .grow{min-width:0;flex:1;}
+.list-row .end{flex:none;text-align:right;}
+.list-row .ic{flex:none;font-size:15px;line-height:1.3;}
+.list-foot{padding:var(--s2) var(--s4);border-top:1px solid var(--line);}
+/* The explanatory line under a card — same voice, same colour, everywhere */
+.list-note{font-size:12px;line-height:1.5;color:var(--muted);margin:var(--s2) 2px 0;}
+/* …and the same line when it sits inside the card, under the rows */
+.list-hint{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0;padding:var(--s2) var(--s4) var(--s3);}
+.list-empty{font-size:13px;line-height:1.5;color:var(--muted);margin:0;padding:var(--s4);}
 
 /* ============================================================
    Goal ring & funnel
@@ -848,9 +915,45 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .cs-modal-grid label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:5px;}
 .cs-modal-grid input,.cs-modal-grid select{width:100%;}
 .cs-modal-grid .hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
-.cs-correct{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
-.cs-correct-h{font-family:'Fraunces',serif;font-size:15px;color:var(--navy);margin-bottom:10px;}
+.cs-correct{margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--line);}
+.cs-correct-h{font-family:'Fraunces',serif;font-size:15px;color:var(--navy);margin-bottom:var(--s2);}
 @media (max-width:640px){ .cs-modal-grid{grid-template-columns:1fr;} }
+
+/* ── Opportunity window ──────────────────────────────────── */
+/* The four money fields flow instead of forcing four columns into
+   560px, which is what made their labels wrap mid-word. */
+.op2-money{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--s3);margin-bottom:var(--s3);}
+.op2-money .field-group{margin-bottom:0;}
+
+/* Multi-select as chips: reads as one control, not stray tickboxes */
+.checkrow{display:flex;flex-wrap:wrap;gap:var(--s1);margin-top:var(--s1);}
+.checkitem{
+  display:inline-flex;align-items:center;gap:7px;padding:6px 12px;
+  border:1px solid var(--line-strong);border-radius:20px;background:#fff;
+  font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;
+  transition:border-color .15s,background .15s,color .15s;
+}
+.checkitem:hover{border-color:var(--gold);color:var(--ink);}
+.checkitem:has(input:checked){background:rgba(194,161,77,.13);border-color:rgba(194,161,77,.55);color:var(--ink);}
+.checkitem:focus-within{box-shadow:0 0 0 3px rgba(194,161,77,.18);}
+
+/* Rich-text notes: toolbar and canvas are one control */
+.rt-toolbar{
+  display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:6px 8px;
+  border:1px solid var(--line-strong);border-bottom:none;
+  border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:var(--field);
+}
+.rt-toolbar .btn-sm{min-height:30px;padding:4px 9px;}
+.rt-body{
+  min-height:120px;max-height:260px;overflow-y:auto;
+  border:1px solid var(--line-strong);border-radius:0 0 var(--radius-sm) var(--radius-sm);
+  padding:12px 14px;background:#fff;color:var(--ink);font-size:13.5px;line-height:1.6;
+}
+.rt-body:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,161,77,.18);}
+.rt-body > :first-child{margin-top:0;}
+.rt-body p{margin:0 0 8px;}
+.rt-body ul,.rt-body ol{margin:0 0 8px;padding-left:20px;}
+.rt-body:empty::before{content:attr(data-ph);color:#9aa6b4;}
 
 /* ── Report goals card ───────────────────────────────────── */
 .rp-goal{margin:10px 0;}
