@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0E2440" />
+<title>Resilient Wealth Group · Data Backup</title>
+<link rel="icon" href="../assets/img/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --navy:#0E2440; --navy-deep:#0A1A30; --gold:#C2A14D; --gold-soft:#D8BC78;
+  --paper:#F4F1E9; --card:#FFFFFF; --ink:#16263D; --muted:#5C6B7E;
+  --line:rgba(14,36,64,.12); --line-strong:rgba(14,36,64,.22);
+  --good:#2E7D5B; --warn:#B0691F; --bad:#B23A48; --field:#FBFAF6;
+  --shadow-card:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px -22px rgba(14,36,64,.35);
+  --radius:14px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:500;color:var(--navy);margin:0}
+.wrap{max-width:760px;margin:0 auto;padding:44px 20px 80px}
+
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:34px}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:var(--navy);display:flex;align-items:center;justify-content:center;flex:none}
+.brand-mark span{width:14px;height:14px;border-radius:3px;background:var(--gold)}
+.brand-t{font-family:'Fraunces',serif;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);line-height:1.2}
+.brand-t small{display:block;font-family:'Hanken Grotesk',sans-serif;font-size:11px;letter-spacing:.04em;text-transform:none;color:var(--muted);font-style:italic;margin-top:2px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow-card);margin-bottom:18px}
+.card h2{font-size:22px;margin-bottom:6px}
+.lede{color:var(--muted);font-size:14.5px;margin:0 0 20px}
+
+label.lbl{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:6px}
+input{
+  width:100%;padding:11px 12px;border:1px solid var(--line-strong);border-radius:9px;
+  background:var(--field);font-family:inherit;font-size:15px;color:var(--ink);
+}
+input:focus{outline:2px solid var(--gold);outline-offset:1px;background:#fff}
+.field{margin-bottom:14px}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 18px;border-radius:10px;border:1px solid transparent;
+  font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.2px;cursor:pointer;
+  transition:transform .08s ease,box-shadow .15s,background .15s,border-color .15s,color .15s;
+}
+.btn:active{transform:translateY(1px)}
+.btn-gold{background:var(--gold);color:var(--navy-deep);border-color:var(--gold)}
+.btn-gold:hover{background:var(--gold-soft)}
+.btn-navy{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn-ghost{background:transparent;color:var(--navy);border-color:var(--line-strong)}
+.btn-ghost:hover{background:rgba(14,36,64,.04)}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+.note{
+  background:rgba(46,125,91,.08);border:1px solid rgba(46,125,91,.28);
+  border-radius:10px;padding:13px 15px;font-size:13.5px;color:#245F46;margin-bottom:20px
+}
+.note b{color:#1C4C38}
+.note.warn{background:rgba(176,105,31,.09);border-color:rgba(176,105,31,.3);color:#7E4A15}
+.note.bad{background:rgba(178,58,72,.08);border-color:rgba(178,58,72,.3);color:#8C2C38}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:4px}
+th{text-align:left;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 10px 9px 0;border-bottom:1px solid var(--line)}
+td{padding:11px 10px 11px 0;border-bottom:1px solid rgba(14,36,64,.06);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;padding-right:0;font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;color:var(--navy)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.chip-ok{background:rgba(46,125,91,.12);color:var(--good);border:1px solid rgba(46,125,91,.3)}
+.chip-wait{background:rgba(92,107,126,.12);color:var(--muted);border:1px solid rgba(92,107,126,.3)}
+.chip-no{background:rgba(178,58,72,.1);color:var(--bad);border:1px solid rgba(178,58,72,.35)}
+
+.who{display:flex;align-items:center;gap:11px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.av{width:38px;height:38px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.who-n{font-weight:600;font-size:15px;color:var(--ink);line-height:1.25}
+.who-r{font-size:12.5px;color:var(--muted)}
+.sp{flex:1}
+
+.total{
+  display:flex;align-items:baseline;gap:10px;margin:20px 0 4px;
+  padding:16px 18px;background:var(--field);border:1px solid var(--line);border-radius:12px
+}
+.total-l{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.total-v{font-family:'Fraunces',serif;font-size:30px;color:var(--navy);font-variant-numeric:tabular-nums}
+.total-s{font-size:13px;color:var(--muted);margin-left:auto}
+
+.foot{font-size:13px;color:var(--muted);margin-top:26px;line-height:1.65}
+.foot b{color:var(--ink)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <span class="brand-mark"><span></span></span>
+    <span class="brand-t">Resilient Wealth Group<small>Data backup, conducted safely</small></span>
+  </div>
+
+  <!-- SIGN IN -->
+  <div class="card" id="signin-card">
+    <h2>Sign in to back up</h2>
+    <p class="lede">Use your admin account. This tool only reads.</p>
+    <div class="note"><b>It cannot change anything.</b> There is no write, update or delete anywhere in this page. It reads your records and hands you a file.</div>
+    <div id="signin-err" class="note bad hide"></div>
+    <form id="signin-form" autocomplete="on">
+      <div class="field"><label class="lbl" for="email">Email</label><input id="email" type="email" autocomplete="username" required /></div>
+      <div class="field"><label class="lbl" for="pass">Password</label><input id="pass" type="password" autocomplete="current-password" required /></div>
+      <button class="btn btn-navy" id="signin-btn" type="submit">Sign in</button>
+    </form>
+  </div>
+
+  <!-- BACKUP -->
+  <div class="card hide" id="backup-card">
+    <div class="who">
+      <span class="av" id="av">?</span>
+      <span><span class="who-n" id="who-n">&nbsp;</span><span class="who-r" id="who-r">&nbsp;</span></span>
+      <span class="sp"></span>
+      <button class="btn btn-ghost" id="signout-btn" type="button">Sign out</button>
+    </div>
+
+    <h2>What will be saved</h2>
+    <p class="lede">Everything the firm has in Firestore, as one file on your machine.</p>
+
+    <div id="scan-err" class="note warn hide"></div>
+
+    <table>
+      <thead><tr><th>Records</th><th>What it is</th><th class="n">Found</th><th class="n">Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="total">
+      <span class="total-l">Total records</span>
+      <span class="total-v" id="total">0</span>
+      <span class="total-s" id="total-s">scanning…</span>
+    </div>
+
+    <div class="btn-row" style="margin-top:20px">
+      <button class="btn btn-gold" id="dl-json" type="button" disabled>Download full backup (JSON)</button>
+      <button class="btn btn-ghost" id="dl-leads" type="button" disabled>Leads as CSV</button>
+      <button class="btn btn-ghost" id="dl-cases" type="button" disabled>Cases as CSV</button>
+      <button class="btn btn-ghost" id="rescan" type="button">Rescan</button>
+    </div>
+
+    <p class="foot">
+      <b>Keep the JSON somewhere that is not this computer only.</b> It holds real client names,
+      phones, emails, ages and salaries, so treat it like the client file it is. Somewhere backed
+      up and access-controlled, never a shared drive or email.
+      <br><br>
+      <b>This file is the restore point, not a restore button.</b> Putting data back is a
+      deliberate operation with real risk, so it is not built into this page. If it is ever needed,
+      the JSON has everything required to do it carefully.
+      <br><br>
+      Run this before any build work that touches data, and any time you want a checkpoint.
+    </p>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Same project as the live platform. Reads only.
+  firebase.initializeApp({
+    apiKey: "AIzaSyDPpROKzA3NA-aC0AzUtSeSTy_C_scLjkI",
+    authDomain: "resilient-wealth-group.firebaseapp.com",
+    projectId: "resilient-wealth-group",
+    storageBucket: "resilient-wealth-group.firebasestorage.app",
+    messagingSenderId: "635207656747",
+    appId: "1:635207656747:web:832aa82484e499a5a8d16e",
+    measurementId: "G-WTN30P70NP"
+  });
+  var auth = firebase.auth(), db = firebase.firestore();
+
+  // Every collection the firm owns, with a plain-English description.
+  var SETS = [
+    { key: 'users',         label: 'Team accounts and roles' },
+    { key: 'leads',         label: 'Leads, with every call, note and change' },
+    { key: 'deleted_leads', label: 'The deletion archive' },
+    { key: 'cases',         label: 'Opportunities and their money' },
+    { key: 'weeks',         label: 'Weekly scorecard submissions' },
+    { key: 'reports',       label: 'Frozen weekly reports' },
+    { key: 'config',        label: 'Scoring thresholds and agent settings' }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var data = {};       // key -> array of docs
+  var profile = null;
+
+  function show(el, on) { el.classList[on ? 'remove' : 'add']('hide'); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function initials(name) {
+    return String(name || '?').trim().split(/\s+/).slice(0, 2)
+      .map(function (w) { return w.charAt(0).toUpperCase(); }).join('') || '?';
+  }
+
+  // ── sign in ──────────────────────────────────────────────
+  $('signin-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = $('signin-btn'); btn.disabled = true; btn.textContent = 'Signing in…';
+    show($('signin-err'), false);
+    auth.signInWithEmailAndPassword($('email').value.trim(), $('pass').value)
+      .catch(function (err) {
+        $('signin-err').textContent = err.code === 'auth/invalid-credential'
+          ? 'That email and password did not match. Try again, or reset it from the platform.'
+          : (err.message || 'Could not sign in.');
+        show($('signin-err'), true);
+      })
+      .then(function () { btn.disabled = false; btn.textContent = 'Sign in'; });
+  });
+
+  $('signout-btn').addEventListener('click', function () { auth.signOut(); });
+
+  auth.onAuthStateChanged(function (user) {
+    if (!user) {
+      profile = null; data = {};
+      show($('signin-card'), true); show($('backup-card'), false);
+      return;
+    }
+    db.collection('users').doc(user.uid).get()
+      .then(function (d) { profile = d.exists ? d.data() : { name: user.email, role: '?' }; })
+      .catch(function () { profile = { name: user.email, role: '?' }; })
+      .then(function () {
+        $('av').textContent = initials(profile.name);
+        $('who-n').textContent = profile.name || user.email;
+        $('who-r').textContent = (profile.role === 'admin' ? 'Admin' : 'Agent') + ' · ' + user.email;
+        show($('signin-card'), false); show($('backup-card'), true);
+        if (profile.role !== 'admin') {
+          $('scan-err').innerHTML = '<b>You are not signed in as an admin.</b> Some records are '
+            + 'admin-only and will come back empty. Sign in with the owner account for a complete backup.';
+          show($('scan-err'), true);
+        }
+        scan();
+      });
+  });
+
+  // ── scan ─────────────────────────────────────────────────
+  function paintRows(state) {
+    $('rows').innerHTML = SETS.map(function (s) {
+      var st = state[s.key] || { status: 'wait' };
+      var chip = st.status === 'ok'   ? '<span class="chip chip-ok">Read</span>'
+               : st.status === 'no'   ? '<span class="chip chip-no">Blocked</span>'
+               :                        '<span class="chip chip-wait">Reading…</span>';
+      return '<tr><td class="mono">' + esc(s.key) + '</td><td>' + esc(s.label) + '</td>'
+           + '<td class="n">' + (st.count == null ? '—' : st.count) + '</td>'
+           + '<td class="n">' + chip + '</td></tr>';
+    }).join('');
+  }
+
+  function scan() {
+    var state = {};
+    data = {};
+    SETS.forEach(function (s) { state[s.key] = { status: 'wait', count: null }; });
+    paintRows(state);
+    $('total').textContent = '0';
+    $('total-s').textContent = 'scanning…';
+    ['dl-json', 'dl-leads', 'dl-cases'].forEach(function (id) { $(id).disabled = true; });
+
+    var jobs = SETS.map(function (s) {
+      return db.collection(s.key).get()
+        .then(function (snap) {
+          data[s.key] = snap.docs.map(function (d) {
+            return Object.assign({ _id: d.id }, d.data());
+          });
+          state[s.key] = { status: 'ok', count: data[s.key].length };
+        })
+        .catch(function () {
+          data[s.key] = [];
+          state[s.key] = { status: 'no', count: 0 };
+        })
+        .then(function () { paintRows(state); });
+    });
+
+    Promise.all(jobs).then(function () {
+      var total = SETS.reduce(function (n, s) { return n + (data[s.key] || []).length; }, 0);
+      var blocked = SETS.filter(function (s) { return state[s.key].status === 'no'; }).length;
+      $('total').textContent = total.toLocaleString('en-US');
+      $('total-s').textContent = blocked
+        ? blocked + ' set' + (blocked > 1 ? 's' : '') + ' could not be read'
+        : 'everything readable was read';
+      $('dl-json').disabled = total === 0;
+      $('dl-leads').disabled = !(data.leads || []).length;
+      $('dl-cases').disabled = !(data.cases || []).length;
+    });
+  }
+
+  $('rescan').addEventListener('click', scan);
+
+  // ── download ─────────────────────────────────────────────
+  function stamp() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+         + '_' + p(d.getHours()) + p(d.getMinutes());
+  }
+  function save(name, text, mime) {
+    var blob = new Blob([text], { type: mime + ';charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  $('dl-json').addEventListener('click', function () {
+    var counts = {};
+    SETS.forEach(function (s) { counts[s.key] = (data[s.key] || []).length; });
+    var payload = {
+      _backup: {
+        firm: 'Resilient Wealth Group',
+        project: 'resilient-wealth-group',
+        takenAt: new Date().toISOString(),
+        takenBy: (profile && profile.name) || null,
+        counts: counts,
+        note: 'Full Firestore export. Read-only snapshot. Restoring is a deliberate operation, not automated.'
+      },
+      collections: data
+    };
+    save('rwg-backup_' + stamp() + '.json', JSON.stringify(payload, null, 2), 'application/json');
+  });
+
+  // Flat CSV for eyeballing in Excel. Nested arrays are summarised, not dumped,
+  // because the JSON above is the thing that can actually restore.
+  function toCSV(rows, skip) {
+    skip = skip || [];
+    var keys = [];
+    rows.forEach(function (r) {
+      Object.keys(r).forEach(function (k) {
+        if (keys.indexOf(k) < 0 && skip.indexOf(k) < 0) keys.push(k);
+      });
+    });
+    var cell = function (v) {
+      if (v == null) v = '';
+      else if (Array.isArray(v)) v = v.length + ' item' + (v.length === 1 ? '' : 's');
+      else if (typeof v === 'object') v = JSON.stringify(v);
+      v = String(v);
+      return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    };
+    return keys.join(',') + '\r\n'
+      + rows.map(function (r) {
+          return keys.map(function (k) { return cell(r[k]); }).join(',');
+        }).join('\r\n');
+  }
+
+  $('dl-leads').addEventListener('click', function () {
+    save('rwg-leads_' + stamp() + '.csv', toCSV(data.leads || []), 'text/csv');
+  });
+  $('dl-cases').addEventListener('click', function () {
+    save('rwg-cases_' + stamp() + '.csv', toCSV(data.cases || []), 'text/csv');
+  });
+})();
+</script>
+</body>
+</html>
