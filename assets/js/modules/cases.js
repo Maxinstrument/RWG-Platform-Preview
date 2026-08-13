@@ -21,8 +21,10 @@ window.RWG = window.RWG || {};
   function columns() {
     const sc = S();
     return [
-      { key: 'client', label: 'Client', val: c => c.clientName || '(no name)', str: true },
-      { key: 'agent', label: 'Agent', val: c => c.agentName || '', str: true, filter: true },
+      { key: 'client', label: 'Client', val: c => c.clientName || '(no name)', str: true,
+        cell: c => `<div class="cell-name">${esc(c.clientName || '(no name)')}</div>${c.title ? `<div class="cell-sub">${esc(c.title)}</div>` : ''}` },
+      { key: 'agent', label: 'Agent', val: c => c.agentName || '', str: true, filter: true,
+        cell: c => `${esc(c.agentName || '')}${(c.coCreditNames || []).length ? ` <span class="cell-sub">+${c.coCreditNames.length}</span>` : ''}` },
       { key: 'product', label: 'Product', val: c => sc.productName(c.product), str: true, filter: true },
       { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, filter: true },
       { key: 'state', label: 'Stage', val: c => c.state || '', str: true, filter: true, cell: c => `<span class="chip ${stageChipClass(c.state)}">${esc(c.state || '')}</span>` },
@@ -80,34 +82,112 @@ window.RWG = window.RWG || {};
     return header + '\r\n' + body;
   }
 
-  // ── the edit / view modal ──
+  /* ── the opportunity window (phase 5.6 — Carlos's layout) ──
+     One window for add AND edit: name, household, ALL agents involved,
+     product + granular stage, the four money fields (benefit, premium/
+     contribution, FYC/compensation, renewals), source + description,
+     and rich-text details. The money keeps the locked rule — typing
+     FYC back-solves the RATE; a revenue number is never stored raw. */
   function canEdit(c, user) { return user.role === 'admin' || c.agentUid === user.id; }
+  const FAM = (p) => (p === 'wl' || p === 'term' || p === 'di') ? 'ins' : (p === 'annuity' ? 'ann' : (p === 'inv' ? 'inv' : 'flat'));
 
-  function openModal(id) {
-    const c = D().caseById(id); if (!c) return;
+  // Team-internal notes, but still no scripts or handlers in stored HTML.
+  function cleanHtml(html) {
+    return String(html || '')
+      .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+      .replace(/<\s*(script|style|iframe|object|embed)[^>]*\/?\s*>/gi, '')
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/(href|src)\s*=\s*(["']?)\s*javascript:[^"'>\s]*\2/gi, '$1="#"');
+  }
+
+  let form = null;   // live money model while the window is open
+
+  function moneyInit(c, product) {
+    const sc = S();
+    const fam = FAM(product);
+    const dflt = sc.defaultRate(product);
+    const f = { fam: fam, ratePct: dflt ? +(dflt * 100).toFixed(4) : null, premium: 0, fyc: 0 };
+    if (!c) return f;
+    const d = sc.deriveCase(c);
+    if (d.rate) f.ratePct = +(d.rate * 100).toFixed(4);
+    if (fam === 'ins') { f.fyc = Number(c.amount) || 0; f.premium = Math.round(d.annualizedPremium) || 0; }
+    else if (fam === 'ann') { f.premium = Number(c.amount) || 0; f.fyc = +(f.premium * (d.rate || 0)).toFixed(2); }
+    else if (fam === 'inv') { f.premium = Number(c.aum) || 0; f.fyc = +(f.premium * (d.rate || 0)).toFixed(2); }
+    else { f.fyc = Number(c.amount) || 0; f.premium = Number(c.premiumAnnual) || 0; }
+    return f;
+  }
+
+  // The triangle: premium × rate = FYC. Editing FYC gives way to the
+  // RATE, never to a stored revenue — Carlos's rule, kept.
+  function applyMoney(f, field, v) {
+    v = Number(v) || 0;
+    const coupled = f.fam === 'ins' || f.fam === 'ann' || f.fam === 'inv';
+    if (field === 'premium') {
+      f.premium = v;
+      if (coupled && f.ratePct) f.fyc = +(v * f.ratePct / 100).toFixed(2);
+    } else if (field === 'fyc') {
+      f.fyc = v;
+      if (coupled && f.premium > 0 && v > 0) f.ratePct = +(v / f.premium * 100).toFixed(4);
+    }
+    return f;
+  }
+
+  const MONEY_LABELS = {
+    ins:  { premium: 'Premium (annual)',       fyc: 'FYC / Compensation' },
+    ann:  { premium: 'Deposit / Contribution', fyc: 'Compensation' },
+    inv:  { premium: 'Assets in (AUM)',        fyc: 'Compensation (yearly)' },
+    flat: { premium: 'Premium (annual)',       fyc: 'Fee / Compensation' }
+  };
+  function rateHintText(f, product) {
+    const dflt = S().defaultRate(product);
+    if (!dflt || !f.ratePct) return '';
+    const custom = Math.abs(f.ratePct / 100 - dflt) > 1e-6;
+    return 'at ' + (+f.ratePct.toFixed(2)) + '% — ' + (custom ? 'custom rate, stored on this case' : 'the product default');
+  }
+
+  function oppWindow(opts) {
+    const sc = S();
     const user = RWG.auth.currentUser();
-    const sc = S(), editable = canEdit(c, user), isAdmin = user.role === 'admin';
-    const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === c.product ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-    const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}" ${s.id === c.source ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
-    // Closing is a partner's confirmation, not a dropdown choice. Agents
-    // lose the Closed option (a closed case shows it read-only instead).
-    const stateList = sc.STATES.filter(s => s !== 'Closed' || isAdmin || c.state === 'Closed');
-    const stateLocked = !isAdmin && c.state === 'Closed';
-    const stateOpts = stateList.map(s => `<option value="${s}" ${s === c.state ? 'selected' : ''}>${s}</option>`).join('');
-    const inp = sc.inputFor(c.product), moneyVal = sc.usesAum(c.product) ? c.aum : c.amount;
-    const w = sc.deriveWeeks(c);
-    const weekOpts = (sel) => ['<option value="">—</option>'].concat(recentWeeks(20).map(fri => `<option value="${fri}" ${fri === sel ? 'selected' : ''}>${fri}</option>`)).join('');
+    const isAdmin = user.role === 'admin';
+    const c = opts.id ? D().caseById(opts.id) : null;
+    if (opts.id && !c) return;
+    const editable = !c || canEdit(c, user);
+    const closed = !!(c && c.closedAt);
+    const pending = !!(c && c.pendingClose && !closed);
+    const lost = !!(c && c.state === 'Lost');
+    const stageLocked = closed || pending || lost;
+    const hhId = (c && c.householdId) || opts.householdId || null;
+    const HH = RWG.hh;
+    const hh = hhId && HH && HH.isStarted() ? HH.household(hhId) : null;
+    const product = c ? c.product : 'wl';
+    form = moneyInit(c, product);
 
-    const fields = `
-      <div class="cs-modal-grid">
-        <div><label>Client</label><input id="cm-client" value="${esc(c.clientName || '')}" ${editable ? '' : 'disabled'}></div>
-        <div><label>Product</label><select id="cm-prod" ${editable ? '' : 'disabled'}>${prodOpts}</select></div>
-        <div><label>Source</label><select id="cm-src" ${editable ? '' : 'disabled'}>${srcOpts}</select></div>
-        <div><label>Stage</label><select id="cm-state" ${editable && !stateLocked ? '' : 'disabled'}>${stateOpts}</select>${!isAdmin ? '<div class="hint">Closing is confirmed by a partner.</div>' : ''}</div>
-        <div><label id="cm-money-label">${esc(inp.label)}</label><input id="cm-money" type="number" value="${esc(moneyVal || 0)}" ${editable ? '' : 'disabled'}><div class="hint" id="cm-money-hint">${esc(inp.hint)}</div></div>
-      </div>`;
+    const users = RWG.data.users().filter(u => u.status === 'active');
+    const ownerUid = c ? c.agentUid : ((hh && hh.advisorUid) || user.id);
+    const coUids = (c && c.coCreditUids) || [];
+    const dis = editable ? '' : 'disabled';
 
-    const correct = isAdmin ? `
+    const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === product ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}" ${c && s.id === c.source ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
+    const ownerOpts = users.map(u => `<option value="${esc(u.id)}" ${u.id === ownerUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('')
+      || `<option value="${esc(user.id)}" selected>${esc(user.name)}</option>`;
+
+    function stageOptions(prodId) {
+      const P = RWG.pipelines;
+      const pl = P.pipelineForProduct(prodId);
+      const cur = c ? P.stageForCase(c) : 'uncovered';
+      return P.boardStages(pl).filter(s => s.bucket !== 'Closed').map(s =>
+        `<option value="${esc(s.id)}" ${s.id === cur ? 'selected' : ''}>${esc(s.label)}${s.bucket === 'Submitted' ? ' ●' : ''}</option>`).join('');
+    }
+    const stageChip = closed ? '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>'
+      : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>'
+      : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(c.lostReason.split(' — ')[0]) : ''}</span>` : '';
+
+    const L = MONEY_LABELS[form.fam];
+    const w = c ? sc.deriveWeeks(c) : null;
+    const weekOpts = (sel) => ['<option value="">—</option>'].concat(recentWeeks(20).map(fri =>
+      `<option value="${fri}" ${fri === sel ? 'selected' : ''}>${fri}</option>`)).join('');
+    const correct = c && isAdmin ? `
       <div class="cs-correct">
         <div class="cs-correct-h">Correct the weeks <span class="muted">(admin)</span></div>
         <div class="cs-modal-grid">
@@ -117,46 +197,220 @@ window.RWG = window.RWG || {};
         </div>
       </div>` : '';
 
-    const foot = editable
-      ? `<div class="modal-foot">
-          ${isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(id)}">Delete</button>` : ''}
-          <span class="topbar-spacer"></span>
-          <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-          <button class="btn btn-gold" data-action="cs-save" data-id="${esc(id)}">Save</button>
-        </div>`
-      : `<div class="modal-foot"><span class="topbar-spacer"></span><button class="btn btn-ghost" data-action="close-modal">Close</button></div>`;
+    const details = cleanHtml((c && c.details) || '');
+    const toolBtn = (cmd, label, title) =>
+      `<button type="button" class="btn btn-quiet btn-sm op2-tool" data-cmd="${cmd}" title="${esc(title)}" style="padding:3px 9px;font-size:12px">${label}</button>`;
 
     const mount = document.getElementById('modal-mount');
     mount.innerHTML = `<div class="scrim" data-action="close-modal"></div>
-      <div class="modal-card">
-        <div class="modal-head"><h3>${editable ? 'Edit case' : 'Case'}</h3><button class="drawer-close" data-action="close-modal">✕</button></div>
-        <div class="modal-body">${fields}${correct}${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:10px">Read-only. Only the case owner or an admin can edit.</p>'}</div>
-        ${foot}
+      <div class="modal-card" style="max-width:680px">
+        <div class="modal-head"><h3>${c ? (editable ? 'Opportunity' : 'Opportunity (read-only)') : 'Add Opportunity'}</h3>
+          <button class="drawer-close" data-action="close-modal">✕</button></div>
+        <div class="modal-body">
+
+          <div class="field-group"><label class="lbl">Opportunity name <span style="color:var(--bad)">*</span></label>
+            <input id="op2-title" value="${esc((c && c.title) || '')}" placeholder="e.g. Vargas — whole life + DI package" ${dis}></div>
+
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">Regarding — household / client</label>
+              <div class="flex" style="gap:8px;align-items:center">
+                <input id="op2-client" value="${esc((c && c.clientName) || (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : ''))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
+                ${hh ? `<button class="btn btn-quiet btn-sm" style="flex:none" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button>` : ''}
+              </div>
+              ${hh ? `<div class="hint">${esc(hh.name)}</div>` : '<div class="hint">Not linked to a household yet.</div>'}</div>
+            <div class="field-group"><label class="lbl">Agents involved</label>
+              <select id="op2-agent" ${dis}>${ownerOpts}</select>
+              <div class="flex" style="gap:9px;flex-wrap:wrap;margin-top:6px">
+                ${users.map(u => u.id === ownerUid ? '' : `<label class="flex" style="gap:4px;align-items:center;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="op2-co-${esc(u.id)}" data-op2co="${esc(u.id)}" ${coUids.indexOf(u.id) >= 0 ? 'checked' : ''} ${dis}
+                    style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">${esc((u.name || '').split(' ')[0])}</label>`).join('')}
+              </div>
+              <div class="hint">First is the owner. Others ride along from day one — the split itself is set at close.</div></div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">Product</label>
+              <select id="op2-prod" ${c ? 'disabled title="A product picks its pipeline — change it by reopening the opportunity"' : ''}>${prodOpts}</select>
+              <div class="hint" id="op2-track"></div></div>
+            <div class="field-group"><label class="lbl">Stage</label>
+              ${stageLocked ? stageChip : `<select id="op2-stage" ${dis}>${stageOptions(product)}</select>
+              <div class="hint" id="op2-stage-hint"></div>`}</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <div class="field-group"><label class="lbl">Benefit amount</label>
+              <input id="op2-benefit" type="number" step="any" value="${esc(c && c.benefit != null && c.benefit !== '' ? c.benefit : '')}" ${dis}></div>
+            <div class="field-group"><label class="lbl" id="op2-prem-label">${esc(L.premium)}</label>
+              <input id="op2-premium" type="number" step="any" value="${form.premium || ''}" ${dis}></div>
+            <div class="field-group"><label class="lbl" id="op2-fyc-label">${esc(L.fyc)}</label>
+              <input id="op2-fyc" type="number" step="any" value="${form.fyc || ''}" ${dis}>
+              <div class="hint" id="op2-rate-hint">${esc(rateHintText(form, product))}</div></div>
+            <div class="field-group"><label class="lbl">Renewals / yr</label>
+              <input id="op2-renewal" type="number" step="any" value="${esc(c && c.renewalAnnual != null && c.renewalAnnual !== '' ? c.renewalAnnual : '')}" ${dis}>
+              <div class="hint">reporting only</div></div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">Source</label>
+              <select id="op2-src" ${dis}>${srcOpts}</select></div>
+            <div class="field-group"><label class="lbl">Source description</label>
+              <input id="op2-srcnote" value="${esc((c && c.sourceNote) || '')}" placeholder="e.g. referred by the Delgados" ${dis}></div>
+          </div>
+
+          <div class="field-group"><label class="lbl">Details</label>
+            ${editable ? `<div class="flex" style="gap:4px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;background:var(--field)">
+              ${toolBtn('bold', '<b>B</b>', 'Bold')}${toolBtn('italic', '<i>I</i>', 'Italic')}${toolBtn('underline', '<u>U</u>', 'Underline')}
+              ${toolBtn('insertUnorderedList', '•≡', 'Bullet list')}${toolBtn('insertOrderedList', '1≡', 'Numbered list')}
+              ${toolBtn('link', '🔗', 'Insert link')}
+              <span class="topbar-spacer"></span>
+              ${toolBtn('date', 'Insert date', 'Stamp today into the notes')}
+            </div>` : ''}
+            <div id="op2-details" ${editable ? 'contenteditable="true"' : ''}
+              style="min-height:110px;max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:${editable ? '0 0 10px 10px' : '10px'};padding:10px 13px;font-size:13.5px;background:#fff;color:var(--ink)">${details}</div></div>
+
+          ${correct}
+          ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}
+        </div>
+        <div class="modal-foot">
+          ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
+          <span class="topbar-spacer"></span>
+          <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+          ${editable ? `<button class="btn btn-gold" data-action="cs-save" ${c ? `data-id="${esc(c.recordId)}"` : ''} ${hhId ? `data-hh="${esc(hhId)}"` : ''}>${c ? 'Save' : 'Open opportunity ✦'}</button>` : ''}
+        </div>
       </div>`;
+
+    // ── direct wiring: this window opens over any view ──
+    const byId = (i) => document.getElementById(i);
+    function paintStatic() {
+      const p = byId('op2-prod') ? byId('op2-prod').value : product;
+      const P = RWG.pipelines;
+      const tr = byId('op2-track');
+      if (tr) tr.textContent = P.pipelineForProduct(p).name + ' track';
+      const L2 = MONEY_LABELS[FAM(p)];
+      const pl = byId('op2-prem-label'); if (pl) pl.textContent = L2.premium;
+      const fl = byId('op2-fyc-label'); if (fl) fl.textContent = L2.fyc;
+      const rh = byId('op2-rate-hint'); if (rh) rh.textContent = rateHintText(form, p);
+      const stSel = byId('op2-stage');
+      const sh = byId('op2-stage-hint');
+      if (stSel && sh) {
+        const bucket = P.bucketOf(p, stSel.value);
+        sh.innerHTML = bucket === 'Submitted'
+          ? '<b style="color:var(--gold)">Starting here counts it as written — permanently, on this week.</b>'
+          : '● marks the stages that count as written.';
+      }
+    }
+    const prodSel = byId('op2-prod');
+    if (prodSel && !c) prodSel.addEventListener('change', () => {
+      const p = prodSel.value;
+      form.fam = FAM(p);
+      const dflt = sc.defaultRate(p);
+      form.ratePct = dflt ? +(dflt * 100).toFixed(4) : null;
+      applyMoney(form, 'premium', form.premium);
+      const st2 = byId('op2-stage'); if (st2) st2.innerHTML = stageOptions(p);
+      const pi = byId('op2-premium'); if (pi) pi.value = form.premium || '';
+      const fi = byId('op2-fyc'); if (fi) fi.value = form.fyc || '';
+      paintStatic();
+    });
+    const stSel2 = byId('op2-stage');
+    if (stSel2) stSel2.addEventListener('change', paintStatic);
+    const premIn = byId('op2-premium');
+    if (premIn) premIn.addEventListener('input', () => {
+      applyMoney(form, 'premium', premIn.value);
+      const fi = byId('op2-fyc'); if (fi && document.activeElement !== fi) fi.value = form.fyc || '';
+      paintStatic();
+    });
+    const fycIn = byId('op2-fyc');
+    if (fycIn) fycIn.addEventListener('input', () => {
+      applyMoney(form, 'fyc', fycIn.value);
+      paintStatic();
+    });
+    document.querySelectorAll('.op2-tool').forEach(b => {
+      b.addEventListener('mousedown', e => e.preventDefault());   // keep the text selection
+      b.addEventListener('click', () => {
+        const ed = byId('op2-details'); if (!ed) return;
+        ed.focus();
+        const cmd = b.dataset.cmd;
+        if (cmd === 'link') {
+          const url = prompt('Link to:'); if (url) document.execCommand('createLink', false, url);
+        } else if (cmd === 'date') {
+          const d = new Date();
+          document.execCommand('insertText', false, (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear() + ' — ');
+        } else document.execCommand(cmd, false, null);
+      });
+    });
+    paintStatic();
+    const t = byId('op2-title'); if (t && !c) t.focus();
   }
 
-  function saveModal(id) {
-    const c = D().caseById(id); if (!c) return;
+  function saveWindow(el) {
+    const sc = S();
     const user = RWG.auth.currentUser();
-    const g = (i) => { const el = document.getElementById(i); return el ? el.value : ''; };
-    const prod = g('cm-prod'), usesAum = S().usesAum(prod), mv = Number(g('cm-money')) || 0;
+    const id = el.dataset.id || null;
+    const c = id ? D().caseById(id) : null;
+    const g = (i) => { const x = document.getElementById(i); return x ? x.value : ''; };
+    const title = g('op2-title').trim();
+    if (!title) { U().toast('Give the opportunity a name'); return; }
+    const clientName = g('op2-client').trim();
+    if (!clientName) { U().toast('Who is the client?'); return; }
+    const product = c ? c.product : (g('op2-prod') || 'wl');
+    const fam = FAM(product);
+    const ownerUid = g('op2-agent') || (c ? c.agentUid : user.id);
+    const owner = RWG.data.user(ownerUid) || user;
+    const coUids = [], coNames = [];
+    RWG.data.users().filter(u => u.status === 'active' && u.id !== ownerUid).forEach(u => {
+      const box = document.getElementById('op2-co-' + u.id);
+      if (box && box.checked) { coUids.push(u.id); coNames.push(u.name || ''); }
+    });
+    // basis + rate, never a raw revenue number
+    const basis = fam === 'ins' || fam === 'flat' ? (Number(form.fyc) || 0)
+      : (Number(form.premium) || 0);
+    const dflt = sc.defaultRate(product);
+    const custom = form.ratePct && dflt != null && Math.abs(form.ratePct / 100 - dflt) > 1e-6;
+    const num = (i) => { const v = g(i); return v === '' ? null : (Number(v) || 0); };
+    const ed = document.getElementById('op2-details');
+
     const patch = {
-      recordId: id, agentUid: c.agentUid, agentName: c.agentName,
-      clientName: g('cm-client').trim(), product: prod, source: g('cm-src'), state: g('cm-state'),
-      amount: usesAum ? 0 : mv, aum: usesAum ? mv : 0,
-      coCreditUids: c.coCreditUids, coCreditNames: c.coCreditNames
+      recordId: id || undefined,
+      agentUid: ownerUid, agentName: owner.name || '',
+      clientName: clientName, product: product, source: g('op2-src'),
+      state: c ? c.state : 'Opened',
+      amount: fam === 'inv' ? 0 : basis,
+      aum: fam === 'inv' ? basis : 0,
+      rate: custom ? form.ratePct / 100 : null,   // default rates are never stored
+      premiumAnnual: (fam === 'ins' || fam === 'flat') && Number(form.premium) > 0 ? Number(form.premium) : null,
+      benefit: num('op2-benefit'), renewalAnnual: num('op2-renewal'),
+      coCreditUids: coUids, coCreditNames: coNames,
+      title: title, sourceNote: g('op2-srcnote').trim() || null,
+      details: ed ? cleanHtml(ed.innerHTML) : (c ? c.details : null),
+      householdId: (c && c.householdId) || el.dataset.hh || null,
+      stageId: c ? c.stageId : 'uncovered'
     };
-    D().saveCase(patch).then(() => {
-      // admin week correction, if changed
-      if (user.role === 'admin') {
+    D().saveCase(patch).then(row => {
+      // stage move (add: from Uncovered to the chosen start; edit: if changed)
+      const sel = g('op2-stage');
+      const P = RWG.pipelines;
+      if (sel && sel !== P.stageForCase(row)) {
+        return D().setPipelineStage(row.recordId, sel).then(() => row);
+      }
+      return row;
+    }).then(row => {
+      // admin week correction, if the block was shown and changed
+      if (c && user.role === 'admin' && document.getElementById('cm-ow')) {
+        const w = sc.deriveWeeks(c);
         const ow = g('cm-ow'), sw = g('cm-sw'), cw = g('cm-cw');
-        const w = S().deriveWeeks(c);
         if (ow !== w.openedWeek || sw !== w.submittedWeek || cw !== w.closedWeek) {
-          return D().adminSetStamps(id, { openedWeek: ow || w.openedWeek, submittedWeek: sw, closedWeek: cw });
+          return D().adminSetStamps(row.recordId, { openedWeek: ow || w.openedWeek, submittedWeek: sw, closedWeek: cw }).then(() => row);
         }
       }
-    }).then(() => { document.getElementById('modal-mount').innerHTML = ''; U().toast('Case saved', true); })
-      .catch(err => U().toast('Could not save: ' + err.message));
+      return row;
+    }).then(row => {
+      document.getElementById('modal-mount').innerHTML = '';
+      form = null;
+      RWG.app.renderMain();
+      const started = RWG.wf ? RWG.wf.autoLaunch(D().caseById(row.recordId)) : [];
+      U().toast((c ? 'Saved' : 'Opportunity opened — it is on the board')
+        + (started.length ? ' · ' + started.join(' + ') + ' workflow started' : ''), true);
+    }).catch(err => U().toast('Could not save: ' + err.message));
   }
 
   RWG.modules.register({
@@ -182,12 +436,7 @@ window.RWG = window.RWG || {};
       const id = e.target.id;
       if (id === 'cs-week') { st.week = e.target.value; RWG.app.renderMain(); return; }
       if (id && id.indexOf('csf-') === 0) { st.f[id.slice(4)] = e.target.value; refreshBody(); return; }
-      // live money-label swap in the modal
-      if (id === 'cm-prod') {
-        const inp = S().inputFor(e.target.value);
-        const l = document.getElementById('cm-money-label'); if (l) l.textContent = inp.label;
-        const h = document.getElementById('cm-money-hint'); if (h) h.textContent = inp.hint;
-      }
+      // (the opportunity window wires its own listeners — it opens over any view)
     },
 
     actions: {
@@ -199,8 +448,14 @@ window.RWG = window.RWG || {};
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
         a.download = 'RWG_cases_' + S().currentWeekEnding() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
       },
-      'cs-open': (el) => openModal(el.dataset.id),
-      'cs-save': (el) => saveModal(el.dataset.id),
+      'cs-open': (el) => oppWindow({ id: el.dataset.id }),
+      'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null }),
+      'cs-save': (el) => saveWindow(el),
+      'cs-view-hh': (el) => {
+        document.getElementById('modal-mount').innerHTML = '';
+        const hhm = RWG.modules.get('households');
+        if (hhm) hhm.actions['hh-goto'](el);
+      },
       'cs-delete': (el) => { if (confirm('Delete this case? Admins only.')) D().deleteCase(el.dataset.id).then(() => { document.getElementById('modal-mount').innerHTML = ''; U().toast('Case deleted'); }); }
     },
 
@@ -254,5 +509,5 @@ window.RWG = window.RWG || {};
     const cnt = document.getElementById('cs-count'); if (cnt) cnt.textContent = rows.length + ' of ' + D().cases().length;
   }
 
-  RWG._casesModule = { filtered, toCSV, columns };
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, _form: () => form };
 })();

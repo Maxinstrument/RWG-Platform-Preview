@@ -63,14 +63,14 @@ window.RWG = window.RWG || {};
         style="cursor:pointer;border-left:3px solid ${closed ? 'var(--good)' : (stage.bucket === 'Submitted' ? 'var(--gold)' : 'var(--line-strong)')}">
       <div class="flex" style="justify-content:space-between;gap:8px;align-items:flex-start" data-action="cs-open" data-id="${esc(c.recordId)}">
         <div>
-          <div style="font-weight:700;font-size:13.5px;color:var(--navy)">${esc(c.clientName || '(no name)')}</div>
-          <div class="cell-sub">${esc(sc.productName(c.product))}${c.source ? ' · ' + esc(sc.sourceLabel(c.source)) : ''}</div>
+          <div style="font-weight:700;font-size:13.5px;color:var(--navy)">${esc(c.title || c.clientName || '(no name)')}</div>
+          <div class="cell-sub">${c.title ? esc(c.clientName || '') + ' · ' : ''}${esc(sc.productName(c.product))}${c.source ? ' · ' + esc(sc.sourceLabel(c.source)) : ''}</div>
         </div>
         ${c.householdId ? `<button class="btn btn-quiet btn-sm" data-action="hh-goto" data-id="${esc(c.householdId)}" title="Open the household" style="padding:2px 7px">🏠</button>` : ''}
       </div>
       <div class="serif" style="font-size:16px;color:var(--navy);margin-top:6px" data-action="cs-open" data-id="${esc(c.recordId)}">${U().money(money)}</div>
       <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
-        <span class="pill-soft" style="font-size:11px">${esc(first || '—')}</span>
+        <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
         ${closed ? '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>'
           : (stage.bucket === 'Closed'
               ? (isAdmin

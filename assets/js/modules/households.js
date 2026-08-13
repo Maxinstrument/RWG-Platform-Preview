@@ -337,7 +337,7 @@ window.RWG = window.RWG || {};
             <button class="btn btn-ghost btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
             <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button>
             <button class="btn btn-ghost btn-sm" data-action="wf-launch" data-hh="${esc(h.id)}">▶ Workflow</button>
-            <button class="btn btn-gold btn-sm" data-action="hh-opp-add" data-id="${esc(h.id)}">＋ Opportunity</button>
+            <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(h.id)}">＋ Opportunity</button>
           </div>
         </div>
       </div>
@@ -464,78 +464,25 @@ window.RWG = window.RWG || {};
     const rows = opps.map(c => {
       const money = SC.usesAum(c.product) ? c.aum : c.amount;
       return `<tr class="cs-row" data-action="cs-open" data-id="${esc(c.recordId)}">
-        <td><div class="cell-name">${esc(SC.productName(c.product) || c.product)}</div>
-            <div class="cell-sub">${esc(SC.sourceLabel(c.source) || '')}</div></td>
+        <td><div class="cell-name">${esc(c.title || SC.productName(c.product) || c.product)}</div>
+            <div class="cell-sub">${c.title ? esc(SC.productName(c.product)) + ' · ' : ''}${esc(SC.sourceLabel(c.source) || '')}</div></td>
         <td>${stageChip2(c)}</td>
         <td class="num">${U().money(money)}</td>
         <td class="num">${U().money(Math.round(SC.deriveCase(c).revenue))}</td>
-        <td><span class="cell-sub">${esc((c.agentName || '').split(' ')[0])}</span></td>
+        <td><span class="cell-sub">${esc((c.agentName || '').split(' ')[0])}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span></td>
         <td><span class="cell-sub">${esc(c.openedWeek || '')}</span></td>
       </tr>`;
     }).join('');
     return `<div class="card" style="margin-top:18px">
       <div class="card-head"><h3>Opportunities</h3><span class="sub">${opps.length}${open ? ' · ' + open + ' open' : ''}</span>
         <span class="topbar-spacer"></span>
-        <button class="btn btn-gold btn-sm" data-action="hh-opp-add" data-id="${esc(h.id)}">＋ Opportunity</button></div>
+        <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(h.id)}">＋ Opportunity</button></div>
       ${opps.length
         ? `<div class="table-wrap"><table class="data">
             <thead><tr><th>Product</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Revenue</th><th>Agent</th><th>Opened</th></tr></thead>
             <tbody>${rows}</tbody></table></div>`
         : `<p class="muted" style="font-size:13.5px;padding:6px 2px">Nothing yet — open the first opportunity for this family.</p>`}
     </div>`;
-  }
-
-  function oppModal(hhId) {
-    const h = H().household(hhId); if (!h) return;
-    const SC = RWG.scorecard;
-    const prim = H().primaryContact(hhId);
-    const me = RWG.auth.currentUser();
-    const prodOpts = SC.PRODUCTS.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-    const srcOpts = SC.SOURCES.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
-    const inp = SC.inputFor('wl');
-    modal('New opportunity', `On ${esc(h.name)} — the product picks its own pipeline.`, `
-      <div class="field-row">
-        <div class="field-group"><label class="lbl">Client</label>
-          <input id="op-client" value="${esc(prim ? H().contactName(prim) : '')}"></div>
-        <div class="field-group"><label class="lbl">Product</label>
-          <select id="op-prod">${prodOpts}</select></div>
-      </div>
-      <div class="field-row">
-        <div class="field-group"><label class="lbl" id="op-money-label">${esc(inp.label)}</label>
-          <input id="op-money" type="number" step="any" placeholder="0">
-          <div class="hint" id="op-money-hint">${esc(inp.hint)}</div></div>
-        <div class="field-group" id="op-rate-wrap"><label class="lbl">Rate % <span class="pill-soft" style="font-size:10.5px">optional</span></label>
-          <input id="op-rate" type="number" step="any">
-          <div class="hint" id="op-rate-hint"></div></div>
-      </div>
-      <div class="field-row">
-        <div class="field-group"><label class="lbl">Source</label>
-          <select id="op-src">${srcOpts}</select></div>
-        <div class="field-group"><label class="lbl">Agent on the case</label>
-          <select id="op-agent">${advisorOptions(h.advisorUid || me.id)}</select></div>
-      </div>
-      <p class="hint" id="op-track"></p>`,
-      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-       <button class="btn btn-gold" data-action="hh-opp-save" data-id="${esc(hhId)}">Open opportunity ✦</button>`);
-    // Direct wiring (modal survives outside this module's view events):
-    // the money label and the track note both follow the product.
-    const prod = document.getElementById('op-prod');
-    const paint = () => {
-      const p = prod.value, i = SC.inputFor(p);
-      const l = document.getElementById('op-money-label'); if (l) l.textContent = i.label;
-      const hn = document.getElementById('op-money-hint'); if (hn) hn.textContent = i.hint;
-      const tr = document.getElementById('op-track');
-      if (tr) tr.textContent = 'Track: ' + RWG.pipelines.pipelineForProduct(p).name + ' · starts at Uncovered';
-      // rate: only products that have one; placeholder shows the default
-      const def = SC.defaultRate(p);
-      const wrap = document.getElementById('op-rate-wrap');
-      const ri = document.getElementById('op-rate');
-      const rh = document.getElementById('op-rate-hint');
-      if (wrap) wrap.style.display = def == null ? 'none' : '';
-      if (ri && def != null) ri.placeholder = +(def * 100).toFixed(2) + '% default';
-      if (rh && def != null) rh.textContent = 'Blank uses the default. A 401(k) is often 0.17%.';
-    };
-    if (prod) { prod.addEventListener('change', paint); paint(); }
   }
 
   // live repaint of just the list body while typing
@@ -679,33 +626,6 @@ window.RWG = window.RWG || {};
       },
       'hh-unlink': (el) => {
         H().unlinkHouseholds(st.currentId, el.dataset.id).then(() => RWG.app.renderMain());
-      },
-
-      // opportunities
-      'hh-opp-add': (el) => oppModal(el.dataset.id),
-      'hh-opp-save': (el) => {
-        const SC = RWG.scorecard;
-        const gv = (id) => { const x = document.getElementById(id); return x ? x.value : ''; };
-        const clientName = gv('op-client').trim();
-        if (!clientName) { U().toast('Who is the client?'); return; }
-        const product = gv('op-prod');
-        const money = Number(gv('op-money')) || 0;
-        const agentUid = gv('op-agent');
-        const agent = D().user(agentUid);
-        const ratePct = Number(gv('op-rate'));
-        RWG.scorecardData.saveCase({
-          agentUid: agentUid, agentName: (agent && agent.name) || '',
-          clientName: clientName, product: product, source: gv('op-src'),
-          state: 'Opened',
-          amount: SC.usesAum(product) ? 0 : money,
-          aum: SC.usesAum(product) ? money : 0,
-          rate: ratePct > 0 ? ratePct / 100 : null,
-          householdId: el.dataset.id, stageId: 'uncovered'
-        }).then(() => {
-          mount().innerHTML = '';
-          RWG.app.renderMain();
-          U().toast('Opportunity opened — it is on the board', true);
-        }).catch(err => U().toast('Could not save: ' + err.message));
       },
 
       // conversion

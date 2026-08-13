@@ -42,7 +42,8 @@ RWG.scorecardData = (function () {
   // modal anywhere can silently strip them.
   const PASSTHROUGH = ['householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
     'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
-    'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage'];
+    'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage',
+    'title', 'sourceNote', 'details'];   // the opportunity window (phase 5.6)
 
   const cache = { cases: [], weeks: [], agents: {} };
   let onChange = () => {};
@@ -157,7 +158,10 @@ RWG.scorecardData = (function () {
     const i = cache.cases.findIndex(c => c.recordId === row.recordId);
     if (i >= 0) cache.cases[i] = row; else cache.cases.push(row);
     onChange();
+    // Resolves the saved row: a caller creating a case needs the minted
+    // recordId (the opportunity window stamps a chosen starting stage).
     return db().collection('cases').doc(row.recordId).set(row)
+      .then(() => row)
       .catch(e => { console.error('save case:', e && e.message); throw e; });
   }
 
