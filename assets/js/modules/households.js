@@ -336,6 +336,7 @@ window.RWG = window.RWG || {};
             <button class="btn btn-ghost btn-sm" data-action="hh-edit" data-id="${esc(h.id)}">✎ Edit</button>
             <button class="btn btn-ghost btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
             <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button>
+            <button class="btn btn-ghost btn-sm" data-action="wf-launch" data-hh="${esc(h.id)}">▶ Workflow</button>
             <button class="btn btn-gold btn-sm" data-action="hh-opp-add" data-id="${esc(h.id)}">＋ Opportunity</button>
           </div>
         </div>
@@ -362,6 +363,8 @@ window.RWG = window.RWG || {};
       </div>
 
       ${openTasksCard(h)}
+
+      ${workflowsCard(h)}
 
       <div class="card" style="margin-top:18px">
         <div class="card-head"><h3>Notes</h3></div>
@@ -399,6 +402,46 @@ window.RWG = window.RWG || {};
           <span class="pill-soft" style="font-size:11px;margin-left:6px">${esc((t.assigneeName || '').split(' ')[0])}</span></span>
         <span style="flex:none;font-size:12px;${t.dueDate && t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${t.dueDate && t.dueDate < today ? 'late' : (t.dueDate === today ? 'today' : esc(t.dueDate || ''))}</span>
       </div>`).join('')}
+    </div>`;
+  }
+
+  // ── workflows on the household (phase 4) ──────────────────
+  // Each launch is a checklist: progress, and the next open step.
+  // The steps themselves are ordinary tasks — check them off on My
+  // Work or in the Open tasks card; this card is the overview.
+  function workflowsCard(h) {
+    const W = RWG.wf, T = RWG.tasks, SD = RWG.scorecardData;
+    if (!W || !T || !T.isStarted()) return '';
+    const caseIds = SD.isStarted() ? SD.cases().filter(c => c.householdId === h.id).map(c => c.recordId) : [];
+    const list = W.instancesFor(h.id, caseIds);
+    if (!list.length) return '';
+    const today = T.todayKey();
+    const rows = list.map(w => {
+      const doneAll = w.done >= w.total;
+      const pct = Math.round(100 * w.done / w.total);
+      const late = w.next && w.next.dueDate && w.next.dueDate < today;
+      return `<div style="padding:11px 2px;border-bottom:1px solid rgba(14,36,64,.06)">
+        <div class="flex" style="gap:8px;align-items:center">
+          <b style="font-size:13.5px;color:var(--navy)">${esc(w.name)}</b>
+          <span class="cell-sub" style="font-size:11.5px">${esc(w.label)}</span>
+          <span class="topbar-spacer"></span>
+          <span class="cell-sub" style="font-weight:700;${doneAll ? 'color:var(--good)' : ''}">${doneAll ? '✓ done' : w.done + ' / ' + w.total}</span>
+        </div>
+        <div style="height:5px;background:var(--field);border-radius:3px;margin-top:7px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${doneAll ? 'var(--good)' : 'var(--gold)'};border-radius:3px"></div>
+        </div>
+        ${w.next ? `<div class="flex" style="gap:8px;margin-top:7px;align-items:center">
+          <span class="cell-sub" style="font-size:12px">Next: <span style="color:var(--ink)">${esc(w.next.title)}</span></span>
+          <span class="pill-soft" style="font-size:11px">${esc((w.next.assigneeName || '').split(' ')[0])}</span>
+          <span style="font-size:11.5px;${late ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${late ? 'late' : esc(w.next.dueDate || '')}</span>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Workflows</h3><span class="sub">${list.length}</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-action="wf-launch" data-hh="${esc(h.id)}">▶ Workflow</button></div>
+      ${rows}
     </div>`;
   }
 
@@ -537,6 +580,7 @@ window.RWG = window.RWG || {};
       }
       if (RWG.pipelines) RWG.pipelines.init();
       if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
+      if (RWG.wf) RWG.wf.init();   // the ▶ Workflow button launches from here
     },
 
     onInput(e) {

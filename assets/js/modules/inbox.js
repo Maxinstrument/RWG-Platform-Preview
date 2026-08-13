@@ -392,6 +392,9 @@ window.RWG = window.RWG || {};
       if (!SD().isStarted()) SD().init(me, RWG.app.renderMain);
       if (!H().isStarted()) H().init(me, RWG.app.renderMain);
       P().init();
+      // Onboarding auto-launches from the confirm — needs the tasks cache for its dedupe.
+      if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(me, RWG.app.renderMain);
+      if (RWG.wf) RWG.wf.init();
       if (view === 'close-review' && st.reviewId) loadSplits(st.reviewId);
     },
 
@@ -434,9 +437,13 @@ window.RWG = window.RWG || {};
           .then(() => saveSplits(c.recordId, st.splits, true))
           .then(() => {
             const worth = U().money(Math.round(headline(c)));
+            // A confirmed close is what starts onboarding (phase 4) —
+            // once per household, however many cases close after.
+            const started = RWG.wf ? RWG.wf.autoLaunch(SD().caseById(c.recordId)) : [];
             st.reviewId = null; st.form = null; st.formId = null; st.splits = null; st.splitsId = null;
             RWG.app.nav('inbox');
-            U().toast('Closed and confirmed · ' + worth, true);
+            U().toast('Closed and confirmed · ' + worth
+              + (started.length ? ' · ' + started.join(' + ') + ' started' : ''), true);
           })
           .catch(err => U().toast('Could not confirm: ' + err.message));
       }

@@ -215,13 +215,43 @@ window.RWG = window.RWG || {};
     e.preventDefault();
     if (col.hasAttribute('data-plwon')) { toWon(id); return; }
     SD().setPipelineStage(id, col.dataset.plstage)
-      .then(() => RWG.app.renderMain())
+      .then(() => { RWG.app.renderMain(); fireWorkflows(id); })
       .catch(err => U().toast('Could not move: ' + err.message));
   });
+
+  // A move can start a workflow (phase 4): entering Submitted is what
+  // triggers the product's checklist. Fire-and-tell, never blocking.
+  function fireWorkflows(id) {
+    const c = SD().caseById(id); if (!c || !RWG.wf) return;
+    const started = RWG.wf.autoLaunch(c);
+    if (started.length) U().toast(started.join(' + ') + ' workflow started — the steps are on My Work', true);
+  }
+
+  // Required workflow steps hold the door to Won shut (phase 4). The
+  // partner's confirm in the close review is deliberately NOT gated.
+  function blockedModal(blocks) {
+    document.getElementById('modal-mount').innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card">
+        <div class="modal-head"><h2>Not ready to close</h2>
+          <p>Required workflow steps are still open on this case. Finish them — they are on My Work — then push to Won.</p></div>
+        <div class="modal-body">
+          ${blocks.map(t => `<div class="flex" style="gap:10px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+            <span style="flex:none">⛔</span>
+            <span style="min-width:0;flex:1;font-size:13.5px;color:var(--ink)">${esc(t.title)}
+              <span class="pill-soft" style="font-size:11px;margin-left:6px">${esc((t.assigneeName || '').split(' ')[0])}</span></span>
+            <span class="cell-sub" style="flex:none">${esc(t.dueDate || '')}</span>
+          </div>`).join('')}
+        </div>
+        <div class="modal-foot"><button class="btn btn-navy" data-action="close-modal">Got it</button></div>
+      </div>`;
+  }
 
   // Push to Won. A partner lands straight in the close review — confirming
   // their own case is one motion. An advisor's case waits in the inbox.
   function toWon(id) {
+    const blocks = RWG.wf ? RWG.wf.blockers(id) : [];
+    if (blocks.length) { blockedModal(blocks); return; }
     SD().pushWon(id).then(() => {
       if (RWG.app.effectiveRole() === 'admin') {
         const inbox = RWG.modules.get('inbox');
@@ -254,6 +284,9 @@ window.RWG = window.RWG || {};
       if (!SD().isStarted()) SD().init(me, RWG.app.renderMain);
       if (!H().isStarted()) H().init(me, RWG.app.renderMain);
       P().init();
+      // Workflows read and write tasks: gates + auto-launch dedupe need the cache live.
+      if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(me, RWG.app.renderMain);
+      if (RWG.wf) RWG.wf.init();
     },
 
     onChange(e) {
@@ -264,7 +297,7 @@ window.RWG = window.RWG || {};
       'pl-track': (el) => { st.pl = el.dataset.pl; RWG.app.renderMain(); },
       'pl-move': (el) => {
         SD().setPipelineStage(el.dataset.id, el.dataset.stage)
-          .then(() => RWG.app.renderMain())
+          .then(() => { RWG.app.renderMain(); fireWorkflows(el.dataset.id); })
           .catch(err => U().toast('Could not move: ' + err.message));
       },
       'pl-won': (el) => toWon(el.dataset.id),
