@@ -42,7 +42,7 @@ RWG.scorecardData = (function () {
   // modal anywhere can silently strip them.
   const PASSTHROUGH = ['householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
     'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
-    'a360Recorded', 'lostBy', 'lostAt'];
+    'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage'];
 
   const cache = { cases: [], weeks: [], agents: {} };
   let onChange = () => {};
@@ -198,6 +198,9 @@ RWG.scorecardData = (function () {
     const existing = caseById(recordId);
     if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
     const row = Object.assign({}, existing, {
+      // Remember the stage it died on — the funnel reads this to show
+      // WHERE business leaks, which 'lost' alone can never say.
+      lostFromStage: existing.stageId || existing.lostFromStage || null,
       stageId: 'lost', state: 'Lost', pendingClose: false,
       lostReason: (reason || 'Other') + (note ? ' — ' + note : ''),
       lostBy: (me && me.id) || null, lostAt: nowISO(),
