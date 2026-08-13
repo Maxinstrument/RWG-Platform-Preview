@@ -199,29 +199,44 @@ window.RWG = window.RWG || {};
     </div>`;
   }
 
-  // ── the money input on the add-case form ──
-  function moneyInputBlock(prodId) {
-    const inp = S().inputFor(prodId);
-    return `<label id="sc-money-label">${esc(inp.label)}</label>
-      <input id="sc-money" type="number" min="0" inputmode="decimal" placeholder="0">
-      <div class="hint" id="sc-money-hint">${esc(inp.hint)}</div>`;
-  }
-
+  // ── case rows: derived, granular, and NOT edited here (phase 6b) ──
+  // The scorecard no longer owns a case form. A row opens the real
+  // opportunity window; money runs through deriveCase, so a per-case
+  // rate reads the same here as everywhere else.
   function caseRow(c) {
-    const sc = S();
-    const d = sc.derive(c.product, c.amount, c.aum);
+    const sc = S(), P = RWG.pipelines;
+    const d = sc.deriveCase(c);
     const money1 = sc.usesAum(c.product) ? money(c.aum) : money(c.amount);
-    return `<tr>
-      <td>${esc(c.clientName || '(no name)')}</td>
+    const sid = P.stageForCase(c);
+    const bucket = P.bucketOf(c.product, sid) || c.state;
+    const cls = bucket === 'Closed' ? 'tier-high' : bucket === 'Submitted' ? 'tier-gold' : bucket === 'Lost' ? 'tier-low' : '';
+    const stageLbl = c.closedAt ? 'Closed ✓' : (c.pendingClose ? 'Pending partner' : P.stageLabel(c.product, sid));
+    return `<tr class="cs-row" data-action="cs-open" data-id="${esc(c.recordId)}" style="cursor:pointer">
+      <td><div class="cell-name">${esc(c.title || c.clientName || '(no name)')}</div>
+        ${c.title ? `<div class="cell-sub">${esc(c.clientName || '')}</div>` : ''}</td>
       <td>${esc(sc.productName(c.product))}</td>
-      <td><span class="chip">${esc(c.state)}</span></td>
+      <td><span class="chip ${cls}">${esc(stageLbl)}</span></td>
       <td class="num">${money1}</td>
       <td class="num">${d.annualizedPremium ? money(d.annualizedPremium) : '—'}</td>
-      <td class="num">${money(d.revenue)}</td>
-      <td class="row-actions">
-        <button class="icon-btn" data-action="sc-edit-case" data-id="${esc(c.recordId)}" title="Edit">✎</button>
-        <button class="icon-btn" data-action="sc-del-case" data-id="${esc(c.recordId)}" title="Delete">🗑</button>
-      </td></tr>`;
+      <td class="num">${money(Math.round(d.revenue))}</td></tr>`;
+  }
+
+  // ── the CRM cross-check under the tally (phase 6b) ────────
+  // What the leads CRM can SEE about this week: appointments sitting on
+  // the calendar and how many are marked kept. A hint, not a keeper —
+  // meetings and referrals stay human-logged in the tally.
+  function crmSaw(user, week) {
+    try {
+      if (!RWG.data || !RWG.data.leadsRaw) return null;
+      const days = S().weekDays(week, 7);
+      if (days.length < 7) return null;
+      const start = Date.parse(days[0].key + 'T00:00:00');
+      const end = Date.parse(days[6].key + 'T23:59:59');
+      const mine = RWG.data.leadsRaw().filter(l => l.assignedTo === user.id);
+      const appts = mine.filter(l => l.apptDate && l.apptDate >= start && l.apptDate <= end);
+      const kept = appts.filter(l => l.stage === 'Appointment Kept' || l.stage === 'Opportunity Opened');
+      return { appts: appts.length, kept: kept.length };
+    } catch (e) { return null; }
   }
 
   // ── the daily tally grid (Mon..Sat) ──
@@ -256,9 +271,7 @@ window.RWG = window.RWG || {};
     state: {
       weekEnding: null,
       daily: {},            // { 'yyyy-mm-dd': { fa_sched, ... } }
-      loadedKey: null,      // uid_week the daily tally was last loaded for
-      draftProduct: 'wl',
-      editingId: null
+      loadedKey: null       // uid_week the daily tally was last loaded for
     },
 
     home: {
@@ -275,19 +288,13 @@ window.RWG = window.RWG || {};
     onEnter(view, ctx) {
       const st = this.state;
       if (!D().isStarted()) D().init(RWG.auth.currentUser(), RWG.app.renderMain);
+      RWG.pipelines.init();   // rows show the granular stage
       if (!st.weekEnding) st.weekEnding = S().currentWeekEnding();
     },
 
     onChange(e, st) {
       if (e.target.id === 'sc-week-pick') { st.weekEnding = e.target.value; st.loadedKey = null; RWG.app.renderMain(); return; }
       if (e.target.id === 'sc-agent-pick') { RWG.app.viewAs(e.target.value || null); return; }
-      if (e.target.id === 'sc-prod') {
-        st.draftProduct = e.target.value;
-        const inp = S().inputFor(st.draftProduct);
-        const lab = document.getElementById('sc-money-label'); if (lab) lab.textContent = inp.label;
-        const hint = document.getElementById('sc-money-hint'); if (hint) hint.textContent = inp.hint;
-        return;
-      }
       if (e.target.classList && e.target.classList.contains('sc-daycell')) { persistDaily(st); return; }
     },
 
@@ -302,13 +309,6 @@ window.RWG = window.RWG || {};
     },
 
     actions: {
-      'sc-add-case': function (el, e, st) { addCase(st); },
-      'sc-edit-case': function (el, e, st) { loadCaseIntoForm(st, el.dataset.id); },
-      'sc-del-case': function (el, e, st) {
-        if (!confirm('Delete this case?')) return;
-        D().deleteCase(el.dataset.id).then(() => U().toast('Case deleted'));
-      },
-      'sc-cancel-edit': function (el, e, st) { st.editingId = null; RWG.app.renderMain(); },
       'sc-save-week': function (el, e, st) { saveWeek(st); }
     },
 
@@ -323,17 +323,9 @@ window.RWG = window.RWG || {};
       const weekOpts = recentWeeks(14).map(w =>
         `<option value="${w}" ${w === week ? 'selected' : ''}>Week ending ${w}${w === sc.currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
 
-      const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === st.draftProduct ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-      const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
-      // Closing is a partner's confirmation — agents write and submit here,
-      // then push the case to Won on the Pipeline board when it lands.
-      const stateOpts = sc.STATES
-        .filter(s => s !== 'Closed' || RWG.app.effectiveRole() === 'admin')
-        .map(s => `<option value="${s}" ${s === 'Opened' ? 'selected' : ''}>${s}</option>`).join('');
-
       const rows = vm.r.cases.length
         ? vm.r.cases.map(caseRow).join('')
-        : `<tr><td colspan="7"><div class="empty" style="padding:26px"><div class="ec">🗂</div><h3>No cases yet this week</h3><p>Add your first case below.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty" style="padding:26px"><div class="ec">🗂</div><h3>Nothing counted this week yet</h3><p>Open an opportunity, or move one on the Pipeline — the scorecard counts the stamps by itself.</p></div></td></tr>`;
 
       const notConnected = !D().isStarted() || (D().cases().length === 0 && !D().agentConfig(user.id));
 
@@ -373,29 +365,26 @@ window.RWG = window.RWG || {};
               New business closed <b>${vm.r.closed.length}</b>
               <span class="sub">(counted from your cases, not typed here)</span>
             </div>
+            ${(() => {
+              const saw = crmSaw(user, week);
+              return saw && saw.appts ? `<div class="sc-derived muted" style="margin-top:4px">
+                CRM cross-check: <b>${saw.appts}</b> lead appointment${saw.appts === 1 ? '' : 's'} on this week's calendar,
+                <b>${saw.kept}</b> marked kept — the tally above is still yours to log.</div>` : '';
+            })()}
           </div>
 
           <div class="card">
-            <div class="card-head"><h3>Cases this week</h3><span class="sub">${vm.r.cases.length} case${vm.r.cases.length === 1 ? '' : 's'}</span></div>
+            <div class="card-head"><h3>Cases this week</h3><span class="sub">${vm.r.cases.length} case${vm.r.cases.length === 1 ? '' : 's'} · counted from the stamps, not typed</span>
+              <span class="topbar-spacer"></span>
+              <button class="btn btn-gold btn-sm" data-action="cs-new">＋ Opportunity</button></div>
             <div class="table-wrap"><table class="data sc-cases">
-              <thead><tr><th>Client</th><th>Product</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th><th></th></tr></thead>
+              <thead><tr><th>Opportunity</th><th>Product</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th></tr></thead>
               <tbody>${rows}</tbody>
             </table></div>
-
-            <div class="sc-addcase">
-              <div class="sc-add-h">${st.editingId ? 'Edit case' : 'Add a case'}</div>
-              <div class="sc-add-grid">
-                <div><label>Client name</label><input id="sc-client" type="text" placeholder="Full name"></div>
-                <div><label>Product</label><select id="sc-prod">${prodOpts}</select></div>
-                <div><label>Source</label><select id="sc-src">${srcOpts}</select></div>
-                <div><label>Stage</label><select id="sc-state">${stateOpts}</select></div>
-                <div class="sc-money-wrap">${moneyInputBlock(st.draftProduct)}</div>
-              </div>
-              <div class="sc-add-actions">
-                <button class="btn btn-gold" data-action="sc-add-case">${st.editingId ? 'Save changes' : '＋ Add case'}</button>
-                ${st.editingId ? `<button class="btn btn-ghost" data-action="sc-cancel-edit">Cancel</button>` : ''}
-              </div>
-            </div>
+            <p class="muted" style="font-size:12px;margin:10px 2px 2px">
+              A row opens the opportunity window. Opened, written and closed count from the write-once
+              stamps — the same numbers the Pipeline, the reports and the partner's confirm all read.
+            </p>
           </div>
         </div>
 
@@ -466,47 +455,8 @@ window.RWG = window.RWG || {};
       .catch(err => U().toast('Could not save: ' + err.message));
   }
 
-  // ── case add / edit ──
-  function readCaseForm(st, user) {
-    const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-    const prod = g('sc-prod') || st.draftProduct;
-    const usesAum = S().usesAum(prod);
-    const moneyVal = Number(g('sc-money')) || 0;
-    const me = identity(user);
-    return {
-      recordId: st.editingId || undefined,
-      agentUid: user.id,
-      agentName: me.name,
-      clientName: g('sc-client').trim(),
-      product: prod,
-      source: g('sc-src'),
-      state: g('sc-state'),
-      amount: usesAum ? 0 : moneyVal,
-      aum: usesAum ? moneyVal : 0
-    };
-  }
-
-  function addCase(st) {
-    const user = actor();
-    const input = readCaseForm(st, user);
-    if (!input.clientName) { U().toast('Add a client name'); return; }
-    D().saveCase(input).then(() => {
-      U().toast(st.editingId ? 'Case updated' : 'Case added', true);
-      st.editingId = null;
-    }).catch(err => U().toast('Could not save: ' + err.message));
-  }
-
-  function loadCaseIntoForm(st, id) {
-    const c = D().caseById(id); if (!c) return;
-    st.editingId = id; st.draftProduct = c.product;
-    RWG.app.renderMain();
-    // fill after the DOM exists
-    setTimeout(() => {
-      const set = (i, v) => { const el = document.getElementById(i); if (el) el.value = v; };
-      set('sc-client', c.clientName || ''); set('sc-prod', c.product); set('sc-src', c.source);
-      set('sc-state', c.state); set('sc-money', S().usesAum(c.product) ? c.aum : c.amount);
-    }, 0);
-  }
+  // (The case add/edit form is gone — phase 6b. The opportunity window
+  // is the one way a case is born or changed; the scorecard only reads.)
 
   function saveWeek(st) {
     const user = actor();
@@ -517,5 +467,5 @@ window.RWG = window.RWG || {};
   }
 
   // expose the pure helpers for verification
-  RWG._scorecardModule = { rollup, activityPoints, identity, recentWeeks, dailyTotals, cleanDaily, weekDoc, GOAL_LINES, lineMet, buildVM };
+  RWG._scorecardModule = { rollup, activityPoints, identity, recentWeeks, dailyTotals, cleanDaily, weekDoc, GOAL_LINES, lineMet, buildVM, caseRow, crmSaw };
 })();
