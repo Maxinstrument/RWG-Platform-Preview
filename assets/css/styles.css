@@ -453,7 +453,7 @@ table.data thead th{
 }
 table.data thead th:hover{color:var(--navy);}
 table.data thead th .arrow{opacity:.4;margin-left:3px;}
-table.data tbody td{padding:7px 14px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
+table.data tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
 table.data tbody tr{transition:background .12s;cursor:pointer;}
 table.data tbody tr:hover{background:rgba(194,161,77,.06);}
 table.data tbody tr:last-child td{border-bottom:none;}
@@ -829,6 +829,21 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   .home-hero h2{font-size:24px;}
   .tiles{grid-template-columns:1fr;}
 }
+
+/* ── Home dashboard ──────────────────────────────────────── */
+.hm-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s4);align-items:start;}
+.hm-shell.cz-open{grid-template-columns:minmax(0,1fr) 236px;}
+.hm-full{display:block;margin-bottom:var(--s4);}
+/* Balanced columns, not a grid: a short widget can no longer leave a
+   hole the height of the funnel standing next to it. */
+.hm-grid{columns:2;column-gap:var(--s4);}
+.hm-grid > *{break-inside:avoid;-webkit-column-break-inside:avoid;display:block;margin:0 0 var(--s4);}
+@media (max-width:1180px){ .hm-grid{columns:1;} .hm-shell.cz-open{grid-template-columns:minmax(0,1fr);} }
+/* Funnel + occupancy rows share one label column width so the two
+   charts read as a pair rather than two different charts. */
+.fn-lab{width:152px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-align:right;text-wrap:balance;}
+.oc-lab{width:152px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-wrap:balance;}
+@media (max-width:760px){ .fn-lab,.oc-lab{width:96px;font-size:11px;} }
 
 /* ── Scorecard module ────────────────────────────────────── */
 .sc-wrap{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;}

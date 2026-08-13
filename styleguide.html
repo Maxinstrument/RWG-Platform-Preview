@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resilient Platform · Style guide</title>
+  <link rel="icon" href="assets/img/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- The real stylesheet, so this page can never drift from the app -->
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <style>
+    body{padding:0;}
+    .sg-wrap{max-width:1080px;margin:0 auto;padding:34px 26px 90px;}
+    .sg-h{margin:0 0 6px;font-size:32px;}
+    .sg-sub{color:var(--muted);font-size:15px;margin:0 0 30px;max-width:66ch;}
+    .sg-sec{margin:38px 0 0;}
+    .sg-sec > h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);
+      font-family:'Hanken Grotesk',sans-serif;font-weight:700;margin:0 0 4px;}
+    .sg-sec > p{color:var(--muted);font-size:13.5px;margin:0 0 16px;max-width:70ch;}
+    .sg-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+    .sg-sw{border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden;background:#fff;}
+    .sg-sw i{display:block;height:56px;}
+    .sg-sw b{display:block;font-size:12px;padding:8px 10px 2px;color:var(--ink);}
+    .sg-sw code{display:block;font-size:11px;padding:0 10px 9px;color:var(--muted);}
+    .sg-scale{display:flex;flex-direction:column;gap:7px;}
+    .sg-scale div{display:flex;align-items:center;gap:12px;font-size:12.5px;color:var(--muted);}
+    .sg-scale span{display:block;height:16px;background:rgba(194,161,77,.5);border-radius:3px;}
+  </style>
+</head>
+<body>
+<div class="sg-wrap">
+  <p class="eyebrow"><span class="dot"></span><span>Resilient Wealth Group</span></p>
+  <h1 class="sg-h serif">The platform, in parts</h1>
+  <p class="sg-sub">Every control the CRM uses, on one page, drawing from the same stylesheet the app
+    does. If something here looks wrong, it is wrong everywhere — and if two things here look
+    different, that difference is a bug.</p>
+
+  <section class="sg-sec">
+    <h2>Colour</h2>
+    <p>Navy carries structure, gold carries attention, and the paper ground keeps long days easy on
+      the eye. Green, amber and red mean only one thing each: good, waiting, wrong.</p>
+    <div class="sg-swatches">
+      <div class="sg-sw"><i style="background:var(--navy)"></i><b>Navy</b><code>#0E2440</code></div>
+      <div class="sg-sw"><i style="background:var(--gold)"></i><b>Gold</b><code>#C2A14D</code></div>
+      <div class="sg-sw"><i style="background:var(--paper)"></i><b>Paper</b><code>#F4F1E9</code></div>
+      <div class="sg-sw"><i style="background:var(--field)"></i><b>Field</b><code>#FBFAF6</code></div>
+      <div class="sg-sw"><i style="background:var(--good)"></i><b>Good</b><code>#2E7D5B</code></div>
+      <div class="sg-sw"><i style="background:var(--warn)"></i><b>Waiting</b><code>#B0691F</code></div>
+      <div class="sg-sw"><i style="background:var(--bad)"></i><b>Wrong</b><code>#B23A48</code></div>
+      <div class="sg-sw"><i style="background:var(--muted)"></i><b>Muted</b><code>#5C6B7E</code></div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Spacing</h2>
+    <p>Six numbers. Every gap and padding in the app is one of them; that regularity is most of what
+      makes a screen feel calm.</p>
+    <div class="sg-scale">
+      <div><span style="width:6px"></span>--s1 · 6px</div>
+      <div><span style="width:10px"></span>--s2 · 10px</div>
+      <div><span style="width:14px"></span>--s3 · 14px</div>
+      <div><span style="width:18px"></span>--s4 · 18px — the standard gap between cards</div>
+      <div><span style="width:24px"></span>--s5 · 24px — modal padding</div>
+      <div><span style="width:34px"></span>--s6 · 34px</div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Type</h2>
+    <p>Fraunces for anything that names something; Hanken Grotesk for everything you read. Numbers
+      are always tabular so columns line up.</p>
+    <div class="card">
+      <h2 class="serif" style="font-size:30px;margin-bottom:4px">Thursday morning, Carlos</h2>
+      <h3 style="margin-bottom:6px">Card heading</h3>
+      <p style="margin:0 0 8px;font-size:14px">Body copy sits at 14px with generous line height, because
+        this is a screen people look at for eight hours.</p>
+      <p class="hint" style="margin:0">A hint: 12px, muted, and the same in every window.</p>
+      <p class="num" style="margin:10px 0 0;font-size:22px;font-family:'Fraunces',serif;color:var(--navy)">$26,000.00</p>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Controls</h2>
+    <p>One height (42px), one radius, one focus ring — whatever the input's type happens to be.
+      Click through them: every field should feel like the same field.</p>
+    <div class="card">
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Bare input (no type)</label><input placeholder="First name"></div>
+        <div class="field-group"><label class="lbl">Text</label><input type="text" placeholder="Last name"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Select</label>
+          <select><option>Primary client</option><option>Spouse</option></select></div>
+        <div class="field-group"><label class="lbl">Date</label><input type="date"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Number</label><input type="number" placeholder="85000"></div>
+        <div class="field-group"><label class="lbl">Disabled</label><input value="Locked after close" disabled></div>
+      </div>
+      <div class="field-group"><label class="lbl">Textarea</label>
+        <textarea placeholder="Anything the whole team should know…"></textarea></div>
+      <div class="field-group"><label class="lbl">Multi-select chips</label>
+        <div class="checkrow">
+          <label class="checkitem"><input type="checkbox" checked> Maryurie</label>
+          <label class="checkitem"><input type="checkbox"> Jesus</label>
+          <label class="checkitem"><input type="checkbox"> Nelson</label>
+        </div>
+        <div class="hint">The select names the owner; ticks ride along.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Buttons</h2>
+    <p>Gold commits, navy confirms, ghost steps back, red destroys. Small buttons are 34px; in a
+      toolbar they grow to 38px to match the selects beside them.</p>
+    <div class="card">
+      <div class="flex wrap-gap" style="margin-bottom:14px">
+        <button class="btn btn-gold">Open opportunity ✦</button>
+        <button class="btn btn-navy">Confirm and close</button>
+        <button class="btn btn-ghost">Cancel</button>
+        <button class="btn btn-quiet">Send back</button>
+        <button class="btn btn-danger">Delete</button>
+        <button class="btn btn-gold" disabled>Disabled</button>
+      </div>
+      <div class="flex wrap-gap">
+        <button class="btn btn-gold btn-sm">＋ Task</button>
+        <button class="btn btn-ghost btn-sm">▶ Workflow</button>
+        <button class="btn btn-quiet btn-sm">⏰ Remind</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Status</h2>
+    <p>A chip states where something stands. Colour does the talking, so the words can stay short.</p>
+    <div class="card">
+      <div class="flex wrap-gap">
+        <span class="chip tier-gold">Submitted</span>
+        <span class="chip tier-high">Closed ✓</span>
+        <span class="chip tier-medium">Pending partner</span>
+        <span class="chip tier-low">Lost · price</span>
+        <span class="pill-soft">Kathy</span>
+        <span class="chip tier-gold">⚙ New Life Policy</span>
+        <span class="chip tier-medium">required</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>List surface</h2>
+    <p>My Work, Key dates, Service, the dashboard widgets and the partner inbox are all this one
+      skeleton: a head, optional group bands, rows, and a note.</p>
+    <div class="card flush">
+      <div class="list-head">
+        <span class="t">Open tasks</span><span class="s">3 · 1 overdue</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-ghost btn-sm">＋ Task</button>
+      </div>
+      <div class="list-group bad">Overdue · 1</div>
+      <div class="list-row">
+        <input type="checkbox">
+        <div class="grow">
+          <div style="font-size:13.5px">Chase the APS from Dr. Reyes' office</div>
+          <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap">
+            <span class="chip" style="background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line)">🏠 Vargas Household</span>
+            <span class="chip tier-gold" style="font-size:10.5px">⚙ New Life Policy</span>
+          </div>
+        </div>
+        <div class="end"><span style="color:var(--bad);font-weight:700;font-size:12px">3 days late</span></div>
+      </div>
+      <div class="list-group">Due today · 1</div>
+      <div class="list-row">
+        <input type="checkbox">
+        <div class="grow"><div style="font-size:13.5px">Confirm the review appointment</div></div>
+        <div class="end"><span style="color:var(--warn);font-weight:700;font-size:12px">Today</span></div>
+      </div>
+      <p class="list-hint">Rows, bands and heads all sit on the spacing scale — no screen invents its own.</p>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Table</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Opportunity</th><th>Stage</th><th class="num">Premium</th><th class="num">Revenue</th></tr></thead>
+        <tbody>
+          <tr><td><div class="cell-name">Vargas — whole life</div><div class="cell-sub">Maria Vargas</div></td>
+            <td><span class="chip tier-gold">Medical Underwriting</span></td>
+            <td class="num">$26,000</td><td class="num">$14,300</td></tr>
+          <tr><td><div class="cell-name">Okonjo — FRS rollover</div><div class="cell-sub">Rosa Okonjo</div></td>
+            <td><span class="chip tier-high">Closed ✓</span></td>
+            <td class="num">—</td><td class="num">$1,400</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2>Empty states</h2>
+    <p>An empty screen should say what will fill it, never just "no data".</p>
+    <div class="card flush">
+      <div class="empty" style="padding:44px 16px"><div class="ec">🗓</div>
+        <h3>Nothing inside 60 days</h3>
+        <p>Dates appear as births, closes and custom dates land in the book.</p></div>
+    </div>
+  </section>
+
+  <p class="muted" style="font-size:12.5px;margin-top:44px">
+    Rendered from <code>assets/css/styles.css</code>. Add a component here when you add one to the app.
+  </p>
+</div>
+</body>
+</html>

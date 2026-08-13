@@ -131,7 +131,7 @@ window.RWG = window.RWG || {};
       ${barPct !== null ? `<div style="height:5px;background:var(--field);margin-top:9px;border-radius:3px;overflow:hidden"><div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px"></div></div>` : ''}
       <div class="cell-sub" style="margin-top:5px;font-size:10.5px">${note}</div>
     </div>`;
-    return `<div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s4)">
       ${tile('FYC written this week', U().money(Math.round(fycSum)),
         ctx.isAdmin ? pct + '% of the $' + (goal / 1000) + 'k pace · ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left'
           : 'counts toward the team’s ' + U().money(SC().FYC_PER_WEEK_AT_TARGET) + '/week pace',
@@ -177,11 +177,11 @@ window.RWG = window.RWG || {};
       const color = BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened;
       const drop = i > 0 ? counts[i - 1] - counts[i] : 0;
       return (drop > 0 ? `<div class="flex" style="gap:10px;align-items:center;margin:1px 0 3px">
-          <span style="width:132px;text-align:right;flex:none;font-size:10px;color:var(--bad);font-weight:700">−${drop}</span>
+          <span class="fn-lab" style="color:var(--bad);font-weight:700;font-size:10px">−${drop}</span>
           <span style="flex:1;text-align:center;font-size:10px;color:var(--bad)">dropped before ${esc(s.label)}${i === biggest ? ' · biggest leak' : ''}</span>
           <span style="width:52px;flex:none"></span></div>` : '') +
         `<div class="flex" style="gap:10px;align-items:center;margin-bottom:3px">
-          <span style="width:132px;text-align:right;flex:none;font-size:11px;color:var(--ink);line-height:1.2">${esc(s.label)}</span>
+          <span class="fn-lab">${esc(s.label)}</span>
           <span style="flex:1;display:flex;justify-content:center;min-width:0">
             <span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${counts[i]}</span></span>
           <span style="width:52px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${money[i] ? U().moneyK(money[i]) : ''}</span>
@@ -232,7 +232,7 @@ window.RWG = window.RWG || {};
     if (!shown.length && !pending) return card('Where cases are sitting', esc(pl.name), emptyRow('Nothing open on this track right now.'));
     const max = Math.max.apply(null, shown.map(s => by[s.id]).concat([pending, 1]));
     const bar = (label, n, color) => `<div class="flex" style="gap:9px;align-items:center;padding:4.5px 16px">
-      <span style="width:128px;flex:none;font-size:11px;color:var(--ink);line-height:1.2">${esc(label)}</span>
+      <span class="oc-lab">${esc(label)}</span>
       <span style="flex:1;height:13px;background:var(--field);min-width:0;border-radius:3px;overflow:hidden">
         <span style="display:block;height:100%;width:${Math.round(100 * n / max)}%;background:${color};border-radius:3px"></span></span>
       <span style="width:22px;flex:none;text-align:right;font-size:10.5px;color:var(--ink)">${n}</span>
@@ -338,7 +338,7 @@ window.RWG = window.RWG || {};
     const max = rows[0].n;
     return card('Lost reasons', lost.length + ' lost · last 90 days',
       `<div style="padding:8px 0 6px">${rows.map(x => `<div class="flex" style="gap:9px;align-items:center;padding:4.5px 16px">
-        <span style="width:150px;flex:none;font-size:11.5px;color:var(--ink)">${esc(x.r)}</span>
+        <span class="oc-lab">${esc(x.r)}</span>
         <span style="flex:1;height:12px;background:var(--field);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(100 * x.n / max)}%;background:var(--bad);opacity:.75;border-radius:3px"></span></span>
         <span style="width:20px;flex:none;text-align:right;font-size:10.5px">${x.n}</span></div>`).join('')}</div>`);
   }
@@ -498,14 +498,20 @@ window.RWG = window.RWG || {};
     const periodOpts = [['month', 'This month'], ['q', 'This quarter'], ['ytd', 'This year'], ['all', 'All time']]
       .map(p => `<option value="${p[0]}" ${p[0] === st.period ? 'selected' : ''}>${p[1]}</option>`).join('');
 
+    // Full-width widgets sit above; the rest flow into balanced columns.
+    // (A two-column grid made every row as tall as its tallest widget,
+    // so a short card left a hole the height of the funnel beside it.)
     const on = layout(eff, ctx.isAdmin ? 'admin' : 'agent');
-    const body = on.map(id => {
+    const full = [], flow = [];
+    on.forEach(id => {
       const w = widget(id);
-      if (!w || (w.admin && !ctx.isAdmin)) return '';
+      if (!w || (w.admin && !ctx.isAdmin)) return;
       const html = w.render(ctx);
-      if (!html) return '';
-      return w.full ? html : `<div style="min-width:0">${html}</div>`;
-    }).join('');
+      if (!html) return;
+      (w.full ? full : flow).push(html);
+    });
+    const body = (full.length ? `<div class="hm-full">${full.join('')}</div>` : '')
+      + (flow.length ? `<div class="hm-grid">${flow.map(h => `<div>${h}</div>`).join('')}</div>` : '');
 
     return `
       <div class="flex" style="align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap">
@@ -518,9 +524,9 @@ window.RWG = window.RWG || {};
         <select id="hm-period" class="fbar-select" style="width:auto">${periodOpts}</select>
         <button class="btn ${st.customize ? 'btn-navy' : 'btn-gold'} btn-sm" data-action="hm-customize">${st.customize ? 'Done' : 'Customize'}</button>
       </div>
-      <div style="display:grid;grid-template-columns:${st.customize ? 'minmax(0,1fr) 232px' : 'minmax(0,1fr)'};gap:16px;align-items:start">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start" class="hm-grid">
-          ${body || '<div class="empty" style="grid-column:1/-1;padding:44px"><div class="ec">🧭</div><h3>Nothing switched on</h3><p>Open Customize and pick your widgets.</p></div>'}
+      <div class="hm-shell${st.customize ? ' cz-open' : ''}">
+        <div style="min-width:0">
+          ${body || '<div class="empty" style="padding:44px"><div class="ec">🧭</div><h3>Nothing switched on</h3><p>Open Customize and pick your widgets.</p></div>'}
         </div>
         ${st.customize ? customizeHtml(ctx) : ''}
       </div>`;
