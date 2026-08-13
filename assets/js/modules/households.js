@@ -226,6 +226,11 @@ window.RWG = window.RWG || {};
   function listHtml(user, ctx) {
     const rows = listRows();
     const total = H().households().length;
+    // The one-time grouping pass: offered while any case still lacks a
+    // household, gone the day the last one is attached.
+    const sd = RWG.scorecardData;
+    const unattached = (ctx.isAdmin && sd && sd.isStarted())
+      ? sd.cases().filter(c => !c.householdId).length : 0;
     const body = rows.length ? rows.map(h => {
       const people = H().contactsFor(h.id);
       const prim = H().primaryContact(h.id);
@@ -246,6 +251,7 @@ window.RWG = window.RWG || {};
     return `<div class="card">
       <div class="card-head"><h3>Households</h3><span class="sub">${rows.length}${total !== rows.length ? ' of ' + total : ''}</span>
         <span class="topbar-spacer"></span>
+        ${unattached ? `<button class="btn btn-navy btn-sm" data-action="nav" data-view="grouping" title="One-time pass: attach every existing case to a household">⚡ Group existing cases · ${unattached}</button>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>
         <button class="btn btn-gold btn-sm" data-action="hh-new">＋ New household</button>
       </div>
@@ -407,6 +413,10 @@ window.RWG = window.RWG || {};
 
     onEnter(view, ctx) {
       if (!H().isStarted()) H().init(RWG.auth.currentUser(), RWG.app.renderMain);
+      // admins also get the case count, for the grouping button
+      if (ctx.isAdmin && RWG.scorecardData && !RWG.scorecardData.isStarted()) {
+        RWG.scorecardData.init(RWG.auth.currentUser(), RWG.app.renderMain);
+      }
     },
 
     onInput(e) {

@@ -217,6 +217,102 @@ RWG.hh = (function () {
     return batch.commit().catch(e => { console.error('unlink households:', e && e.message); throw e; });
   }
 
+  // Everything a lead already knows, in contact-record shape.
+  function personFieldsFromLead(l) {
+    return {
+      firstName: l.firstName || '', lastName: l.lastName || '',
+      email: l.email || '', phone: l.phone || '', dob: '',
+      employer: l.employer || '', planType: l.planType || '',
+      memberClass: l.memberClass || '', yos: l.yos != null ? l.yos : null,
+      afc: l.afc != null ? l.afc : null, age: l.age != null ? l.age : null,
+      leadId: l.id
+    };
+  }
+
+  // Attach existing scorecard cases to a household — the additive pointer
+  // that lets phase 2 hang opportunities off the spine. Pokes the
+  // scorecard cache optimistically so the grouping screen recounts live.
+  function attachCasesTo(batch, hhId, caseIds, stampISO) {
+    (caseIds || []).forEach(cid => {
+      batch.update(db().collection('cases').doc(cid), { householdId: hhId, updatedAt: stampISO });
+      const sd = RWG.scorecardData;
+      if (sd && sd.isStarted()) { const c = sd.caseById(cid); if (c) c.householdId = hhId; }
+    });
+  }
+
+  // ── grouping (the one-time pass over the existing book) ──
+  // One atomic batch: household (new or existing) + person (from a lead,
+  // from a bare name, or none when they are already a contact) + every
+  // case in the group stamped with the pointer.
+  //
+  // opts: { householdId }  OR  { household: {name, advisorUid, advisorName, source} }
+  //       + one of: fromLeadId | person {firstName,lastName} | nothing
+  //       + relationship, caseIds[]
+  function createFromGrouping(opts) {
+    const batch = db().batch();
+    const stamp = now();
+    const stampISO = new Date(stamp).toISOString();
+    const by = (me && me.id) || null;
+
+    let hh;
+    if (opts.householdId) {
+      hh = household(opts.householdId);
+      if (!hh) return Promise.reject(new Error('household not found'));
+    } else {
+      const ref = db().collection('households').doc();
+      hh = Object.assign({
+        id: ref.id, name: '', advisorUid: null, advisorName: '',
+        source: '', sourceDetail: '', notes: '', links: [], a360Complete: null,
+        createdAt: stamp, createdBy: by, updatedAt: stamp
+      }, opts.household || {});
+      if (!hh.name) return Promise.reject(new Error('the household needs a name'));
+      cache.households.push(hh);
+      batch.set(db().collection('households').doc(hh.id), stripId(hh));
+    }
+
+    let personId = null;
+    let fields = null;
+    if (opts.fromLeadId) {
+      const l = RWG.data.lead(opts.fromLeadId);
+      if (!l) return Promise.reject(new Error('lead not found'));
+      if (l.householdId) return Promise.reject(new Error(RWG.data.fullName(l) + ' was already converted — refresh the proposals'));
+      fields = personFieldsFromLead(l);
+      const hist = {
+        id: 'h_' + stamp.toString(36), by: by, at: stamp, changes: [],
+        note: '✦ Grouped into household "' + hh.name + '" — client record created'
+      };
+      batch.update(db().collection('leads').doc(l.id), {
+        householdId: hh.id, contactId: null,   // set below once the id exists
+        convertedAt: stamp, convertedBy: by,
+        history: firebase.firestore.FieldValue.arrayUnion(hist)
+      });
+    } else if (opts.person && (opts.person.firstName || opts.person.lastName)) {
+      fields = Object.assign({ leadId: null }, opts.person);
+    }
+    if (fields) {
+      const cRef = db().collection('contacts').doc();
+      const person = Object.assign({
+        id: cRef.id, householdId: hh.id,
+        relationship: opts.relationship || 'Primary client',
+        email: '', phone: '', dob: '', employer: '', planType: '',
+        memberClass: '', yos: null, afc: null, age: null,
+        advisorstream: false,
+        createdAt: stamp, createdBy: by, updatedAt: stamp
+      }, fields);
+      personId = person.id;
+      cache.contacts.push(person);
+      batch.set(cRef, stripId(person));
+      if (opts.fromLeadId) batch.update(db().collection('leads').doc(opts.fromLeadId), { contactId: personId });
+    }
+
+    attachCasesTo(batch, hh.id, opts.caseIds, stampISO);
+
+    onChange();
+    return batch.commit()
+      .then(() => ({ householdId: hh.id, contactId: personId }))
+      .catch(e => { console.error('grouping:', e && e.message); throw e; });
+  }
+
   // ── the conversion (a promotion, not a copy) ──────────────
   // Creates (or reuses) a household, creates the contact carrying
   // everything the lead already knows, and stamps the lead with the
@@ -257,17 +353,12 @@ RWG.hh = (function () {
 
     // 2 · the person, carrying everything the lead already knows
     const cRef = db().collection('contacts').doc();
-    const person = {
+    const person = Object.assign({
       id: cRef.id, householdId: hh.id,
-      firstName: l.firstName || '', lastName: l.lastName || '',
       relationship: opts.relationship || 'Primary client',
-      email: l.email || '', phone: l.phone || '', dob: '',
-      employer: l.employer || '', planType: l.planType || '',
-      memberClass: l.memberClass || '', yos: l.yos != null ? l.yos : null,
-      afc: l.afc != null ? l.afc : null, age: l.age != null ? l.age : null,
-      leadId: l.id, advisorstream: false,
+      advisorstream: false,
       createdAt: stamp, createdBy: by, updatedAt: stamp
-    };
+    }, personFieldsFromLead(l));
     cache.contacts.push(person);
     batch.set(cRef, stripId(person));
 
@@ -302,7 +393,7 @@ RWG.hh = (function () {
     addHousehold, saveHousehold, setA360, deleteHousehold,
     addContact, saveContact, setAdvisorstream, removeContact,
     linkHouseholds, unlinkHouseholds,
-    convertLead,
+    convertLead, createFromGrouping,
     _cache: cache
   };
 })();
