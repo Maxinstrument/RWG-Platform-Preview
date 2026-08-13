@@ -153,6 +153,36 @@ window.RWG = window.RWG || {};
       </div>`;
   }
 
+  // ── edge auto-scroll while dragging ───────────────────────
+  // Browsers do not scroll an inner overflow container during a native
+  // drag, so a column past the edge of the screen was unreachable
+  // without dropping the card first. Holding a card near the board's
+  // left or right edge now scrolls it, faster the closer to the edge.
+  // Generic on .board, so the leads board is cured by the same code.
+  let asBoard = null, asVel = 0, asRaf = null;
+  function asStop() {
+    asBoard = null; asVel = 0;
+    if (asRaf) { cancelAnimationFrame(asRaf); asRaf = null; }
+  }
+  function asTick() {
+    if (asBoard && asVel) { asBoard.scrollLeft += asVel; asRaf = requestAnimationFrame(asTick); }
+    else asStop();
+  }
+  document.addEventListener('dragover', e => {
+    const t = (e.target && e.target.nodeType === 1) ? e.target : e.target && e.target.parentElement;
+    const board = t && t.closest('.board');
+    if (!board) { asStop(); return; }
+    const r = board.getBoundingClientRect();
+    const ZONE = 90;                                   // px from the edge where scrolling kicks in
+    let v = 0;
+    if (e.clientX < r.left + ZONE) v = -Math.ceil((ZONE - (e.clientX - r.left)) / 5);
+    else if (e.clientX > r.right - ZONE) v = Math.ceil((ZONE - (r.right - e.clientX)) / 5);
+    asBoard = board; asVel = v;                        // up to ~18px/frame at the very edge
+    if (v && !asRaf) asRaf = requestAnimationFrame(asTick);
+  });
+  document.addEventListener('dragend', asStop);
+  document.addEventListener('drop', asStop);
+
   // ── drag wiring (own namespace; the kernel's lead handlers ignore it) ──
   let dragId = null;
   const clearHighlights = () => document.querySelectorAll('.board-col.drop-target').forEach(c => {
