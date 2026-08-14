@@ -261,7 +261,7 @@ window.RWG = window.RWG || {};
           ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
           <span class="topbar-spacer"></span>
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-          ${editable ? `<button class="btn btn-gold" data-action="cs-save" ${c ? `data-id="${esc(c.recordId)}"` : ''} ${hhId ? `data-hh="${esc(hhId)}"` : ''}>${c ? 'Save' : 'Open opportunity ✦'}</button>` : ''}
+          ${editable ? `<button class="btn btn-gold" data-action="cs-save" ${c ? `data-id="${esc(c.recordId)}"` : ''} ${hhId ? `data-hh="${esc(hhId)}"` : ''}>${c ? 'Save' : 'Open opportunity ' + U().icon('spark','ic-inline')}</button>` : ''}
         </div>
       </div>`;
 

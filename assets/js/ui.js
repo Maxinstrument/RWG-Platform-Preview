@@ -62,7 +62,7 @@ RWG.ui = (function () {
   }
   function callbackChip(l) {
     return isCallback(l)
-      ? `<span class="chip chip-callback" title="This person asked us to call them to schedule an appointment">📞 Callback</span>`
+      ? `<span class="chip chip-callback" title="This person asked us to call them to schedule an appointment">${icon('phone','ic-inline')} Callback</span>`
       : '';
   }
 
@@ -86,6 +86,58 @@ RWG.ui = (function () {
       <defs><linearGradient id="goldgrad" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#C2A14D"/><stop offset="1" stop-color="#D8BC78"/></linearGradient></defs>
     </svg><div class="ring-center"><span class="big">${big}</span><span class="small">${small}</span></div></div>`;
+  }
+
+  /* ── Icons ─────────────────────────────────────────────────
+     One set, stored as path data only. The <svg> wrapper is built
+     here, so every icon in the app is guaranteed the same viewBox,
+     the same fill and the same stroke weight — a drifted
+     stroke-width is not expressible.
+
+     These are drawn in the product's own line weight and inherit
+     currentColor, which is the whole reason they beat the colour
+     emoji they replace: an emoji is somebody else's artwork at
+     somebody else's weight, and on Windows it renders larger and
+     brighter than the navy text beside it. ─────────────────── */
+  const ICON_PATHS = {
+    dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+    leads:     '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/>',
+    team:      '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.2 3.2 0 0 1 0 7"/><path d="M18 20c0-2.5-1-4.5-2.5-5.6"/>',
+    upload:    '<path d="M12 16V5"/><path d="M8 9l4-4 4 4"/><path d="M5 19h14"/>',
+    settings:  '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+    archive:   '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
+    reports:   '<rect x="3.5" y="3" width="17" height="18" rx="2"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
+    board:     '<rect x="3" y="4" width="5" height="16" rx="1.3"/><rect x="9.5" y="4" width="5" height="11" rx="1.3"/><rect x="16" y="4" width="5" height="14" rx="1.3"/>',
+    today:     '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>',
+    stats:     '<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',
+    logout:    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
+    home:      '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V9.5"/>',
+    scorecard: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    cases:     '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    club:      '<circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5 7 22l5-2.6L17 22l-1.5-8.5"/>',
+    person:    '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c0-3.9 3.4-6.8 7.5-6.8s7.5 2.9 7.5 6.8"/>',
+    search:    '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>',
+
+    /* The five that replace colour emoji. A household is a house with
+       people in it — deliberately not the same drawing as `home`,
+       which is the dashboard. */
+    household: '<path d="M3.5 10.8 12 4l8.5 6.8"/><path d="M5.8 9.8V19a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V9.8"/><circle cx="9.8" cy="14.6" r="1.4"/><circle cx="14.2" cy="14.6" r="1.4"/>',
+    /* A workflow is a branch, not a cog. The gear it replaces already
+       means Settings, and one glyph cannot mean two things. */
+    workflow:  '<circle cx="5.5" cy="6" r="2.4"/><circle cx="5.5" cy="18" r="2.4"/><circle cx="18.5" cy="12" r="2.4"/><path d="M7.9 6h4.6a3.5 3.5 0 0 1 3.5 3.5v.4M7.9 18h4.6a3.5 3.5 0 0 0 3.5-3.5v-.4"/>',
+    service:   '<path d="M15.6 3.4a4.6 4.6 0 0 0-4.1 6.7l-7 7a2.1 2.1 0 0 0 3 3l7-7a4.6 4.6 0 0 0 5.7-6l-2.7 2.7-2.5-.7-.7-2.5z"/>',
+    phone:     '<path d="M6.4 3.6h3.1l1.5 3.9-2 1.5a12.2 12.2 0 0 0 6 6l1.5-2 3.9 1.5v3.1a2 2 0 0 1-2.2 2A16.6 16.6 0 0 1 4.4 5.8a2 2 0 0 1 2-2.2z"/>',
+    /* The conversion mark: a lead becoming a client family. */
+    spark:     '<path d="M12 2.8 14 10l7.2 2-7.2 2-2 7.2-2-7.2-7.2-2 7.2-2z"/>'
+  };
+
+  // cls: 'ic-sm' inside running text, 'ic-lg' for an empty state.
+  function icon(name, cls) {
+    const p = ICON_PATHS[name];
+    if (!p) return '';
+    return '<svg class="ic' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none"'
+      + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true" focusable="false">' + p + '</svg>';
   }
 
   /* ── Notes: one editor, everywhere ─────────────────────────
@@ -221,6 +273,6 @@ RWG.ui = (function () {
     t.dataset.timer = String(setTimeout(() => dismissToast(t), 2600));
   }
 
-  return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName,
+  return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName, icon, ICON_PATHS,
     cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp };
 })();

@@ -55,10 +55,10 @@ RWG.omni = (function () {
 
   const GROUPS = [
     { id: 'contacts', label: 'People', icon: '👤' },
-    { id: 'households', label: 'Households', icon: '🏠' },
+    { id: 'households', label: 'Households', icon: RWG.ui.icon('household','ic-inline') },
     { id: 'cases', label: 'Opportunities', icon: '📁' },
     { id: 'tasks', label: 'Tasks', icon: '✓' },
-    { id: 'leads', label: 'Leads', icon: '✦' }
+    { id: 'leads', label: 'Leads', icon: RWG.ui.icon('spark','ic-inline') }
   ];
 
   function query(raw, perGroup) {

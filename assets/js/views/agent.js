@@ -69,7 +69,7 @@ RWG.views.agent = (function () {
       const when = t ? (overdue ? '⚠ Overdue · ' : '') + U.fmtDateTime(t) : 'No time set';
       return `<div class="lead-card" data-action="open-lead" data-id="${l.id}" style="cursor:pointer">
         <div class="lc-top"><span class="lc-name">${U.esc(D.fullName(l))}</span>${U.tierChip(l._score)}</div>
-        <div class="lc-meta"><span style="${overdue ? 'color:var(--bad);font-weight:700' : ''}">📞 ${U.esc(when)}</span>${l.phone ? ` · <a href="tel:${U.esc(l.phone)}" onclick="event.stopPropagation()">${U.esc(l.phone)}</a>` : ''}</div></div>`;
+        <div class="lc-meta"><span style="${overdue ? 'color:var(--bad);font-weight:700' : ''}">${U.icon('phone','ic-inline')} ${U.esc(when)}</span>${l.phone ? ` · <a href="tel:${U.esc(l.phone)}" onclick="event.stopPropagation()">${U.esc(l.phone)}</a>` : ''}</div></div>`;
     };
 
     const block = (title, color, items, render, empty) => `
@@ -106,7 +106,7 @@ RWG.views.agent = (function () {
 
     return `
       <div class="grid grid-4 mb-16">
-        ${statCard('Dials this week', w.dials, '📞')}
+        ${statCard('Dials this week', w.dials, U.icon('phone','ic-lg'))}
         ${statCard('Reaches this week', w.reaches, '🎯')}
         ${statCard('Appts set this week', w.apptSet, '📅')}
         ${statCard('Reach rate', (w.dials ? Math.round(w.reaches / w.dials * 100) : 0) + '%', '%')}

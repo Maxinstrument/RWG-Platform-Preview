@@ -268,7 +268,7 @@ window.RWG = window.RWG || {};
         <div class="flex" style="gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
           ${e.sub ? `<span class="cell-sub" style="font-size:11.5px">${esc(e.sub)}</span>` : ''}
           ${e.advisor ? `<span class="pill-soft" style="font-size:11px">${esc(e.advisor.split(' ')[0])}</span>` : ''}
-          ${e.milestone ? `<span class="chip tier-gold" style="font-size:10.5px">✦ ${esc(e.milestone)}</span>` : ''}
+          ${e.milestone ? `<span class="chip tier-gold" style="font-size:10.5px">${U().icon('spark','ic-inline')} ${esc(e.milestone)}</span>` : ''}
           ${e.kind === 'custom' && e.legacy ? `<button class="chip tier-medium" style="font-size:10.5px;cursor:pointer"
               title="This date is filed against the household. Key dates belong to a person now — click to say whose."
               data-action="kd-move" data-hh="${esc(e.hhId)}" data-kd="${esc(e.kdId)}">on the household · assign →</button>` : ''}

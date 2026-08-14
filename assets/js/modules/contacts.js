@@ -147,7 +147,7 @@ window.RWG = window.RWG || {};
     return `<tr class="cs-row" data-action="hh-open" data-id="${esc(h.id)}">
       <td>
         <div class="ct-name">
-          <span class="hh-badge">🏠</span>
+          <span class="hh-badge">${U().icon('household','ic-sm')}</span>
           <span style="min-width:0">
             <span class="cell-name" style="display:block">${esc(h.name)}</span>
             <span class="cell-sub">${esc(h.source || '')}</span>
@@ -213,7 +213,7 @@ window.RWG = window.RWG || {};
            <tbody>${list.map(row).join('')}</tbody></table></div>`;
 
     const empty = isHH
-      ? `<div class="empty" style="padding:48px 16px"><div class="ec">🏠</div>
+      ? `<div class="empty" style="padding:48px 16px"><div class="ec">${U().icon('household','ic-lg')}</div>
            <h3>${total ? 'No households match' : 'The book starts here'}</h3>
            <p>${total ? 'Loosen the search.' : 'Convert a lead whose appointment was kept, or add a contact and start a household with them.'}</p></div>`
       : `<div class="empty" style="padding:48px 16px"><div class="ec">👥</div>
@@ -253,7 +253,7 @@ window.RWG = window.RWG || {};
           ${isHH ? '' : `<select id="ct-rel"><option value="">Any relationship</option>${relOpts}</select>`}
           <select id="ct-tagsel" title="Tags in use"><option value="">Any tag</option>${tagOpts}</select>
           <span class="topbar-spacer"></span>
-          ${isHH ? `<button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>` : ''}
+          ${isHH ? `<button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ${U().icon('spark','ic-inline')}</button>` : ''}
           ${isHH && unattached ? `<button class="btn btn-navy btn-sm" data-action="nav" data-view="grouping"
               title="One-time pass: attach every existing case to a household">⚡ Group existing cases · ${unattached}</button>` : ''}
         </div>

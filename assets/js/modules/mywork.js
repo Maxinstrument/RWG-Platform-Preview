@@ -123,7 +123,7 @@ window.RWG = window.RWG || {};
     const act = { household: 'hh-goto', case: 'cs-open', lead: 'open-lead' }[t.relatedType];
     if (!act) return '';
     return `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
-      data-action="${act}" data-id="${esc(t.relatedId)}">${t.relatedType === 'household' ? '🏠 ' : ''}${esc(t.relatedLabel || t.relatedType)}</button>`;
+      data-action="${act}" data-id="${esc(t.relatedId)}">${t.relatedType === 'household' ? U().icon('household','ic-inline') + ' ' : ''}${esc(t.relatedLabel || t.relatedType)}</button>`;
   }
   function dueLabel(t, today) {
     if (t.status === 'done') return `<span class="cell-sub">${t.doneAt ? U().fmtRelative(t.doneAt) : 'done'}</span>`;
@@ -151,8 +151,8 @@ window.RWG = window.RWG || {};
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
           ${relatedChip(t)}
           ${t.category ? `<button class="tag-chip" data-action="tk-cat-pick" data-cat="${esc(t.category)}">${esc(t.category)}</button>` : ''}
-          ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10.5px" title="Step ${(t.workflowStep || 0) + 1} of the ${esc(t.workflowName)} workflow">⚙ ${esc(t.workflowName)}</span>` : ''}
-          ${t.kind === 'service' ? `<span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">🛠 ${esc(t.serviceType || 'Service')}</span>` : ''}
+          ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10.5px" title="Step ${(t.workflowStep || 0) + 1} of the ${esc(t.workflowName)} workflow">${U().icon('workflow','ic-inline')} ${esc(t.workflowName)}</span>` : ''}
+          ${t.kind === 'service' ? `<span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>` : ''}
           ${t.kind === 'service' && t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.required ? '<span class="chip tier-medium" style="font-size:10.5px" title="A required step — the case cannot be pushed to Won until this is done">required</span>' : ''}
           ${t.repeat && t.repeat !== 'none' ? '<span class="cell-sub" style="font-size:11px" title="Repeats">↻</span>' : ''}
@@ -200,7 +200,7 @@ window.RWG = window.RWG || {};
             <span style="min-width:0"><span style="font-size:13px;color:var(--ink);cursor:pointer;font-weight:600" data-action="open-lead" data-id="${esc(l.id)}">${esc(D().fullName(l))}</span>
             <span class="cell-sub" style="display:block">Appointment ${new Date(l.apptDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span></span></div>`)
           .concat(calls.map(l => `<div class="list-row" style="gap:9px">
-            <span style="flex:none">📞</span>
+            <span style="flex:none">${U().icon('phone','ic-sm')}</span>
             <span style="min-width:0"><span style="font-size:13px;color:var(--ink);cursor:pointer;font-weight:600" data-action="open-lead" data-id="${esc(l.id)}">${esc(D().fullName(l))}</span>
             <span class="cell-sub" style="display:block">Callback ${l.callbackAt < startOfToday.getTime() ? 'overdue' : 'today'}</span></span></div>`))
           .join('');

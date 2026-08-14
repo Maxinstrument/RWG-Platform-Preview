@@ -275,7 +275,7 @@ window.RWG = window.RWG || {};
       <span style="flex:none">${e.icon}</span>
       <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${e.hhId ? 'cursor:pointer' : ''}" ${e.hhId ? `data-action="hh-goto" data-id="${esc(e.hhId)}"` : ''}>${esc(e.title)}</span>
       <span class="cell-sub" style="display:block">${esc(e.sub || '')}${e.advisor ? (e.sub ? ' · ' : '') + esc(firstName(e.advisor)) : ''}</span>
-      ${e.milestone ? `<span class="chip tier-gold" style="font-size:10px;margin-top:2px">✦ ${esc(e.milestone)}</span>` : ''}</span>
+      ${e.milestone ? `<span class="chip tier-gold" style="font-size:10px;margin-top:2px">${U().icon('spark','ic-inline')} ${esc(e.milestone)}</span>` : ''}</span>
       <span class="cell-sub" style="flex:none">${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</span>
     </div>`).join('');
     return card('Important dates', 'next 30 days · whole book', rows,
@@ -330,7 +330,7 @@ window.RWG = window.RWG || {};
     const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
         <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">
         <span style="min-width:0;flex:1;font-size:13px;color:var(--ink)">${esc(t.title)}
-          ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10px;margin-left:4px">⚙ ${esc(t.workflowName)}</span>` : ''}</span>
+          ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10px;margin-left:4px">${U().icon('workflow','ic-inline')} ${esc(t.workflowName)}</span>` : ''}</span>
         <span style="flex:none;font-size:11px;${t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--warn);font-weight:700'}">${t.dueDate < today ? 'late' : 'today'}</span>
       </div>`).join('')
       : emptyRow('Clear. Nothing due today.');
@@ -525,7 +525,7 @@ window.RWG = window.RWG || {};
     const today = T().todayKey();
     const rows = open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 6)
       .map(t => `<div class="list-row mid" style="gap:9px">
-        <span style="flex:none">🛠</span>
+        <span style="flex:none">${U().icon('service','ic-sm')}</span>
         <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${t.relatedId ? 'cursor:pointer' : ''}"
           ${t.relatedId ? `data-action="hh-goto" data-id="${esc(t.relatedId)}"` : ''}>${esc(t.title)}</span>
         <span class="cell-sub" style="display:block;font-size:11px">${esc(t.serviceType || '')} · ${esc(firstName(t.assigneeName))}</span></span>

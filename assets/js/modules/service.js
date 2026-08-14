@@ -88,9 +88,9 @@ window.RWG = window.RWG || {};
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
-          <span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">🛠 ${esc(t.serviceType || 'Service')}</span>
+          <span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>
           ${t.relatedId ? `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
-            data-action="hh-goto" data-id="${esc(t.relatedId)}">🏠 ${esc(t.relatedLabel || '')}</button>` : ''}
+            data-action="hh-goto" data-id="${esc(t.relatedId)}">${U().icon('household','ic-inline')} ${esc(t.relatedLabel || '')}</button>` : ''}
           <span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>
           ${t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}
@@ -130,7 +130,7 @@ window.RWG = window.RWG || {};
         <button class="btn btn-gold btn-sm" data-action="sv-new">＋ Service request</button>
       </div>
       <div class="card flush">
-        ${list.map(row).join('') || `<div class="empty" style="padding:44px 16px"><div class="ec">🛠</div><h3>${empty}</h3>
+        ${list.map(row).join('') || `<div class="empty" style="padding:44px 16px"><div class="ec">${U().icon('service','ic-lg')}</div><h3>${empty}</h3>
           <p>Service requests are tasks with a type — they show on My Work and on the household, same as everything.</p></div>`}
       </div>
       <p class="muted" style="font-size:12px;margin:10px 2px 0">

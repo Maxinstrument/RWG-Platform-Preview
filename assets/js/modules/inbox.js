@@ -280,7 +280,7 @@ window.RWG = window.RWG || {};
             <h3 style="font-size:22px">${esc(c.clientName || '(no name)')}</h3>
             <div class="tag-row" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
               <span class="pill-soft">${esc(SC().productName(c.product))}</span>
-              ${hh ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-goto" data-id="${esc(hh.id)}">🏠 ${esc(hh.name)}</button>` : ''}
+              ${hh ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-goto" data-id="${esc(hh.id)}">${U().icon('household','ic-inline')} ${esc(hh.name)}</button>` : ''}
               <span class="pill-soft">Pushed by ${esc(c.agentName || '—')}${c.pendingCloseAt ? ' · ' + U().fmtRelative(Date.parse(c.pendingCloseAt)) : ''}</span>
               ${already ? '<span class="chip tier-high">Already closed — editing the record</span>' : '<span class="chip tier-medium">Pending verification</span>'}
             </div>

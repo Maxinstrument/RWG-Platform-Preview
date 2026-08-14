@@ -87,7 +87,7 @@ RWG.views.drawer = function (leadId, opts) {
                     <button class="btn btn-ghost btn-sm" data-action="toggle-appt">Reschedule</button>`;
   } else if (l.stage === 'Appointment Kept') {
     stageActions = `<span class="muted" style="font-size:13px;align-self:center">Outcome:</span>
-                    <button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}" title="Creates the household and the client record — the lead's history comes along">Convert to household ✦</button>
+                    <button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}" title="Creates the household and the client record — the lead's history comes along">Convert to household ${U.icon('spark','ic-inline')}</button>
                     <button class="btn btn-navy btn-sm" data-action="graduate" data-id="${l.id}" data-stage="Opportunity Opened">Opportunity Opened only</button>
                     <button class="btn btn-ghost btn-sm" data-action="graduate" data-id="${l.id}" data-stage="No Opportunity">No Opportunity</button>`;
   } else {
@@ -96,7 +96,7 @@ RWG.views.drawer = function (leadId, opts) {
     const spine = l.householdId
       ? `<button class="btn btn-navy btn-sm" data-action="hh-goto" data-id="${l.householdId}">View household →</button>`
       : (l.stage === 'Opportunity Opened'
-          ? `<button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}">Convert to household ✦</button>`
+          ? `<button class="btn btn-gold btn-sm" data-action="hh-convert" data-id="${l.id}">Convert to household ${U.icon('spark','ic-inline')}</button>`
           : '');
     stageActions = `<span class="chip ${l.stage === 'Opportunity Opened' ? 'tier-gold' : 'tier-low'}">Graduated · ${U.esc(l.stage)}</span>
       ${spine}
@@ -107,7 +107,7 @@ RWG.views.drawer = function (leadId, opts) {
     .map(ap => `<div class="cell-sub">• ${U.esc(ap.listName || 'List')} — ${U.fmtRelative(ap.at)}</div>`).join('');
   const callbackBanner = U.isCallback(l) ? `
     <div class="card tight" style="background:rgba(178,58,72,.08);border-color:rgba(178,58,72,.5);margin-bottom:14px">
-      <div style="font-weight:700;color:var(--bad)">📞 Callback requested</div>
+      <div style="font-weight:700;color:var(--bad)">${U.icon('phone','ic-inline')} Callback requested</div>
       <div class="cell-sub" style="margin:4px 0 0">This person asked us to call them to schedule an appointment (June 2026 seminar). Reach out to them first.</div>
     </div>` : '';
   const returningBanner = l.returning ? `
@@ -203,7 +203,7 @@ RWG.views.drawer = function (leadId, opts) {
         </div>
         ${U.noteEditor({ id: 'act-note', placeholder: 'Notes from the call…', minHeight: '84px' })}
         <div class="mt-8" style="display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn btn-ghost btn-sm" data-action="toggle-callback" data-id="${l.id}">📞 Log a Callback</button>
+          <button class="btn btn-ghost btn-sm" data-action="toggle-callback" data-id="${l.id}">${U.icon('phone','ic-inline')} Log a Callback</button>
           <button class="btn btn-navy btn-sm" data-action="save-activity" data-id="${l.id}">＋ Log it</button>
         </div>
       </div>
@@ -228,7 +228,7 @@ RWG.views.drawer = function (leadId, opts) {
 
       <div class="section-title">Pipeline</div>
       ${l.apptDate ? `<p class="muted" style="font-size:13px;margin:-2px 0 12px">📅 Appointment: <b style="color:var(--navy)">${U.fmtDateTime(l.apptDate)}</b></p>` : ''}
-      ${l.callbackAt ? `<p class="muted" style="font-size:13px;margin:-2px 0 12px">📞 Callback: <b style="color:var(--navy)">${U.fmtDateTime(l.callbackAt)}</b></p>` : ''}
+      ${l.callbackAt ? `<p class="muted" style="font-size:13px;margin:-2px 0 12px">${U.icon('phone','ic-inline')} Callback: <b style="color:var(--navy)">${U.fmtDateTime(l.callbackAt)}</b></p>` : ''}
       <div class="flex wrap-gap">${stageActions}</div>
 
       <div class="section-title">Activity timeline</div>

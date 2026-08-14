@@ -246,7 +246,7 @@ window.RWG = window.RWG || {};
         <select id="cv-rel">${H().RELATIONSHIPS.map(r => `<option ${r === 'Spouse' ? 'selected' : ''}>${r}</option>`).join('')}</select></div>` : ''}
       <p class="hint" style="margin-top:8px">Converting also marks the lead <b>Opportunity Opened</b> — the same hand-off as today, plus the client record.</p>`,
       `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-       <button class="btn btn-gold" data-action="hh-convert-save" data-id="${esc(l.id)}">Convert ✦</button>`);
+       <button class="btn btn-gold" data-action="hh-convert-save" data-id="${esc(l.id)}">Convert ${U().icon('spark','ic-inline')}</button>`);
     // Wired directly: the kernel only routes change events to the module that
     // owns the CURRENT VIEW, and this modal can open from a Leads view (the drawer).
     const sel = document.getElementById('cv-existing');
@@ -314,7 +314,7 @@ window.RWG = window.RWG || {};
       </tr>`;
     }).join('') : '';
 
-    const empty = `<div class="empty" style="padding:48px 16px"><div class="ec">🏠</div>
+    const empty = `<div class="empty" style="padding:48px 16px"><div class="ec">${U().icon('household','ic-lg')}</div>
       <h3>${total ? 'No households match' : 'The book starts here'}</h3>
       <p>${total ? 'Adjust the search.' : 'Convert a lead whose appointment was kept, or create a household by hand.'}</p></div>`;
 
@@ -322,7 +322,7 @@ window.RWG = window.RWG || {};
       <div class="card-head"><h3>Households</h3><span class="sub">${rows.length}${total !== rows.length ? ' of ' + total : ''}</span>
         <span class="topbar-spacer"></span>
         ${unattached ? `<button class="btn btn-navy btn-sm" data-action="nav" data-view="grouping" title="One-time pass: attach every existing case to a household">⚡ Group existing cases · ${unattached}</button>` : ''}
-        <button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>
+        <button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ${U().icon('spark','ic-inline')}</button>
         <button class="btn btn-gold btn-sm" data-action="hh-new">＋ New household</button>
       </div>
       <div class="filterbar" style="flex-direction:row;align-items:center">
@@ -428,7 +428,7 @@ window.RWG = window.RWG || {};
             <button class="btn btn-ghost btn-sm" data-action="hh-person-add" data-id="${esc(h.id)}">＋ Person</button>
             <button class="btn btn-ghost btn-sm" data-action="tk-new" data-hh="${esc(h.id)}">＋ Task</button>
             <button class="btn btn-ghost btn-sm" data-action="wf-launch" data-hh="${esc(h.id)}">▶ Workflow</button>
-            <button class="btn btn-ghost btn-sm" data-action="sv-new" data-hh="${esc(h.id)}">🛠 Service</button>
+            <button class="btn btn-ghost btn-sm" data-action="sv-new" data-hh="${esc(h.id)}">${U().icon('service','ic-inline')} Service</button>
             <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(h.id)}">＋ Opportunity</button>
           </div>
         </div>

@@ -1448,3 +1448,28 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
 /* A hover that lands on the same frame as the cursor and releases gently
    is most of what "expensive" means when nobody can name it. */
 .btn:hover,.nav-item:hover,table.data tbody tr:hover,.cs-row:hover td{transition-duration:0ms;}
+
+/* ============================================================
+   Icons
+
+   One base size, two variants. Everything inherits currentColor,
+   so an icon is the same navy as the sentence it sits in — which
+   is the whole point of replacing the colour emoji: those render
+   at somebody else's weight and brightness, and on Windows they
+   sat visibly larger and louder than the 13px text beside them.
+   ============================================================ */
+.ic{width:18px;height:18px;flex:none;}
+.ic-sm{width:15px;height:15px;}
+.ic-lg{width:26px;height:26px;}
+/* Riding inside a line of text: optically centred on the x-height,
+   not the baseline, which is why this needs a nudge rather than
+   vertical-align:middle. */
+.ic-inline{
+  width:13px;height:13px;flex:none;
+  vertical-align:-2px;margin-right:1px;
+}
+/* A chip is small and its icon should not crowd the word beside it. */
+.chip .ic-inline,.pill-soft .ic-inline{width:12px;height:12px;vertical-align:-1.5px;}
+.topbar-search svg{width:17px;height:17px;}
+/* The empty-state medallion holds one large glyph, centred. */
+.empty .ec .ic-lg{width:26px;height:26px;}

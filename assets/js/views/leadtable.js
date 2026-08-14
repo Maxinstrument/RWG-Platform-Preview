@@ -192,7 +192,7 @@ RWG.leadtable = (function () {
         <div class="lrc-cell"><span class="k">Plan</span><span class="v">${U.esc(RWG.scoring.normPlan(l.planType))}</span></div>
       </div>
       <div class="lrc-foot">
-        <a href="tel:${U.esc(l.phone)}" class="lrc-phone" onclick="event.stopPropagation()">${l.phone ? '📞 ' + U.esc(l.phone) : '—'}</a>
+        <a href="tel:${U.esc(l.phone)}" class="lrc-phone" onclick="event.stopPropagation()">${l.phone ? U.icon('phone','ic-inline') + ' ' + U.esc(l.phone) : '—'}</a>
         <span class="cell-sub">${l.attempts || 0} attempt${l.attempts === 1 ? '' : 's'}${l.disposition ? ' · ' + U.esc(l.disposition) : ''}</span>
       </div>
     </div>`;

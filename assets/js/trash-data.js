@@ -29,14 +29,14 @@ RWG.trash = (function () {
   // What each collection is called in front of a human, and where its
   // rows live in the caches so a restore can repaint immediately.
   const KINDS = {
-    households: { kind: 'Household', icon: '🏠' },
+    households: { kind: 'Household', icon: RWG.ui.icon('household','ic-inline') },
     contacts:   { kind: 'Person',    icon: '👤' },
     cases:      { kind: 'Opportunity', icon: '📁' },
     tasks:      { kind: 'Task',      icon: '✓'  },
     notes:      { kind: 'Note',      icon: '💬' },
     // Leads keep their original deleted_leads archive; the Trash screen
     // adapts those rows into this shape so there is one bin, not two.
-    leads:      { kind: 'Lead',      icon: '✦'  }
+    leads:      { kind: 'Lead',      icon: RWG.ui.icon('spark','ic-inline')  }
   };
   const kindOf = (coll) => (KINDS[coll] || { kind: coll, icon: '•' });
 

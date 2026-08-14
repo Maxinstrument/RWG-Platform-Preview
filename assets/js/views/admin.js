@@ -74,7 +74,7 @@ RWG.views.admin = (function () {
       <p class="muted" style="margin:-6px 0 18px;font-size:14px">Welcome back, <b style="color:var(--navy)">${U.esc(user.name.split(' ')[0])}</b>. Here's where the team stands this week.</p>
       ${pendingBanner}
       <div class="grid grid-4 mb-16">
-        ${statCard('Dials this week', w.dials, '📞')}
+        ${statCard('Dials this week', w.dials, U.icon('phone','ic-lg'))}
         ${statCard('Reaches', w.reaches, '🎯')}
         ${statCard('Appts set', w.apptSet, '📅')}
         ${statCard('Appts kept', apptKept, '🤝')}
@@ -345,7 +345,7 @@ RWG.views.admin = (function () {
         ${statCard('Appointments set', (t.apptSet || 0), '📅')}
         ${statCard('Appointments kept', (t.apptKept || 0), '🤝')}
         ${statCard('Reaches', (t.reaches || 0), '🎯')}
-        ${statCard('Dials', (t.dials || 0), '📞')}
+        ${statCard('Dials', (t.dials || 0), U.icon('phone','ic-lg'))}
       </div>
       <div class="table-wrap"><table class="data">${head}<tbody>${rows || empty}${teamRow}</tbody></table></div>
       ${apptTierTable(rep, status)}`;
