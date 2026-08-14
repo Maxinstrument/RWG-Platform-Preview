@@ -18,6 +18,21 @@
    ============================================================ */
 window.RWG = window.RWG || {};
 
+// The two pages of the Leads area, drawn by both of them so the strip sits
+// in the same place whichever one you are on. Same shape as the Pipeline's
+// tracks + "☰ All cases", and published like RWG.reportTabs so there is one
+// copy of it rather than one per screen.
+RWG.leadTabs = function (active) {
+  const tab = (view, label, title) =>
+    `<button class="btn btn-sm ${view === active ? 'btn-navy' : 'btn-ghost'}"
+       data-action="nav" data-view="${view}" title="${title}">${label}</button>`;
+  return `<div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+    ${tab('dashboard', 'Command Center', 'Where the team stands this week')}
+    <span class="pl-divider"></span>
+    ${tab('leads', '☰ All leads', 'Every lead across the team, filterable and exportable')}
+  </div>`;
+};
+
 RWG.modules.register({
   id: 'leads',
   title: 'Leads',
@@ -26,8 +41,10 @@ RWG.modules.register({
 
   nav: {
     admin: [
-      { view: 'dashboard', label: 'Command Center', icon: 'dashboard' },
-      { view: 'leads',     label: 'All Leads',      icon: 'leads' },
+      // One area, two pages. Leads opens on the Command Center — where the
+      // team stands this week — with the whole table one click away, the
+      // same shape as Pipeline ↔ All cases.
+      { view: 'dashboard', label: 'Leads', icon: 'leads', also: ['leads'] },
       // 'reports' (Lead Reports) is now the Leads tab inside the Reports
       // hub, and 'archive' (Deleted Leads) folded into the Trash — both
       // views stay registered so old deep-links still render.
@@ -46,10 +63,11 @@ RWG.modules.register({
     ]
   },
 
-  // Views the module owns that no longer have a sidebar entry: 'reports' is
-  // the Leads tab inside the Reports hub, 'archive' folded into the Trash,
-  // 'settings' moved to CRM Settings. All still render if you land on them.
-  views: ['reports', 'archive', 'settings'],
+  // Views the module owns that no longer have a sidebar entry: 'leads' is the
+  // second page of the Leads area, 'reports' is the Leads tab inside the
+  // Reports hub, 'archive' folded into the Trash, 'settings' moved to CRM
+  // Settings. All still render if you land on them.
+  views: ['leads', 'reports', 'archive', 'settings'],
 
   meta: {
     dashboard: { t: 'Command Center', s: 'Team performance, live' },
@@ -86,6 +104,7 @@ RWG.modules.register({
       : RWG.views.agent.render(view, user, ctx);
     // The lead report is a tab of the Reports hub, so it wears the strip.
     if (view === 'reports' && RWG.reportTabs) return RWG.reportTabs('reports', ctx) + body;
+    if (ctx.role === 'admin' && (view === 'dashboard' || view === 'leads')) return RWG.leadTabs(view) + body;
     return body;
   }
 });
