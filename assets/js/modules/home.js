@@ -33,7 +33,9 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const dayMs = 86400000;
 
-  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '' };
+  // funnelView: 'now'   — each opportunity counted once, where it actually is
+  //             'reach' — the classic conversion funnel, cumulative
+  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '', funnelView: 'now' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -239,53 +241,106 @@ window.RWG = window.RWG || {};
     // it is why one case appears on several bars.
     // here[i]:    is sitting there NOW. A case rests in exactly one stage, so
     //             these add up to the live pipeline and never double-count.
+    const live = (r) => r.c.state !== 'Lost';
     const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);
-    const here = cols.map((s, i) => reach.filter(r => r.i === i && r.c.state !== 'Lost').length);
+    const here = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).length);
     const money = cols.map((s, i) => reach.filter(r => r.i >= i).reduce((n, r) => n + headlineMoney(r.c), 0));
-    return { pl, cols, pool, reach, reached, here, money };
+    const hereMoney = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).reduce((n, r) => n + headlineMoney(r.c), 0));
+    const lost = reach.filter(r => !live(r)).map(r => r.c);
+    // here[] + lost is the whole pool, with nothing counted twice.
+    return { pl, cols, pool, reach, reached, here, money, hereMoney, lost };
   }
 
+  /* Two honest readings of the same pipeline, and they answer different
+     questions:
+
+       Where they are  every opportunity counted ONCE, in the stage it is
+                       actually in. Tania closed, so she is on Close / Won
+                       and nowhere else. The bars add up to what you opened.
+       How far they got the classic conversion funnel: each bar is "reached
+                       at least here", so a closed case counts on every bar
+                       it passed. That repetition is the only way to see
+                       where business falls out — but read as a snapshot it
+                       looks like one case in seven places at once.
+
+     "Where they are" leads, because that is what the card is read as. */
   function wFunnel(ctx) {
     const m = funnelModel();
-    const cols = m.cols, counts = m.reached;
-    if (!m.pool.length) return card('Conversion funnel', esc(m.pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
+    const cols = m.cols;
+    const nowView = st.funnelView !== 'reach';
+    if (!m.pool.length) return card('Opportunity funnel', esc(m.pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
+
+    const counts = nowView ? m.here : m.reached;
+    const money = nowView ? m.hereMoney : m.money;
+    // Cumulative bars scale against the top of the funnel; a snapshot has no
+    // such anchor, so it scales against its own busiest stage.
+    const base = nowView ? Math.max.apply(null, counts.concat([1])) : (m.reached[0] || 1);
+
     let biggest = -1, biggestDrop = 0;
     for (let i = 1; i < cols.length; i++) {
-      const d = counts[i - 1] - counts[i];
+      const d = m.reached[i - 1] - m.reached[i];
       if (d > biggestDrop) { biggestDrop = d; biggest = i; }
     }
+
     const rows = cols.map((s, i) => {
-      const w = counts[0] ? Math.max(Math.round(100 * counts[i] / counts[0]), counts[i] ? 7 : 0) : 0;
+      const w = Math.max(Math.round(100 * counts[i] / base), counts[i] ? 7 : 0);
       const color = BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened;
-      const drop = i > 0 ? counts[i - 1] - counts[i] : 0;
-      // "did not reach", not "dropped": some of these are lost, and some are
-      // simply still earlier in the pipeline. The drill-down says which.
+      // The leak markers belong to the cumulative reading — in a snapshot
+      // "−2 did not reach here" has nothing to subtract from.
+      const drop = (!nowView && i > 0) ? m.reached[i - 1] - m.reached[i] : 0;
       return (drop > 0 ? `<div class="flex fn-drop" style="gap:10px;align-items:center;margin:1px 0 3px;cursor:pointer"
           data-action="hm-drill" data-kind="fn-miss" data-i="${i}"
           title="See the ${drop} that have not reached ${esc(s.label)}">
           <span class="fn-lab" style="color:var(--bad);font-weight:700;font-size:10px">−${drop}</span>
           <span style="flex:1;text-align:center;font-size:10px;color:var(--bad)">did not reach ${esc(s.label)}${i === biggest ? ' · biggest leak' : ''}</span>
           <span style="width:64px;flex:none"></span></div>` : '') +
-        `<div class="flex fn-row" style="gap:10px;align-items:center;margin-bottom:3px;cursor:pointer"
-          data-action="hm-drill" data-kind="fn-reach" data-i="${i}"
-          title="See the ${counts[i]} that reached ${esc(s.label)}">
+        `<div class="flex fn-row" style="gap:10px;align-items:center;margin-bottom:3px;${counts[i] ? 'cursor:pointer' : ''}"
+          ${counts[i] ? `data-action="hm-drill" data-kind="${nowView ? 'fn-here' : 'fn-reach'}" data-i="${i}"` : ''}
+          title="${counts[i] ? `See the ${counts[i]} ${nowView ? 'sitting in' : 'that reached'} ${esc(s.label)}` : 'Nothing here'}">
           <span class="fn-lab">${esc(s.label)}</span>
           <span style="flex:1;display:flex;justify-content:center;min-width:0">
-            <span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${counts[i]}</span></span>
-          <span style="width:64px;flex:none;text-align:right;line-height:1.25">
-            <span style="font-size:10.5px;color:var(--muted);display:block">${m.money[i] ? U().moneyK(m.money[i]) : ''}</span>
-            ${m.here[i] ? `<span class="fn-here" data-action="hm-drill" data-kind="fn-here" data-i="${i}"
-              title="Sitting in ${esc(s.label)} right now">${m.here[i]} here now</span>` : ''}
-          </span>
+            ${counts[i]
+              ? `<span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${counts[i]}</span>`
+              : '<span class="cell-sub" style="font-size:10px">—</span>'}</span>
+          <span style="width:64px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${money[i] ? U().moneyK(money[i]) : ''}</span>
         </div>`;
     }).join('');
-    const wonPct = counts[0] ? Math.round(100 * counts[counts.length - 1] / counts[0]) : 0;
-    return card('Conversion funnel', counts[0] + ' opened ' + esc(sinceLabel()),
-      `<div style="padding:12px var(--pad-panel) 4px">${rows}</div>` +
-      hint('Each bar is how many got <b>at least</b> this far, so one case counts on every bar it passed — '
-        + 'that is what makes the leaks visible. <b>here now</b> is where it is actually sitting today. '
-        + 'Click any number to see the cases behind it. '
-        + wonPct + '% of what opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(m.pl.name) + ' reached a confirmed close.'));
+
+    // Lost cases are nowhere on the board, so a snapshot has to say so out
+    // loud or the bars quietly fail to add up to what you opened.
+    const lostRow = (nowView && m.lost.length) ? `<div class="flex fn-drop"
+        style="gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);cursor:pointer"
+        data-action="hm-drill" data-kind="fn-lost"
+        title="See the ${m.lost.length} lost">
+        <span class="fn-lab" style="color:var(--bad);font-weight:700">Lost</span>
+        <span style="flex:1;display:flex;justify-content:center">
+          <span style="height:19px;padding:0 10px;background:var(--bad);display:flex;align-items:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${m.lost.length}</span></span>
+        <span style="width:64px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${
+          m.lost.reduce((n, c) => n + headlineMoney(c), 0) ? U().moneyK(m.lost.reduce((n, c) => n + headlineMoney(c), 0)) : ''}</span>
+      </div>` : '';
+
+    const vbtn = (id, label, title) =>
+      `<button class="btn btn-sm ${(st.funnelView === id || (id === 'now' && nowView)) ? 'btn-navy' : 'btn-ghost'}"
+        data-action="hm-funnel-view" data-v="${id}" title="${esc(title)}">${label}</button>`;
+    const toggle = `<div class="flex" style="gap:5px">
+      ${vbtn('now', 'Where they are', 'Every opportunity counted once, in the stage it is actually in')}
+      ${vbtn('reach', 'How far they got', 'The conversion funnel: each bar is everything that reached at least that stage')}
+    </div>`;
+
+    const wonPct = m.reached[0] ? Math.round(100 * m.reached[m.reached.length - 1] / m.reached[0]) : 0;
+    const live = m.here.reduce((n, x) => n + x, 0);
+    return card('Opportunity funnel', m.reached[0] + ' opened ' + esc(sinceLabel()),
+      `<div style="padding:12px var(--pad-panel) 4px">${rows}${lostRow}</div>` +
+      hint(nowView
+        ? 'Every opportunity appears <b>once</b>, in the stage it is in today — these ' + live
+          + ' plus ' + m.lost.length + ' lost is everything opened ' + PERIOD_LABEL[st.period] + '. '
+          + 'Click a bar for the cases behind it. ' + wonPct + '% reached a confirmed close; '
+          + '<b>How far they got</b> shows where the rest fell out.'
+        : 'Each bar is how many got <b>at least</b> this far, so one case counts on every bar it passed — '
+          + 'that repetition is what makes the leaks visible, and it is why a closed case shows on every stage. '
+          + 'Click any number for the cases behind it. '
+          + wonPct + '% of what opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(m.pl.name) + ' reached a confirmed close.'),
+      toggle);
   }
 
   // 3 · Needs help moving — the Monday list.
@@ -639,7 +694,7 @@ window.RWG = window.RWG || {};
 
   const WIDGETS = [
     { id: 'pace',        title: 'Weekly pace',          render: wPace, full: true },
-    { id: 'funnel',      title: 'Conversion funnel',    render: wFunnel },
+    { id: 'funnel',      title: 'Opportunity funnel',   render: wFunnel },
     { id: 'stale',       title: 'Needs help moving',    render: wStale },
     { id: 'occupancy',   title: 'Where cases sit',      render: wOccupancy },
     { id: 'dates',       title: 'Important dates',      render: wDates },
@@ -830,6 +885,7 @@ window.RWG = window.RWG || {};
     actions: {
       'home-open': (el) => RWG.app.nav(el.dataset.view),
       'hm-customize': () => { st.customize = !st.customize; RWG.app.renderMain(); },
+      'hm-funnel-view': (el) => { st.funnelView = el.dataset.v === 'reach' ? 'reach' : 'now'; RWG.app.renderMain(); },
 
       /* Open the cases behind a number. Each branch re-reads the same model
          the chart drew from, so the panel and the bar can never disagree —
@@ -853,7 +909,7 @@ window.RWG = window.RWG || {};
 
         const m = funnelModel();
         const s = m.cols[i];
-        if (!s) return;
+        if (!s && kind !== 'fn-lost') return;
         if (kind === 'fn-reach') {
           openDrill('Reached ' + s.label, m.reached[i] + ' of ' + m.reached[0] + ' opened ' + sinceLabel(),
             m.reach.filter(r => r.i >= i).map(r => r.c),
@@ -864,6 +920,11 @@ window.RWG = window.RWG || {};
           openDrill('Sitting in ' + s.label, 'right now',
             m.reach.filter(r => r.i === i && r.c.state !== 'Lost').map(r => r.c),
             'Where these cases actually are today. A case rests in one stage only, so these never double-count.');
+          return;
+        }
+        if (kind === 'fn-lost') {
+          openDrill('Lost', 'opened ' + sinceLabel(), m.lost,
+            'These left the board. Each row carries the reason it was marked lost.');
           return;
         }
         if (kind === 'fn-miss') {
