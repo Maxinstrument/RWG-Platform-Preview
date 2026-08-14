@@ -526,8 +526,8 @@ window.RWG = window.RWG || {};
     const rows = open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).slice(0, 6)
       .map(t => `<div class="list-row mid" style="gap:9px">
         <span style="flex:none">${U().icon('service','ic-sm')}</span>
-        <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${t.relatedId ? 'cursor:pointer' : ''}"
-          ${t.relatedId ? `data-action="hh-goto" data-id="${esc(t.relatedId)}"` : ''}>${esc(t.title)}</span>
+        <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${t.relatedId && U().relAction(t.relatedType) ? 'cursor:pointer' : ''}"
+          ${t.relatedId && U().relAction(t.relatedType) ? `data-action="${U().relAction(t.relatedType)}" data-id="${esc(t.relatedId)}"` : ''}>${esc(t.title)}</span>
         <span class="cell-sub" style="display:block;font-size:11px">${esc(t.serviceType || '')} · ${esc(firstName(t.assigneeName))}</span></span>
         <span style="flex:none;font-size:11.5px;${t.dueDate && t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--muted)'}">${t.dueDate && t.dueDate < today ? 'late' : esc(t.dueDate || '')}</span>
       </div>`).join('');

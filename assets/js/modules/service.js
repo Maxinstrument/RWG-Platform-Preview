@@ -89,8 +89,8 @@ window.RWG = window.RWG || {};
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
           <span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>
-          ${t.relatedId ? `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
-            data-action="hh-goto" data-id="${esc(t.relatedId)}">${U().icon('household','ic-inline')} ${esc(t.relatedLabel || '')}</button>` : ''}
+          ${t.relatedId && U().relAction(t.relatedType) ? `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
+            data-action="${U().relAction(t.relatedType)}" data-id="${esc(t.relatedId)}">${U().relIcon(t.relatedType, 'ic-inline')} ${esc(t.relatedLabel || '')}</button>` : ''}
           <span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>
           ${t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${U().noteHtml(t.note)}</span>` : ''}

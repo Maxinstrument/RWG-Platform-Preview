@@ -33,14 +33,17 @@ RWG.scorecardData = (function () {
     'state', 'amount', 'aum', 'coCreditUids', 'coCreditNames',
     'openedWeek', 'submittedAt', 'closedAt', 'createdAt', 'createdBy', 'updatedAt',
     // the spine + granular pipeline (phase 2)
-    'householdId', 'stageId', 'lostReason', 'pendingClose',
+    // contactId is who the opportunity is FOR — a person, not a family.
+    // householdId rides along for the family screens, but the contact is
+    // what tasks, notes and the activity feed hang off.
+    'contactId', 'householdId', 'stageId', 'lostReason', 'pendingClose',
     // money detail + the close (phase 2, slice 2)
     'rate', 'premiumAnnual', 'benefit', 'renewalAnnual', 'applied',
     'pendingCloseAt', 'closeNote', 'a360Recorded', 'lostBy', 'lostAt'];
 
   // Passed through buildCase untouched (null when absent), so no edit
   // modal anywhere can silently strip them.
-  const PASSTHROUGH = ['householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
+  const PASSTHROUGH = ['contactId', 'householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
     'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
     'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage',
     'title', 'sourceNote', 'details'];   // the opportunity window (phase 5.6)

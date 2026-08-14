@@ -222,9 +222,11 @@ RWG.wf = (function () {
         assigneeUid: who.uid, assigneeName: who.name,
         dueDate: dueKey(start, s.dueDays),
         relatedType: rel.type, relatedId: rel.id, relatedLabel: rel.label,
-        // A step is ABOUT the case and FOR the family. Carrying the household
-        // too is what lets an underwriting task show up on the client's screen
-        // instead of only in whoever-was-assigned's list.
+        // A step is ABOUT the case and FOR the person. Carrying the contact
+        // is what puts an underwriting step on that client's record — open
+        // or done — instead of leaving it in whoever-was-assigned's list.
+        // The household rides along for the family screens.
+        contactId: opts.contactId || (c && c.contactId) || null,
         householdId: hhId || null,
         clientName: (c && c.clientName) || '',
         required: !!s.required, gate: s.gate || null,

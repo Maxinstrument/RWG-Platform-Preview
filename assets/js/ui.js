@@ -140,6 +140,15 @@ RWG.ui = (function () {
       + ' aria-hidden="true" focusable="false">' + p + '</svg>';
   }
 
+  /* Where a record pointer goes when you click it. A task, note or request
+     can point at a contact, an opportunity, a household or a lead, and any
+     of them can be re-pointed after the fact — so every screen that renders
+     a pointer reads the destination from here rather than assuming. */
+  const REL_ACTION = { contact: 'ct-open', case: 'cs-open', household: 'hh-goto', lead: 'open-lead' };
+  const REL_ICON = { contact: 'person', case: 'cases', household: 'household' };
+  const relAction = (type) => REL_ACTION[type] || '';
+  const relIcon = (type, cls) => (REL_ICON[type] ? icon(REL_ICON[type], cls) : '');
+
   /* ── Notes: one editor, everywhere ─────────────────────────
      Every place in the CRM where you write something about a
      person, a family or a case is the same control: a small
@@ -274,5 +283,5 @@ RWG.ui = (function () {
   }
 
   return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName, icon, ICON_PATHS,
-    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp };
+    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, relAction, relIcon };
 })();

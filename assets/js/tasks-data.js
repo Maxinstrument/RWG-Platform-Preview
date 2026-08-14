@@ -159,11 +159,15 @@ RWG.tasks = (function () {
       id: ref.id, title: '', note: '',
       assigneeUid: (me && me.id) || null, assigneeName: (me && me.name) || '',
       dueDate: todayKey(), status: 'open', doneAt: null, doneBy: null,
-      // relatedType/Id is what the task is ABOUT — usually the case.
-      // householdId is who it is FOR, carried alongside so a task about a
-      // policy still surfaces on the family's screen. A task pointed at a
-      // household has both, and they agree.
-      relatedType: null, relatedId: null, relatedLabel: '', householdId: null,
+      // relatedType/Id is what the task is ABOUT — a contact, an opportunity,
+      // a household or a lead. contactId is who it is FOR: the person. It is
+      // carried alongside so a task about a policy still surfaces on that
+      // person's record, and stays there once the task is closed — which is
+      // what makes the contact's history complete. householdId rides along
+      // the same way for the family screens. A task pointed at a contact has
+      // both pointers and they agree.
+      relatedType: null, relatedId: null, relatedLabel: '',
+      contactId: null, householdId: null,
       required: false, workflowId: null,
       category: '', priority: 'none', repeat: 'none',
       createdAt: now(), createdBy: (me && me.id) || null,
@@ -199,7 +203,8 @@ RWG.tasks = (function () {
       if (due) {
         const carry = {};
         ['title', 'note', 'assigneeUid', 'assigneeName', 'relatedType', 'relatedId',
-          'relatedLabel', 'category', 'priority', 'repeat', 'kind', 'serviceType'].forEach(k => {
+          'relatedLabel', 'contactId', 'householdId',
+          'category', 'priority', 'repeat', 'kind', 'serviceType'].forEach(k => {
             if (t[k] !== undefined) carry[k] = t[k];
           });
         carry.dueDate = due;

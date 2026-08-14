@@ -1480,6 +1480,12 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
 .rec-shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--panel-gap);align-items:start;}
 .rec-rail{display:flex;flex-direction:column;gap:var(--panel-gap);min-width:0;}
 .rec-shell .list-row .end{white-space:nowrap;}
+/* A sub-heading inside a rail card — "Tasks", "Special dates". Quieter than
+   a card title, so the card still reads as one thing rather than three. */
+.rec-sub{padding:9px var(--pad-cell) 5px;font-size:var(--fs-micro);font-weight:700;
+  letter-spacing:var(--track-caps);text-transform:uppercase;color:var(--ink-ghost);
+  border-top:1px solid var(--line);background:rgba(14,36,64,.015);}
+.rec-sub .btn-link{font-size:var(--fs-micro);letter-spacing:0;text-transform:none;}
 @media (max-width:1080px){
   .rec-shell{grid-template-columns:minmax(0,1fr);}
   .rec-rail{flex-direction:row;flex-wrap:wrap;}

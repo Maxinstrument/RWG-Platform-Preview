@@ -51,6 +51,71 @@ window.RWG = window.RWG || {};
   const mount = () => document.getElementById('modal-mount');
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
+  /* ── "Related to": one control, three kinds of record ──────
+     A task is about a person, an opportunity, or (rarely) a whole family.
+     Three dependent dropdowns would be three chances to leave it half-set,
+     so this is one select whose value carries the type: "contact:c1".
+     The pointer survives the task being closed, which is what lets a
+     contact's history show work that finished months ago. */
+  const relKey = (type, id) => (type && id) ? type + ':' + id : '';
+  function relParse(val) {
+    const i = String(val || '').indexOf(':');
+    if (i < 0) return { type: null, id: null };
+    return { type: String(val).slice(0, i), id: String(val).slice(i + 1) };
+  }
+  // What a pointer means for the two carry-along ids. The contact is the
+  // one that matters; the household is derived, never asked for.
+  function relResolve(type, id) {
+    const out = { type: null, id: null, label: '', contactId: null, householdId: null };
+    if (!type || !id) return out;
+    if (type === 'contact') {
+      const c = H().isStarted() ? H().contact(id) : null;
+      if (!c) return out;
+      return { type: 'contact', id: c.id, label: H().contactName(c),
+        contactId: c.id, householdId: c.householdId || null };
+    }
+    if (type === 'case') {
+      const x = SD() && SD().isStarted() ? SD().caseById(id) : null;
+      if (!x) return out;
+      return { type: 'case', id: x.recordId, label: caseLabel(x),
+        contactId: x.contactId || null, householdId: x.householdId || null };
+    }
+    if (type === 'household') {
+      const h = H().isStarted() ? H().household(id) : null;
+      if (!h) return out;
+      return { type: 'household', id: h.id, label: h.name, contactId: null, householdId: h.id };
+    }
+    return out;
+  }
+  const caseLabel = (x) =>
+    x.title || [x.clientName, SC() ? SC().productName(x.product) : ''].filter(Boolean).join(' · ') || 'Opportunity';
+
+  function relOptions(sel) {
+    const opt = (val, label, disabled) =>
+      `<option value="${esc(val)}" ${val === sel ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${esc(label)}</option>`;
+    let out = opt('', '— nothing yet —');
+    if (H().isStarted()) {
+      const people = H().contacts().slice()
+        .sort((a, b) => H().contactName(a).localeCompare(H().contactName(b)));
+      if (people.length) out += `<optgroup label="Contacts">`
+        + people.map(c => opt(relKey('contact', c.id), H().contactName(c) || '(no name)')).join('') + '</optgroup>';
+    }
+    if (SD() && SD().isStarted()) {
+      const cases = SD().cases().slice()
+        .filter(x => !x.deletedAt)
+        .sort((a, b) => String(b.openedWeek || '').localeCompare(String(a.openedWeek || '')));
+      if (cases.length) out += `<optgroup label="Opportunities">`
+        + cases.map(x => opt(relKey('case', x.recordId),
+            caseLabel(x) + (x.closedAt ? ' · closed' : ''))).join('') + '</optgroup>';
+    }
+    if (H().isStarted()) {
+      const hhs = H().households().slice().sort((a, b) => a.name.localeCompare(b.name));
+      if (hhs.length) out += `<optgroup label="Households">`
+        + hhs.map(h => opt(relKey('household', h.id), h.name)).join('') + '</optgroup>';
+    }
+    return out;
+  }
+
   function taskModal(t, preset) {
     preset = preset || {};
     const v = (k, dflt) => t && t[k] != null ? t[k] : (preset[k] != null ? preset[k] : dflt);
@@ -59,11 +124,8 @@ window.RWG = window.RWG || {};
     const list = users.length ? users : [me];
     const selUid = v('assigneeUid', me.id);
     const assigneeOpts = list.map(u => `<option value="${esc(u.id)}" ${u.id === selUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
-    const hhSel = v('relatedType', null) === 'household' ? v('relatedId', '') : '';
-    const hhOpts = H().isStarted()
-      ? H().households().slice().sort((a, b) => a.name.localeCompare(b.name))
-          .map(h => `<option value="${esc(h.id)}" ${h.id === hhSel ? 'selected' : ''}>${esc(h.name)}</option>`).join('')
-      : '';
+    const relSel = relKey(v('relatedType', null), v('relatedId', null));
+    const relOpts = relOptions(relSel);
     const selCat = v('category', '');
     const catOpts = ['<option value="">— none —</option>'].concat(
       T().categories().map(c => `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
@@ -97,8 +159,11 @@ window.RWG = window.RWG || {};
           <div class="field-group"><label class="lbl">Repeats</label>
             <select id="tk-rep">${repOpts}</select>
             <div class="hint">A repeating task opens its next copy when you tick this one off.</div></div>
-          ${hhOpts ? `<div class="field-group"><label class="lbl">Household <span class="pill-soft" style="font-size:10.5px">optional</span></label>
-            <select id="tk-hh"><option value="">— none —</option>${hhOpts}</select></div>` : ''}
+          <div class="field-group"><label class="lbl">Related to</label>
+            <select id="tk-rel">${relOpts}</select>
+            <input type="hidden" id="tk-relcontact" value="${esc(v('contactId', '') || '')}">
+            <div class="hint">Who or what this is for — a contact, an opportunity, or a household.
+              It stays attached after the task is done, so it shows in that record's history.</div></div>
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
             ${U().noteEditor({ id: 'tk-note', value: v('note', ''), minHeight: '84px',
               placeholder: 'Anything worth remembering about this task…' })}</div>
@@ -126,20 +191,27 @@ window.RWG = window.RWG || {};
     `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
       data-action="${act}" data-id="${esc(id)}" title="${esc(label)}">${icon ? icon + ' ' : ''}${esc(label)}</button>`;
 
+  // The person first — that is the name you recognise at 8am — then the
+  // thing itself. A workflow step on the Vargas whole life reads
+  // "Maria Vargas · Vargas — whole life", and both chips are live.
   function relatedChip(t) {
     const out = [];
-    const hh = t.householdId && RWG.hh && RWG.hh.isStarted() ? RWG.hh.household(t.householdId) : null;
-    // The family first — that is the name you recognise.
-    if (hh && !(t.relatedType === 'household' && t.relatedId === t.householdId)) {
-      out.push(chipBtn('hh-goto', hh.id, hh.name, U().icon('household', 'ic-inline')));
+    const started = RWG.hh && RWG.hh.isStarted();
+    const c = t.contactId && started ? RWG.hh.contact(t.contactId) : null;
+    if (c && !(t.relatedType === 'contact' && t.relatedId === c.id)) {
+      out.push(chipBtn('ct-open', c.id, RWG.hh.contactName(c), U().icon('person', 'ic-inline')));
     }
     if (t.relatedId) {
-      const act = { household: 'hh-goto', case: 'cs-open', lead: 'open-lead' }[t.relatedType];
-      if (act) {
-        const isHh = t.relatedType === 'household';
-        out.push(chipBtn(act, t.relatedId, t.relatedLabel || t.relatedType,
-          isHh ? U().icon('household', 'ic-inline') : (t.relatedType === 'case' ? U().icon('cases', 'ic-inline') : '')));
-      }
+      const act = U().relAction(t.relatedType);
+      if (act) out.push(chipBtn(act, t.relatedId, t.relatedLabel || t.relatedType,
+        U().relIcon(t.relatedType, 'ic-inline')));
+    }
+    // The family only when nothing more specific is on the task — a task
+    // filed against the household itself, or old data from before contacts
+    // carried their own pointer.
+    if (!out.length && t.householdId && started) {
+      const hh = RWG.hh.household(t.householdId);
+      if (hh) out.push(chipBtn('hh-goto', hh.id, hh.name, U().icon('household', 'ic-inline')));
     }
     return out.join('');
   }
@@ -398,12 +470,21 @@ window.RWG = window.RWG || {};
       'tk-who': (el) => { st.who = el.dataset.who; RWG.app.renderMain(); },
       'tk-cat-pick': (el) => { st.cat = el.dataset.cat || ''; RWG.app.renderMain(); },
       'tk-reset': () => { st.who = 'me'; st.when = 'upcoming'; st.kind = 'all'; st.cat = ''; RWG.app.renderMain(); },
+      // A task started from a record is already about that record. The most
+      // specific pointer wins: the opportunity you were looking at, then the
+      // person, then the family — never the family when a person was named.
       'tk-new': (el) => {
-        // From a household header the button carries the relation along.
+        const d = (el && el.dataset) || {};
+        const r = d.case ? relResolve('case', d.case)
+          : d.contact ? relResolve('contact', d.contact)
+          : d.hh ? relResolve('household', d.hh) : null;
         const preset = {};
-        if (el.dataset.hh) {
-          const h = H().household(el.dataset.hh);
-          if (h) { preset.relatedType = 'household'; preset.relatedId = h.id; preset.relatedLabel = h.name; }
+        if (r && r.type) {
+          preset.relatedType = r.type; preset.relatedId = r.id; preset.relatedLabel = r.label;
+          // An opportunity started from a person keeps that person, even when
+          // the case itself has not been linked to one yet.
+          preset.contactId = r.contactId || d.contact || null;
+          preset.householdId = r.householdId || null;
         }
         taskModal(null, preset);
       },
@@ -413,23 +494,29 @@ window.RWG = window.RWG || {};
         if (!title) { U().toast('What needs doing?'); return; }
         const uid = g('tk-assignee');
         const u = D().user(uid) || RWG.auth.currentUser();
-        const hhId = g('tk-hh');
-        const hh = hhId ? H().household(hhId) : null;
-        // A task pointing at a case or lead (workflow steps do) keeps its
-        // pointer through an edit — the household select can't express it,
-        // so blank there must not mean "detach". Picking a household re-points.
+        // The select says what this is about; everything else is derived.
+        // A lead pointer has no entry in the list (leads are worked in their
+        // own screen), so an untouched select must not silently detach one.
         const t0 = el.dataset.id ? T().task(el.dataset.id) : null;
-        const keepRel = t0 && t0.relatedType && t0.relatedType !== 'household' && !hh;
+        const picked = relParse(g('tk-rel'));
+        const keepLead = t0 && t0.relatedType === 'lead' && !picked.type;
+        const r = keepLead
+          ? { type: 'lead', id: t0.relatedId, label: t0.relatedLabel || '',
+              contactId: t0.contactId || null, householdId: t0.householdId || null }
+          : relResolve(picked.type, picked.id);
         const fields = {
           title: title, note: U().noteRead('tk-note'),
           assigneeUid: uid || u.id, assigneeName: u.name || '',
           dueDate: g('tk-due') || T().todayKey(),
           category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
-          relatedType: keepRel ? t0.relatedType : (hh ? 'household' : null),
-          relatedId: keepRel ? t0.relatedId : (hh ? hh.id : null),
-          relatedLabel: keepRel ? t0.relatedLabel : (hh ? hh.name : ''),
-          // Who it is for, kept even when the pointer is a case.
-          householdId: hh ? hh.id : (keepRel ? (t0.householdId || null) : null)
+          relatedType: r.type, relatedId: r.id, relatedLabel: r.label,
+          // Who it is for. An opportunity not yet linked to a person keeps
+          // whoever the task already knew — the person you opened it from —
+          // rather than losing them. Re-pointing at a household clears it,
+          // because a household task is nobody's in particular.
+          contactId: r.contactId
+            || (r.type === 'case' ? (g('tk-relcontact') || (t0 && t0.contactId) || null) : null),
+          householdId: r.householdId || null
         };
         if (el.dataset.id) T().saveTask(Object.assign({ id: el.dataset.id }, fields));
         else T().addTask(fields);

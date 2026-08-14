@@ -100,19 +100,27 @@ window.RWG = window.RWG || {};
      other side — open the case and see what is outstanding and on whom.
      Deliberately not tickable: this window is mid-edit, and a checkbox that
      changes data behind an unsaved form is a good way to lose both. */
-  function stepsBlock(recordId) {
+  function stepsBlock(recordId, contactId) {
     const T = RWG.tasks;
     if (!recordId || !T || !T.isStarted()) return '';
     const steps = T.all().filter(t => t.relatedType === 'case' && t.relatedId === recordId)
       .sort((a, b) => (a.workflowStep || 0) - (b.workflowStep || 0)
         || String(a.dueDate).localeCompare(String(b.dueDate)));
-    if (!steps.length) return '';
     const today = T.todayKey();
     const open = steps.filter(t => t.status !== 'done').length;
     const wfName = (steps.find(t => t.workflowName) || {}).workflowName;
+    // A task started here is already about this opportunity, and carries the
+    // client through so it also lands on their record. It opens over this
+    // window, so it is only offered once the opportunity itself is saved.
+    const addBtn = `<button class="btn btn-quiet btn-sm" data-action="tk-new"
+        data-case="${esc(recordId)}" ${contactId ? `data-contact="${esc(contactId)}"` : ''}
+        title="Opens the task window — save any edits here first">＋ Task</button>`;
     return `<div class="cs-correct" style="margin-top:var(--s3)">
-      <div class="cs-correct-h">Work on this opportunity
-        <span class="muted">${open ? open + ' open of ' + steps.length : 'all ' + steps.length + ' done'}${wfName ? ' · ' + esc(wfName) : ''}</span></div>
+      <div class="cs-correct-h" style="display:flex;align-items:center;gap:8px">Work on this opportunity
+        <span class="muted">${steps.length
+          ? (open ? open + ' open of ' + steps.length : 'all ' + steps.length + ' done') + (wfName ? ' · ' + esc(wfName) : '')
+          : 'nothing yet'}</span>
+        <span class="topbar-spacer"></span>${addBtn}</div>
       ${steps.map(t => {
         const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
         return `<div class="flex" style="gap:10px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--line)">
@@ -182,9 +190,19 @@ window.RWG = window.RWG || {};
     const pending = !!(c && c.pendingClose && !closed);
     const lost = !!(c && c.state === 'Lost');
     const stageLocked = closed || pending || lost;
-    const hhId = (c && c.householdId) || opts.householdId || null;
     const HH = RWG.hh;
-    const hh = hhId && HH && HH.isStarted() ? HH.household(hhId) : null;
+    const bookLive = HH && HH.isStarted();
+    // The contact is the anchor. The household is whatever that person's
+    // family happens to be — derived, never asked for twice.
+    const ctcId = (c && c.contactId) || opts.contactId || null;
+    const ctc = ctcId && bookLive ? HH.contact(ctcId) : null;
+    const hhId = (ctc && ctc.householdId) || (c && c.householdId) || opts.householdId || null;
+    const hh = hhId && bookLive ? HH.household(hhId) : null;
+    const contactOpts = bookLive && HH.contacts().length
+      ? ['<option value="">— not a contact record —</option>'].concat(
+          HH.contacts().slice().sort((a, b) => HH.contactName(a).localeCompare(HH.contactName(b)))
+            .map(p => `<option value="${esc(p.id)}" ${p.id === ctcId ? 'selected' : ''}>${esc(HH.contactName(p) || '(no name)')}</option>`)).join('')
+      : '';
     const product = c ? c.product : 'wl';
     form = moneyInit(c, product);
 
@@ -236,12 +254,15 @@ window.RWG = window.RWG || {};
             <input id="op2-title" value="${esc((c && c.title) || '')}" placeholder="e.g. Vargas — whole life + DI package" ${dis}></div>
 
           <div class="field-row">
-            <div class="field-group"><label class="lbl">Regarding — household / client</label>
-              <div class="flex" style="gap:8px;align-items:center">
-                <input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : ''))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
+            <div class="field-group"><label class="lbl">Regarding — the client</label>
+              ${contactOpts ? `<select id="op2-contact" ${dis} title="The person this opportunity is for">${contactOpts}</select>` : ''}
+              <div class="flex" style="gap:8px;align-items:center;${contactOpts ? 'margin-top:8px' : ''}">
+                <input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || (ctc ? HH.contactName(ctc) : (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : '')))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
                 ${hh ? `<button class="btn btn-quiet btn-sm" style="flex:none" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button>` : ''}
               </div>
-              ${hh ? `<div class="hint">${esc(hh.name)}</div>` : '<div class="hint">Not linked to a household yet.</div>'}</div>
+              <div class="hint">${contactOpts
+                ? 'Naming the contact is what puts this opportunity — and its tasks — on their record.'
+                : (hh ? esc(hh.name) : 'Not linked to a contact yet.')}</div></div>
             <div class="field-group"><label class="lbl">Agents involved</label>
               <select id="op2-agent" ${dis}>${ownerOpts}</select>
               <div class="checkrow">
@@ -285,7 +306,7 @@ window.RWG = window.RWG || {};
             ${U().noteEditor({ id: 'op2-details', value: (c && c.details) || '', editable: editable,
               placeholder: 'Anything worth remembering about this opportunity…' })}</div>
 
-          ${stepsBlock(c ? c.recordId : null)}
+          ${stepsBlock(c ? c.recordId : null, ctcId)}
           ${correct}
           ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}
         </div>
@@ -329,6 +350,19 @@ window.RWG = window.RWG || {};
       const fi = byId('op2-fyc'); if (fi) fi.value = form.fyc || '';
       paintStatic();
     });
+    // Naming the contact names the client — the board still shows a plain
+    // string, and you can still override it by typing.
+    const ctcSel = byId('op2-contact');
+    if (ctcSel) {
+      let auto = ctc ? RWG.hh.contactName(ctc) : '';
+      ctcSel.addEventListener('change', () => {
+        const p = ctcSel.value && RWG.hh && RWG.hh.isStarted() ? RWG.hh.contact(ctcSel.value) : null;
+        const nameIn = byId('op2-client');
+        if (!nameIn) return;
+        const typed = nameIn.value.trim();
+        if (p && (!typed || typed === auto)) { nameIn.value = RWG.hh.contactName(p); auto = nameIn.value; }
+      });
+    }
     const stSel2 = byId('op2-stage');
     if (stSel2) stSel2.addEventListener('change', paintStatic);
     const premIn = byId('op2-premium');
@@ -356,6 +390,12 @@ window.RWG = window.RWG || {};
     if (!title) { U().toast('Give the opportunity a name'); return; }
     const clientName = g('op2-client').trim();
     if (!clientName) { U().toast('Who is the client?'); return; }
+    // Read-only windows render no contact select at all, so its absence must
+    // not be read as "nobody" and quietly unlink a saved opportunity.
+    const hasContactSel = !!document.getElementById('op2-contact');
+    const HHs = RWG.hh;
+    const pickedContact = (hasContactSel && g('op2-contact') && HHs && HHs.isStarted())
+      ? HHs.contact(g('op2-contact')) : null;
     const product = c ? c.product : (g('op2-prod') || 'wl');
     const fam = FAM(product);
     const ownerUid = g('op2-agent') || (c ? c.agentUid : user.id);
@@ -386,7 +426,11 @@ window.RWG = window.RWG || {};
       coCreditUids: coUids, coCreditNames: coNames,
       title: title, sourceNote: g('op2-srcnote').trim() || null,
       details: hasDetails ? U().noteRead('op2-details') : (c ? c.details : null),
-      householdId: (c && c.householdId) || el.dataset.hh || null,
+      contactId: pickedContact ? pickedContact.id : (hasContactSel ? null : (c ? c.contactId || null : el.dataset.contact || null)),
+      // The family follows the person. Only when nobody is named does it
+      // fall back to whatever the window was opened from.
+      householdId: (pickedContact && pickedContact.householdId)
+        || (c && c.householdId) || el.dataset.hh || null,
       stageId: c ? c.stageId : 'uncovered'
     };
     D().saveCase(patch).then(row => {
@@ -460,7 +504,8 @@ window.RWG = window.RWG || {};
       'cs-open': (el) => oppWindow({ id: el.dataset.id }),
       // From a contact record the client name rides along, so the person you
       // clicked is the client — not whoever happens to be primary on the family.
-      'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null, clientName: el.dataset.client || '' }),
+      'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null,
+        contactId: el.dataset.contact || null, clientName: el.dataset.client || '' }),
       'cs-save': (el) => saveWindow(el),
       // Back to the board, on the track you clicked.
       'cs-to-board': (el) => {
