@@ -418,16 +418,21 @@ window.RWG = window.RWG || {};
     title: 'Reports',
     enabled: true,
     roles: ['admin', 'agent'],
-    // One Reports entry in the sidebar; Production and Lead reports are tabs
-    // inside it, so the entry stays lit while you are on either of them.
+    // One Reports entry in the sidebar, and it is the agents' — a partner's
+    // opens on Production and is declared by the module that owns that view.
+    // An agent has no production or lead report to see, so the builder is
+    // the whole of Reports for them and there are no tabs to keep lit.
     // NB the view id is `report_build`, not `reports` — the Leads module has
     // owned a view called `reports` since long before this screen existed.
-    nav: [{ view: 'report_build', label: 'Reports', icon: 'reports', also: ['report_week', 'reports'] }],
+    nav: { agent: [{ view: 'report_build', label: 'Reports', icon: 'reports' }] },
+    views: ['report_build'],
     meta: { report_build: { t: 'Reports', s: 'Ask the book a question' } },
     state: st,
 
     home: {
-      tile: () => ({ icon: 'reports', title: 'Reports', desc: 'Ask the book a question and export the answer.', view: 'report_build' })
+      tile: (ctx) => ({ icon: 'reports', title: 'Reports',
+        desc: 'Ask the book a question and export the answer.',
+        view: (ctx && ctx.isAdmin) ? 'report_week' : 'report_build' })
     },
 
     onEnter() {
@@ -572,10 +577,13 @@ window.RWG = window.RWG || {};
      happen to be about reporting. Declared on RWG so the Leads module and
      the production report can use it without importing anything. */
   RWG.reportTabs = function (active, ctx) {
+    // Production first — it is the question you open Reports to answer;
+    // Leads next; the builder last, for the question the other two do not
+    // already answer.
     const tabs = [
-      { view: 'report_build', label: 'Build a report' },
       { view: 'report_week', label: 'Production', admin: true },
-      { view: 'reports', label: 'Leads', admin: true }
+      { view: 'reports', label: 'Leads', admin: true },
+      { view: 'report_build', label: 'Build a report' }
     ].filter(t => !t.admin || (ctx && ctx.isAdmin));
     if (tabs.length < 2) return '';
     return `<div class="flex" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">${

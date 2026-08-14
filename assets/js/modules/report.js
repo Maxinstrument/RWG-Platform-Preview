@@ -261,8 +261,12 @@ window.RWG = window.RWG || {};
     title: 'Reports',
     enabled: true,
     roles: ['admin'],
-    // No sidebar entry of its own: this is the "Production" tab inside Reports.
-    nav: [],
+    // Reports opens here for a partner: production first, because that is the
+    // question you open reports to answer. The entry lives in this module
+    // because this module owns the view — a nav entry pointing at somebody
+    // else's view is how two modules end up claiming one id.
+    // (Agents cannot see production; the builder module carries their entry.)
+    nav: [{ view: 'report_week', label: 'Reports', icon: 'reports', also: ['reports', 'report_build'] }],
     views: ['report_week'],
     meta: { report_week: { t: 'Reports', s: 'Production — cases, premium and pace, week by week' } },
 
