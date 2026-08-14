@@ -1490,10 +1490,17 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
 /* ── Funnel rows are live: every number opens its cases ───
    The hover is what tells you so before you click. */
 .fn-row:hover,.fn-drop:hover{background:var(--hover-row);border-radius:4px;}
-.fn-here{display:block;font-size:var(--fs-micro);font-weight:700;color:var(--navy);
-  cursor:pointer;white-space:nowrap;}
-.fn-here:hover{text-decoration:underline;}
 .dn-row:hover{background:var(--hover-row);border-radius:4px;}
+/* The fullest stage: the one line item the Monday meeting works on. */
+.fn-jam .fn-lab{color:var(--bad);font-weight:700;}
+.fn-banner{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;cursor:pointer;
+  margin:0 var(--pad-panel);padding:10px 14px;border-radius:8px;
+  background:rgba(176,58,46,.06);border:1px solid rgba(176,58,46,.22);}
+.fn-banner:hover{background:rgba(176,58,46,.11);}
+.fn-banner-k{font-size:var(--fs-micro);font-weight:700;letter-spacing:var(--track-caps);
+  text-transform:uppercase;color:var(--bad);flex:none;}
+.fn-banner-v{font-size:var(--fs-panel);font-weight:700;color:var(--navy);min-width:0;}
+.fn-banner-s{font-size:var(--fs-sub);color:var(--muted);margin-left:auto;text-align:right;}
 @media (max-width:1080px){
   .rec-shell{grid-template-columns:minmax(0,1fr);}
   .rec-rail{flex-direction:row;flex-wrap:wrap;}

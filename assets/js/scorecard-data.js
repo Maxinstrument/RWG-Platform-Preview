@@ -36,14 +36,14 @@ RWG.scorecardData = (function () {
     // contactId is who the opportunity is FOR — a person, not a family.
     // householdId rides along for the family screens, but the contact is
     // what tasks, notes and the activity feed hang off.
-    'contactId', 'householdId', 'stageId', 'lostReason', 'pendingClose',
+    'contactId', 'householdId', 'stageId', 'stageAt', 'lostReason', 'pendingClose',
     // money detail + the close (phase 2, slice 2)
     'rate', 'premiumAnnual', 'benefit', 'renewalAnnual', 'applied',
     'pendingCloseAt', 'closeNote', 'a360Recorded', 'lostBy', 'lostAt'];
 
   // Passed through buildCase untouched (null when absent), so no edit
   // modal anywhere can silently strip them.
-  const PASSTHROUGH = ['contactId', 'householdId', 'stageId', 'lostReason', 'rate', 'premiumAnnual',
+  const PASSTHROUGH = ['contactId', 'householdId', 'stageId', 'stageAt', 'lostReason', 'rate', 'premiumAnnual',
     'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
     'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage',
     'title', 'sourceNote', 'details'];   // the opportunity window (phase 5.6)
@@ -190,7 +190,10 @@ RWG.scorecardData = (function () {
     if (!bucket) return Promise.reject(new Error('no such stage on this track: ' + stageId));
     if (bucket === 'Closed') return Promise.reject(new Error('closing goes through the close review'));
 
-    const row = Object.assign({}, existing, { stageId: stageId, updatedAt: nowISO() });
+    // stageAt: when this case landed in the stage it is in now. updatedAt
+    // moves for any edit, so it cannot answer "how long has this been
+    // sitting here" — which is the whole question at a Monday meeting.
+    const row = Object.assign({}, existing, { stageId: stageId, stageAt: nowISO(), updatedAt: nowISO() });
     if (bucket === 'Submitted' && !row.submittedAt) row.submittedAt = nowISO();
     if (bucket === 'Submitted' && row.state === 'Opened') row.state = 'Submitted';
     if (bucket === 'Lost') { row.state = 'Lost'; }

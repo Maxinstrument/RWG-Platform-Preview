@@ -33,9 +33,7 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const dayMs = 86400000;
 
-  // funnelView: 'now'   — each opportunity counted once, where it actually is
-  //             'reach' — the classic conversion funnel, cumulative
-  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '', funnelView: 'now' };
+  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -98,6 +96,13 @@ window.RWG = window.RWG || {};
   const scoped = (rows, ctx) => ctx.isAdmin ? rows : rows.filter(c => c.agentUid === ctx.eff.id);
   const openCases = () => SD().cases().filter(c => (c.state === 'Opened' || c.state === 'Submitted') && !c.closedAt);
   const headlineMoney = (c) => Number(SC().usesAum(c.product) ? c.aum : c.amount) || 0;
+  // How long this case has been sitting where it is. stageAt is stamped on
+  // every board move; anything written before that stamp existed falls back
+  // to its last touch, which is the closest honest answer we have.
+  const stuckDays = (c) => {
+    const t = toMs(c.stageAt || c.updatedAt || c.createdAt);
+    return t ? Math.max(0, Math.floor((Date.now() - t) / dayMs)) : 0;
+  };
   const ageDays = (c) => {
     const t = toMs(c.updatedAt || c.createdAt);
     return t ? Math.max(0, Math.floor((Date.now() - t) / dayMs)) : 0;
@@ -136,7 +141,8 @@ window.RWG = window.RWG || {};
       <span class="grow" style="min-width:0">
         <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(c.title || c.clientName || '(unnamed)')}</span>
         <span class="cell-sub" style="display:block">${esc(c.clientName || '')}${c.clientName ? ' · ' : ''}${esc(SC().productName(c.product) || '')}</span>
-        <span class="cell-sub" style="display:block">${esc(stage)}${c.agentName ? ' · ' + esc(firstName(c.agentName)) : ''}</span>
+        <span class="cell-sub" style="display:block">${esc(stage)}${c.agentName ? ' · ' + esc(firstName(c.agentName)) : ''}${
+          c.closedAt || c.state === 'Lost' ? '' : ` · <span style="${stuckDays(c) >= 30 ? 'color:var(--bad);font-weight:700' : ''}">${stuckDays(c)}d here</span>`}</span>
       </span>
       <span class="end num" style="font-size:var(--fs-dense)">${headlineMoney(c) ? U().moneyK(headlineMoney(c)) : ''}</span>
     </div>`;
@@ -242,105 +248,94 @@ window.RWG = window.RWG || {};
     // here[i]:    is sitting there NOW. A case rests in exactly one stage, so
     //             these add up to the live pipeline and never double-count.
     const live = (r) => r.c.state !== 'Lost';
-    const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);
-    const here = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).length);
-    const money = cols.map((s, i) => reach.filter(r => r.i >= i).reduce((n, r) => n + headlineMoney(r.c), 0));
-    const hereMoney = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).reduce((n, r) => n + headlineMoney(r.c), 0));
+    const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);   // close rate only
+    const at = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).map(r => r.c));
+    const here = at.map(list => list.length);
+    const hereMoney = at.map(list => list.reduce((n, c) => n + headlineMoney(c), 0));
+    const oldest = at.map(list => list.reduce((n, c) => Math.max(n, stuckDays(c)), 0));
     const lost = reach.filter(r => !live(r)).map(r => r.c);
-    // here[] + lost is the whole pool, with nothing counted twice.
-    return { pl, cols, pool, reach, reached, here, money, hereMoney, lost };
+    // at[] + lost is the whole pool, with nothing counted twice.
+
+    // The bottleneck: the fullest stage, ties broken by whoever has been
+    // waiting longest. Closed business is not a jam, so Won never wins.
+    let jam = -1;
+    cols.forEach((s, i) => {
+      if (s.bucket === 'Closed' || !here[i]) return;
+      if (jam < 0 || here[i] > here[jam] || (here[i] === here[jam] && oldest[i] > oldest[jam])) jam = i;
+    });
+    return { pl, cols, pool, reach, reached, at, here, hereMoney, oldest, lost, jam };
   }
 
-  /* Two honest readings of the same pipeline, and they answer different
-     questions:
+  /* One question, asked the way it gets asked at the Monday meeting:
+     WHERE IS WORK PILING UP. Every opportunity appears once, in the stage
+     it is actually in, and the fullest stage is called out at the top by
+     name — that is the line item the room works on.
 
-       Where they are  every opportunity counted ONCE, in the stage it is
-                       actually in. Tania closed, so she is on Close / Won
-                       and nowhere else. The bars add up to what you opened.
-       How far they got the classic conversion funnel: each bar is "reached
-                       at least here", so a closed case counts on every bar
-                       it passed. That repetition is the only way to see
-                       where business falls out — but read as a snapshot it
-                       looks like one case in seven places at once.
-
-     "Where they are" leads, because that is what the card is read as. */
+     Days matter as much as counts. Four sitting in Waiting on Signature
+     for two days is a good week; two sitting there for six weeks is the
+     problem. Both are on every row. */
   function wFunnel(ctx) {
     const m = funnelModel();
     const cols = m.cols;
-    const nowView = st.funnelView !== 'reach';
     if (!m.pool.length) return card('Opportunity funnel', esc(m.pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
 
-    const counts = nowView ? m.here : m.reached;
-    const money = nowView ? m.hereMoney : m.money;
-    // Cumulative bars scale against the top of the funnel; a snapshot has no
-    // such anchor, so it scales against its own busiest stage.
-    const base = nowView ? Math.max.apply(null, counts.concat([1])) : (m.reached[0] || 1);
-
-    let biggest = -1, biggestDrop = 0;
-    for (let i = 1; i < cols.length; i++) {
-      const d = m.reached[i - 1] - m.reached[i];
-      if (d > biggestDrop) { biggestDrop = d; biggest = i; }
-    }
+    const base = Math.max.apply(null, m.here.concat([1]));
+    const dayChip = (d) => d >= 30 ? 'color:var(--bad);font-weight:700'
+      : d >= 14 ? 'color:var(--gold-ink);font-weight:700' : 'color:var(--muted)';
 
     const rows = cols.map((s, i) => {
-      const w = Math.max(Math.round(100 * counts[i] / base), counts[i] ? 7 : 0);
-      const color = BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened;
-      // The leak markers belong to the cumulative reading — in a snapshot
-      // "−2 did not reach here" has nothing to subtract from.
-      const drop = (!nowView && i > 0) ? m.reached[i - 1] - m.reached[i] : 0;
-      return (drop > 0 ? `<div class="flex fn-drop" style="gap:10px;align-items:center;margin:1px 0 3px;cursor:pointer"
-          data-action="hm-drill" data-kind="fn-miss" data-i="${i}"
-          title="See the ${drop} that have not reached ${esc(s.label)}">
-          <span class="fn-lab" style="color:var(--bad);font-weight:700;font-size:10px">−${drop}</span>
-          <span style="flex:1;text-align:center;font-size:10px;color:var(--bad)">did not reach ${esc(s.label)}${i === biggest ? ' · biggest leak' : ''}</span>
-          <span style="width:64px;flex:none"></span></div>` : '') +
-        `<div class="flex fn-row" style="gap:10px;align-items:center;margin-bottom:3px;${counts[i] ? 'cursor:pointer' : ''}"
-          ${counts[i] ? `data-action="hm-drill" data-kind="${nowView ? 'fn-here' : 'fn-reach'}" data-i="${i}"` : ''}
-          title="${counts[i] ? `See the ${counts[i]} ${nowView ? 'sitting in' : 'that reached'} ${esc(s.label)}` : 'Nothing here'}">
+      const n = m.here[i];
+      const w = Math.max(Math.round(100 * n / base), n ? 7 : 0);
+      const isJam = i === m.jam;
+      const color = isJam ? 'var(--bad)' : (BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened);
+      return `<div class="flex fn-row${isJam ? ' fn-jam' : ''}" style="gap:10px;align-items:center;margin-bottom:3px;${n ? 'cursor:pointer' : ''}"
+          ${n ? `data-action="hm-drill" data-kind="fn-here" data-i="${i}"` : ''}
+          title="${n ? `See the ${n} sitting in ${esc(s.label)}` : 'Nothing here'}">
           <span class="fn-lab">${esc(s.label)}</span>
           <span style="flex:1;display:flex;justify-content:center;min-width:0">
-            ${counts[i]
-              ? `<span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${counts[i]}</span>`
+            ${n
+              ? `<span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${n}</span>`
               : '<span class="cell-sub" style="font-size:10px">—</span>'}</span>
-          <span style="width:64px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${money[i] ? U().moneyK(money[i]) : ''}</span>
+          <span style="width:74px;flex:none;text-align:right;line-height:1.25">
+            <span style="font-size:10.5px;color:var(--muted);display:block">${m.hereMoney[i] ? U().moneyK(m.hereMoney[i]) : ''}</span>
+            ${n && s.bucket !== 'Closed' ? `<span style="font-size:var(--fs-micro);display:block;${dayChip(m.oldest[i])}">${m.oldest[i]}d oldest</span>` : ''}
+          </span>
         </div>`;
     }).join('');
 
-    // Lost cases are nowhere on the board, so a snapshot has to say so out
-    // loud or the bars quietly fail to add up to what you opened.
-    const lostRow = (nowView && m.lost.length) ? `<div class="flex fn-drop"
+    // Lost cases are on no stage, so they get their own line or the bars
+    // quietly fail to add up to what you opened.
+    const lostMoney = m.lost.reduce((n, c) => n + headlineMoney(c), 0);
+    const lostRow = m.lost.length ? `<div class="flex fn-drop"
         style="gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);cursor:pointer"
-        data-action="hm-drill" data-kind="fn-lost"
-        title="See the ${m.lost.length} lost">
+        data-action="hm-drill" data-kind="fn-lost" title="See the ${m.lost.length} lost">
         <span class="fn-lab" style="color:var(--bad);font-weight:700">Lost</span>
         <span style="flex:1;display:flex;justify-content:center">
           <span style="height:19px;padding:0 10px;background:var(--bad);display:flex;align-items:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${m.lost.length}</span></span>
-        <span style="width:64px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${
-          m.lost.reduce((n, c) => n + headlineMoney(c), 0) ? U().moneyK(m.lost.reduce((n, c) => n + headlineMoney(c), 0)) : ''}</span>
+        <span style="width:74px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${lostMoney ? U().moneyK(lostMoney) : ''}</span>
       </div>` : '';
 
-    const vbtn = (id, label, title) =>
-      `<button class="btn btn-sm ${(st.funnelView === id || (id === 'now' && nowView)) ? 'btn-navy' : 'btn-ghost'}"
-        data-action="hm-funnel-view" data-v="${id}" title="${esc(title)}">${label}</button>`;
-    const toggle = `<div class="flex" style="gap:5px">
-      ${vbtn('now', 'Where they are', 'Every opportunity counted once, in the stage it is actually in')}
-      ${vbtn('reach', 'How far they got', 'The conversion funnel: each bar is everything that reached at least that stage')}
-    </div>`;
+    // The headline: the one stage to talk about, clickable straight to the
+    // list of names so the discussion starts from the cases, not the number.
+    const jam = m.jam;
+    const banner = jam >= 0 ? `<div class="fn-banner" data-action="hm-drill" data-kind="fn-here" data-i="${jam}"
+        title="See the ${m.here[jam]} sitting in ${esc(cols[jam].label)}">
+        <span class="fn-banner-k">Piling up</span>
+        <span class="fn-banner-v">${esc(cols[jam].label)}</span>
+        <span class="fn-banner-s">${m.here[jam]} ${m.here[jam] === 1 ? 'opportunity' : 'opportunities'}${
+          m.oldest[jam] ? ' · oldest ' + m.oldest[jam] + ' day' + (m.oldest[jam] === 1 ? '' : 's') : ''}${
+          m.hereMoney[jam] ? ' · ' + U().moneyK(m.hereMoney[jam]) : ''}</span>
+      </div>` : '';
 
     const wonPct = m.reached[0] ? Math.round(100 * m.reached[m.reached.length - 1] / m.reached[0]) : 0;
     const live = m.here.reduce((n, x) => n + x, 0);
-    return card('Opportunity funnel', m.reached[0] + ' opened ' + esc(sinceLabel()),
-      `<div style="padding:12px var(--pad-panel) 4px">${rows}${lostRow}</div>` +
-      hint(nowView
-        ? 'Every opportunity appears <b>once</b>, in the stage it is in today — these ' + live
-          + ' plus ' + m.lost.length + ' lost is everything opened ' + PERIOD_LABEL[st.period] + '. '
-          + 'Click a bar for the cases behind it. ' + wonPct + '% reached a confirmed close; '
-          + '<b>How far they got</b> shows where the rest fell out.'
-        : 'Each bar is how many got <b>at least</b> this far, so one case counts on every bar it passed — '
-          + 'that repetition is what makes the leaks visible, and it is why a closed case shows on every stage. '
-          + 'Click any number for the cases behind it. '
-          + wonPct + '% of what opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(m.pl.name) + ' reached a confirmed close.'),
-      toggle);
+    return card('Opportunity funnel', live + ' in play · ' + m.reached[0] + ' opened ' + esc(sinceLabel()),
+      banner + `<div style="padding:10px var(--pad-panel) 4px">${rows}${lostRow}</div>` +
+      hint('Every opportunity appears <b>once</b>, in the stage it is in today — these ' + live
+        + ' plus ' + m.lost.length + ' lost is everything opened ' + PERIOD_LABEL[st.period] + '. '
+        + '<b>Oldest</b> is how long the longest-waiting one has sat there, so a full stage that moves '
+        + 'reads differently from one that does not. Click any bar for the names. '
+        + wonPct + '% of what opened reached a confirmed close.'));
   }
 
   // 3 · Needs help moving — the Monday list.
@@ -885,7 +880,6 @@ window.RWG = window.RWG || {};
     actions: {
       'home-open': (el) => RWG.app.nav(el.dataset.view),
       'hm-customize': () => { st.customize = !st.customize; RWG.app.renderMain(); },
-      'hm-funnel-view': (el) => { st.funnelView = el.dataset.v === 'reach' ? 'reach' : 'now'; RWG.app.renderMain(); },
 
       /* Open the cases behind a number. Each branch re-reads the same model
          the chart drew from, so the panel and the bar can never disagree —
@@ -908,39 +902,29 @@ window.RWG = window.RWG || {};
         }
 
         const m = funnelModel();
-        const s = m.cols[i];
-        if (!s && kind !== 'fn-lost') return;
-        if (kind === 'fn-reach') {
-          openDrill('Reached ' + s.label, m.reached[i] + ' of ' + m.reached[0] + ' opened ' + sinceLabel(),
-            m.reach.filter(r => r.i >= i).map(r => r.c),
-            'Everything that got <b>at least</b> this far, wherever it sits today — which is why the same case appears on several bars.');
-          return;
-        }
-        if (kind === 'fn-here') {
-          openDrill('Sitting in ' + s.label, 'right now',
-            m.reach.filter(r => r.i === i && r.c.state !== 'Lost').map(r => r.c),
-            'Where these cases actually are today. A case rests in one stage only, so these never double-count.');
-          return;
-        }
         if (kind === 'fn-lost') {
           openDrill('Lost', 'opened ' + sinceLabel(), m.lost,
             'These left the board. Each row carries the reason it was marked lost.');
           return;
         }
-        if (kind === 'fn-miss') {
-          const prev = m.cols[i - 1];
-          const list = m.reach.filter(r => r.i === i - 1).map(r => r.c);
-          openDrill('Did not reach ' + s.label,
-            list.length + ' stopped at ' + (prev ? prev.label : 'the start'), list,
-            'Some of these are lost and some are simply still earlier in the pipeline — the stage on each row says which.');
+        const s = m.cols[i];
+        if (!s) return;
+        if (kind === 'fn-here') {
+          // Longest-waiting first: at a Monday meeting the top of this list
+          // is the conversation, not the bottom.
+          const list = m.at[i].slice().sort((a, b) => stuckDays(b) - stuckDays(a));
+          openDrill('Sitting in ' + s.label,
+            list.length + (list.length === 1 ? ' opportunity' : ' opportunities'), list,
+            'Everything parked in this stage right now, longest wait first. A case sits in one stage only, so nothing here is counted twice.');
         }
       },
       'hm-drill-export': () => {
         if (!lastDrill || !lastDrill.list.length) { U().toast('Nothing to export'); return; }
-        const head = ['Opportunity', 'Client', 'Product', 'Stage', 'Owner', 'Amount', 'Opened week', 'Closed'];
+        const head = ['Opportunity', 'Client', 'Product', 'Stage', 'Days in stage', 'Owner', 'Amount', 'Opened week', 'Closed'];
         const rows = lastDrill.list.map(c => [
           c.title || '', c.clientName || '', SC().productName(c.product) || c.product || '',
           c.closedAt ? 'Closed' : (c.state === 'Lost' ? 'Lost' : P().stageLabel(c.product, P().stageForCase(c))),
+          c.closedAt || c.state === 'Lost' ? '' : stuckDays(c),
           c.agentName || '', headlineMoney(c), c.openedWeek || '', c.closedAt || ''
         ]);
         U().downloadCSV(`RWG_${lastDrill.title.replace(/[^\w]+/g, '_')}_${U().stampName()}.csv`,
