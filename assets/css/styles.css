@@ -125,7 +125,7 @@ a{color:inherit;}
   padding:40px 36px 30px;text-align:center;
   box-shadow:var(--shadow-pop);
   border-top:3px solid var(--gold);
-  animation:rise .5s ease both;
+  animation:rise .38s ease backwards;
 }
 .gate-logo{height:78px;width:auto;object-fit:contain;margin:0 auto 18px;display:block;}
 .gate-brand{font-family:'Fraunces',serif;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--navy);margin:0;}
@@ -374,7 +374,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
   position:fixed;z-index:250;
   background:#fff;border:1px solid var(--line-strong);border-radius:12px;
   box-shadow:var(--shadow-pop);padding:8px;min-width:210px;max-height:72vh;overflow-y:auto;
-  animation:rise .14s ease both;
+  animation:rise .14s ease backwards;
 }
 .pop-h{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:6px 8px 8px;}
 .pop-row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;user-select:none;white-space:nowrap;}
@@ -418,7 +418,7 @@ input.pop-search{width:100%;min-height:34px;margin:2px 0 8px;padding:7px 10px;fo
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   background:linear-gradient(160deg,var(--navy),var(--navy-deep));color:#fff;
   border-radius:12px;padding:11px 16px;margin-bottom:14px;
-  box-shadow:var(--shadow-card);border:1px solid rgba(194,161,77,.4);animation:rise .18s ease both;
+  box-shadow:var(--shadow-card);border:1px solid rgba(194,161,77,.4);animation:rise .16s ease backwards;
 }
 .bulkbar .bulk-count{font-weight:700;font-size:14px;color:var(--gold-soft);white-space:nowrap;}
 .bulkbar .fbar-sortlbl{color:rgba(255,255,255,.7);}
@@ -494,14 +494,33 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* ============================================================
    Drawer (lead detail)
    ============================================================ */
-.scrim{position:fixed;inset:0;background:rgba(10,26,48,.45);backdrop-filter:blur(2px);z-index:120;opacity:0;animation:fade .2s ease forwards;}
+/* The resting state lives in the BASE rule and the keyframe only says where
+   the thing came FROM. That inversion matters three times over:
+     · a filling animation outranks author inline styles, so the old
+       `forwards` pinned these open and no exit could ever run;
+     · with the end state in a keyframe, killing animations for
+       prefers-reduced-motion left the scrim invisible-but-click-blocking
+       and the drawer parked off-screen;
+     · `backwards` still holds the from-state before the first frame,
+       so nothing flashes at full opacity on the way in. */
+.scrim{
+  position:fixed;inset:0;z-index:120;background:rgba(10,26,48,.45);
+  animation:scrim-in .2s ease backwards;
+}
+@keyframes scrim-in{from{opacity:0;}}
+.scrim.leaving{opacity:0;transition:opacity .15s ease;}
+.scrim.no-enter{animation:none;}
+
 .drawer{
   position:fixed;top:0;right:0;height:100vh;width:480px;max-width:94vw;z-index:130;
   background:var(--paper);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;
-  transform:translateX(100%);animation:slidein .28s cubic-bezier(.2,.8,.2,1) forwards;
+  animation:drawer-in .26s cubic-bezier(.2,.7,.3,1) backwards;
+  will-change:transform;
 }
-@keyframes slidein{to{transform:none;}}
-@keyframes fade{to{opacity:1;}}
+@keyframes drawer-in{from{transform:translateX(100%);}}
+.drawer.leaving{transform:translateX(100%);transition:transform .2s cubic-bezier(.5,0,.85,.5);}
+/* A repaint is not an arrival: logging a call must not re-slide the panel. */
+.drawer.no-enter{animation:none;}
 .drawer-head{background:linear-gradient(160deg,var(--navy),var(--navy-deep));color:#fff;padding:22px 24px;border-bottom:3px solid var(--gold);}
 .drawer-head .dh-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
 .drawer-head h2{color:#fff;font-size:23px;}
@@ -557,11 +576,18 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   width:min(var(--modal-w),94vw);max-height:calc(100vh - 48px);
   display:flex;flex-direction:column;                 /* head/foot pinned, body scrolls */
   background:var(--paper);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);
-  border-top:3px solid var(--gold);animation:modalrise .2s ease both;
+  border-top:3px solid var(--gold);
+  animation:modal-in .2s cubic-bezier(.2,.7,.3,1) backwards;
 }
 .modal-card.modal-lg{--modal-w:760px;}
 .modal-card.modal-sm{--modal-w:460px;}
-@keyframes modalrise{from{opacity:0;transform:translateX(-50%) translateY(-8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+/* translateX(-50%) is LAYOUT here, not motion — it has to be restated in
+   every keyframe and in the exit, or the card snaps hard to the right. */
+@keyframes modal-in{from{opacity:0;transform:translateX(-50%) translateY(-10px) scale(.985);}}
+.modal-card.leaving{
+  opacity:0;transform:translateX(-50%) translateY(-6px);
+  transition:opacity .15s cubic-bezier(.5,0,.85,.5),transform .15s cubic-bezier(.5,0,.85,.5);
+}
 /* Grid, not flex, so it fits both shapes: a bare <h2>+<p>, and a
    <div> wrapping them next to a close button. */
 .modal-head{
@@ -680,8 +706,14 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .empty p{font-size:14px;margin:0 auto;max-width:380px;}
 
 /* Toast */
-#toast-wrap{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:10px;align-items:center;}
-.toast{background:var(--navy);color:#fff;padding:13px 20px;border-radius:11px;font-size:14px;font-weight:600;box-shadow:var(--shadow-pop);display:flex;align-items:center;gap:10px;animation:rise .25s ease both;border-left:3px solid var(--gold);}
+/* The wrap must not eat clicks: it spans the width of the screen at the
+   bottom, where the Save buttons are. Only the toast itself is solid. */
+#toast-wrap{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:10px;align-items:center;pointer-events:none;}
+/* `backwards`, not `both`. A filling animation sits ABOVE author inline
+   styles in the cascade, so `both` pinned opacity:1 forever and the exit
+   fade below could never run — the toast just blinked out. */
+.toast{background:var(--navy);color:#fff;padding:13px 20px;border-radius:11px;font-size:14px;font-weight:600;box-shadow:var(--shadow-pop);display:flex;align-items:center;gap:10px;animation:rise .25s ease backwards;border-left:3px solid var(--gold);pointer-events:auto;transition:opacity .28s ease,transform .28s ease;}
+.toast.out{opacity:0;transform:translateY(8px);}
 .toast.good{border-left-color:var(--good);}
 
 /* helpers */
@@ -1214,3 +1246,29 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
 /* A clickable row still lets its own links and buttons act first */
 .cs-row a,.cs-row .tag-chip,.cs-row .btn{position:relative;z-index:1;}
 .cs-row:hover .cell-name{color:var(--gold);}
+
+/* ============================================================
+   Reduced motion
+
+   Safe as a blanket rule ONLY because every entrance in this file
+   now keeps its resting state in its base rule and uses a
+   `backwards` fill. Before that inversion, killing animations left
+   the scrim invisible but still swallowing clicks, and the drawer
+   parked off-screen — for exactly the people who asked for calm.
+
+   .001ms, never 0: at 0 some browsers never fire `animationend`,
+   and anything awaiting it would hang.
+   ============================================================ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-delay:0ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  /* Movement that was decoration, not state, simply stops. */
+  .lead-card:hover,.pl-card:hover,.tile:hover,.dropzone:hover .dz-ic{transform:none;}
+  .btn:active{transform:none;}
+  .lead-card.dragging{transform:none;}
+}

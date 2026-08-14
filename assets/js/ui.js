@@ -198,16 +198,27 @@ RWG.ui = (function () {
   // Safe for filenames on every platform we care about.
   const stampName = () => new Date().toISOString().slice(0, 10);
 
-  let toastTimer;
+  // Each toast owns its own dismissal. The old code cleared a shared timer
+  // it never assigned, so the guard did nothing — and had it worked, a
+  // second toast would have cancelled the first one's exit and left it on
+  // screen forever. Three at a time is the ceiling; older ones make way.
+  const TOAST_MAX = 3;
+  function dismissToast(t) {
+    if (!t || t.dataset.going) return;
+    t.dataset.going = '1';
+    clearTimeout(Number(t.dataset.timer));
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 300);
+  }
   function toast(msg, good) {
     let wrap = document.getElementById('toast-wrap');
     if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toast-wrap'; document.body.appendChild(wrap); }
+    while (wrap.children.length >= TOAST_MAX) dismissToast(wrap.firstElementChild);
     const t = document.createElement('div');
     t.className = 'toast' + (good ? ' good' : '');
     t.innerHTML = (good ? '✓ ' : '') + esc(msg);
     wrap.appendChild(t);
-    clearTimeout(toastTimer);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; t.style.transition = '.3s'; setTimeout(() => t.remove(), 300); }, 2600);
+    t.dataset.timer = String(setTimeout(() => dismissToast(t), 2600));
   }
 
   return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName,

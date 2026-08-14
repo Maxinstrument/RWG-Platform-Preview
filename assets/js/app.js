@@ -418,21 +418,48 @@ RWG.app = (function () {
   }
 
   // ────────────────────────── drawer
+  // Dismissal: the state clears on the same tick, only the pixels wait.
+  // `instant` keeps test harnesses (and anyone on reduced motion) synchronous,
+  // and the timeout cap means a stuck animation can never strand a panel.
+  const motionOff = () => {
+    try { return !!(navigator.webdriver || window.__RWG_TEST__)
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return true; }
+  };
+  function dismiss(sel, ms) {
+    const m = $(sel);
+    if (!m || !m.firstElementChild) return;
+    if (motionOff()) { m.innerHTML = ''; return; }
+    if (m.dataset.closing) return;                       // Escape held down must not double-fire
+    m.dataset.closing = '1';
+    m.querySelectorAll('.drawer,.modal-card,.scrim').forEach(el => el.classList.add('leaving'));
+    setTimeout(() => { m.innerHTML = ''; delete m.dataset.closing; }, ms);
+  }
+
   function openLead(id, editing) {
+    // Re-rendering the drawer after logging a call is a repaint, not an
+    // arrival — without this it slid in from the right again every time.
+    const refreshing = !!$('#drawer-mount .drawer');
+    const body = refreshing ? $('#drawer-mount .drawer-body') : null;
+    const scroll = body ? body.scrollTop : 0;
     state.leadId = id;
     state.editing = !!editing;
     const user = RWG.auth.currentUser();
     $('#drawer-mount').innerHTML = RWG.views.drawer(id, { isAdmin: user.role === 'admin', editing: state.editing });
+    if (refreshing) {
+      const d = $('#drawer-mount .drawer'); if (d) d.classList.add('no-enter');
+      const s = $('#drawer-mount .scrim');  if (s) s.classList.add('no-enter');
+      const b = $('#drawer-mount .drawer-body'); if (b) b.scrollTop = scroll;
+    }
   }
   function closeDrawer() {
-    const m = $('#drawer-mount'); if (m) m.innerHTML = '';
-    state.leadId = null; state.editing = false;
+    state.leadId = null; state.editing = false;          // state first, always
+    dismiss('#drawer-mount', 200);
   }
   function refreshDrawer() { if (state.leadId) openLead(state.leadId, state.editing); }
 
   // ────────────────────────── modal (Add lead)
   function openModal(html) { const m = $('#modal-mount'); if (m) m.innerHTML = html; }
-  function closeModal() { const m = $('#modal-mount'); if (m) m.innerHTML = ''; }
+  function closeModal() { dismiss('#modal-mount', 150); }
 
   function buildAddLeadModal() {
     const u = RWG.auth.currentUser();
