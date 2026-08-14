@@ -158,7 +158,7 @@ window.RWG = window.RWG || {};
     title: 'Trash',
     enabled: true,
     roles: ['admin'],
-    nav: [{ view: 'trash', label: 'Trash', icon: 'archive', where: 'user' }],
+    nav: [{ view: 'trash', label: 'Trash', icon: 'archive', where: 'user', menuOrder: 5 }],
     meta: { trash: { t: 'Trash', s: 'Deleted records, waiting on a partner' } },
     state: st,
 

@@ -28,11 +28,13 @@ RWG.modules.register({
     admin: [
       { view: 'dashboard', label: 'Command Center', icon: 'dashboard' },
       { view: 'leads',     label: 'All Leads',      icon: 'leads' },
-      { view: 'agents',    label: 'Team',           icon: 'team', badge: () => RWG.data.pendingUsers().length },
       // 'reports' (Lead Reports) is now the Leads tab inside the Reports
       // hub, and 'archive' (Deleted Leads) folded into the Trash — both
       // views stay registered so old deep-links still render.
-      { view: 'upload',    label: 'Upload & Assign',icon: 'upload' },
+      // Team and Upload live under your name with the other admin tools.
+      { view: 'agents', label: 'Team Overview', icon: 'team', where: 'user', menuOrder: 1,
+        badge: () => RWG.data.pendingUsers().length },
+      { view: 'upload', label: 'Upload & Assign', icon: 'upload', where: 'user', menuOrder: 4 },
       // Lead scoring moved into CRM Settings (phase 7); the old view
       // stays registered so a stale deep-link still renders.
     ],
@@ -52,7 +54,7 @@ RWG.modules.register({
   meta: {
     dashboard: { t: 'Command Center', s: 'Team performance, live' },
     leads:     { t: 'All Leads',      s: 'Every lead across the team' },
-    agents:    { t: 'Team',           s: 'Agents & approvals' },
+    agents:    { t: 'Team Overview',  s: 'Agents & approvals' },
     reports:   { t: 'Reports', s: 'Leads — call activity and appointments, week by week' },
     upload:    { t: 'Upload & Assign',s: 'Import and distribute lead lists' },
     archive:   { t: 'Deleted Leads',  s: 'Archived records — restore or erase' },
@@ -63,8 +65,9 @@ RWG.modules.register({
     stats:     { t: 'My Stats',       s: 'Your week so far' }
   },
 
-  // Needs the leads search box and the "New Lead" button in the topbar.
-  chrome: { search: 'leads', newLead: true },
+  // The topbar search is global now, and "New Lead" lives on the leads
+  // screens themselves rather than following you around the whole app.
+  chrome: {},
 
   home: {
     tile: (ctx) => ({

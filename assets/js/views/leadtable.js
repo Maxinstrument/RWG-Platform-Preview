@@ -242,7 +242,7 @@ RWG.leadtable = (function () {
         <input class="input fbar-search" type="search" placeholder="Search name, employer or phone…" value="${U.esc(f.search || '')}">
         <div class="fbar-mrow">${sortSel}${tierChips}</div>
         ${chips ? `<div class="chip-row">${chips}</div>` : ''}
-        <div class="fbar-bottom"><span class="fbar-count">${count} of ${allLeads.length} lead${allLeads.length === 1 ? '' : 's'}</span><span class="fbar-spacer"></span>${clearBtn}${exportBtn}</div>
+        <div class="fbar-bottom"><span class="fbar-count">${count} of ${allLeads.length} lead${allLeads.length === 1 ? '' : 's'}</span><span class="fbar-spacer"></span>${clearBtn}${opts.canAdd ? '<button class="btn btn-gold btn-sm" data-action="add-lead">＋ New lead</button>' : ''}${exportBtn}</div>
       </div>`;
     }
 
@@ -270,7 +270,10 @@ RWG.leadtable = (function () {
       </div>
       <div class="fbar-bottom">
         <span class="fbar-count">${count} of ${allLeads.length} lead${allLeads.length === 1 ? '' : 's'}</span>
+        <input class="input fbar-search fbar-search-inline" type="search"
+               placeholder="Search name, employer or phone…" value="${U.esc(f.search || '')}">
         <span class="fbar-spacer"></span>
+        ${opts.canAdd ? '<button class="btn btn-gold btn-sm" data-action="add-lead">＋ New lead</button>' : ''}
         ${colBtn}
         ${opts.canExport ? `<button class="btn btn-ghost btn-sm" data-action="export-leads" title="Export this view to CSV (opens in Excel)">⬇ Export</button>` : ''}
       </div>

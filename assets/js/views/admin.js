@@ -107,7 +107,7 @@ RWG.views.admin = (function () {
     const selected = (ctx && ctx.selected) || new Set();
     const all = D.leads();
     const filtered = LT.applyFilter(all, f);
-    return LT.filterBar(all, f, filtered.length, { showOwner: true, columns: cols, canExport: true })
+    return LT.filterBar(all, f, filtered.length, { showOwner: true, columns: cols, canExport: true, canAdd: true })
       + (selected.size ? bulkBar(selected.size, ctx && ctx.assignTarget) : '')
       + `<div id="leads-body">${LT.leadsView(filtered, f, { showOwner: true, columns: cols, selectable: true, selected: selected, allLeads: all, empty: 'Try a different filter, or Clear all.' })}</div>`;
   }

@@ -207,7 +207,10 @@ RWG.app = (function () {
       return `<button class="nav-item ${isOn(n) ? 'active' : ''}" data-action="nav" data-view="${n.view}">
         ${ICONS[n.icon] || ''}<span>${n.label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</button>`;
     }).join('');
-    const userNav = allNav.filter(n => n.where === 'user');
+    // Menu order is declared, not inherited from script-tag order, so
+    // Upload sits under Data migration however the modules happen to load.
+    const userNav = allNav.filter(n => n.where === 'user')
+      .sort((a, b) => (a.menuOrder || 50) - (b.menuOrder || 50));
     const userMenuHtml = `
       <div class="user-menu" id="user-menu" hidden>
         <div class="um-head">${U.esc(user.name)}<span>${U.esc(user.email || (role === 'admin' ? 'Owner' : 'Agent'))}</span></div>
@@ -228,7 +231,6 @@ RWG.app = (function () {
           <div class="nav-label">${role === 'admin' ? 'Owner' : (impersonating ? 'Viewing as agent' : 'Agent')}</div>
           ${navHtml}
           <div class="spacer"></div>
-          <a class="nav-item" href="guide.html" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 5h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6v13h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3H3z"/></svg><span>Guide</span></a>
           <button class="nav-item" data-action="logout">${ICONS.logout}<span>Sign out</span></button>
           <div class="side-foot">RWG Platform</div>
         </aside>
@@ -237,8 +239,12 @@ RWG.app = (function () {
           <button class="icon-btn menu-toggle" data-action="toggle-menu">☰</button>
           <div><div class="page-title" id="page-title"></div><div class="page-sub" id="page-sub"></div></div>
           <div class="topbar-spacer"></div>
-          ${chrome.search ? `<div class="topbar-search">${ICONS.search}<input id="global-search" type="search" placeholder="Search leads…" value="${U.esc(state.search)}"></div>` : ''}
-          ${chrome.newLead ? `<button class="btn btn-gold btn-sm" data-action="add-lead" style="white-space:nowrap">＋ New Lead</button>` : ''}
+          <div class="omni-wrap">
+            <div class="topbar-search">${ICONS.search}
+              <input id="global-search" type="search" autocomplete="off"
+                     placeholder="Search people, households, opportunities, tasks, leads…"></div>
+            <div class="omni-panel" id="omni-panel" hidden></div>
+          </div>
           <div class="user-wrap">
             <button class="user-chip" data-action="toggle-user-menu" aria-haspopup="true" aria-expanded="false">
               ${U.avatar(user, 32)}
@@ -256,6 +262,32 @@ RWG.app = (function () {
     renderMain();
   }
 
+  // ── search everything ─────────────────────────────────────
+  function closeOmni() {
+    const p = $('#omni-panel');
+    if (p && !p.hidden) { p.hidden = true; p.innerHTML = ''; }
+  }
+  function paintOmni(q) {
+    const p = $('#omni-panel');
+    if (!p) return;
+    if (!String(q || '').trim()) { closeOmni(); return; }
+    RWG.omni.warm();
+    const rows = RWG.omni.query(q);
+    if (!rows.length) {
+      p.hidden = false;
+      p.innerHTML = `<div class="omni-empty">Nothing matches “${U.esc(q)}”.</div>`;
+      return;
+    }
+    p.hidden = false;
+    p.innerHTML = rows.map(r => {
+      if (r.header) return `<div class="omni-head">${r.icon} ${U.esc(r.header)}<span>${r.total}</span></div>`;
+      if (r.more) return `<div class="omni-more">+${r.more} more</div>`;
+      return `<button class="omni-row"${r.action ? ` data-action="${r.action}" data-id="${U.esc(r.id)}"` : ''}>
+        <span class="t">${U.esc(r.title)}</span>
+        ${r.sub ? `<span class="s">${U.esc(r.sub)}</span>` : ''}</button>`;
+    }).join('');
+  }
+
   function closeUserMenu() {
     const m = $('#user-menu');
     if (m && !m.hidden) m.hidden = true;
@@ -267,8 +299,15 @@ RWG.app = (function () {
   document.addEventListener('click', (e) => {
     const t = (e.target && e.target.nodeType === 1) ? e.target : null;
     if (!t) return;
-    if (t.closest('.user-wrap')) return;
-    closeUserMenu();
+    if (!t.closest('.user-wrap')) closeUserMenu();
+    // A result closes the panel and clears the box; clicking anywhere else
+    // outside it just closes. Either way the query does not linger.
+    if (t.closest('.omni-row')) {
+      const box = $('#global-search'); if (box) box.value = '';
+      closeOmni();
+    } else if (!t.closest('.omni-wrap')) {
+      closeOmni();
+    }
   });
 
   function setMeta() {
@@ -1057,13 +1096,9 @@ RWG.app = (function () {
         return;
       }
       if (e.target.id === 'global-search') {
-        state.search = e.target.value;
-        clearSelection();
-        // Jump to the leads list as you type — only if the Leads module is on.
-        const want = effectiveRole() === 'admin' ? 'leads' : 'mylist';
-        if (RWG.modules.moduleForView(want) && state.view !== want) { state.view = want; setActiveNav(); setMeta(); }
-        renderMain();
-        const s = $('#global-search'); if (s) { s.focus(); }
+        // Paints only the panel, never the page, so the box keeps focus and
+        // the caret while results change underneath it.
+        paintOmni(e.target.value);
         return;
       }
       // Let the active module react to typing in its own inputs.
@@ -1120,7 +1155,17 @@ RWG.app = (function () {
       const cm = RWG.modules.moduleForView(state.view);
       if (cm && cm.onChange) cm.onChange(e, cm.state);
     });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); closeModal(); document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true); } });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeDrawer(); closeModal(); closeOmni(); closeUserMenu();
+        document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true);
+      }
+      // ⌘K / Ctrl-K puts the cursor in the search box from anywhere.
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        const box = $('#global-search');
+        if (box) { e.preventDefault(); box.focus(); box.select(); }
+      }
+    });
     // a fixed popover can't follow a scroll, so close it instead
     window.addEventListener('scroll', () => document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true), true);
 

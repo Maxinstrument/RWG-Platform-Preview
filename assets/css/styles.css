@@ -1138,3 +1138,38 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
 .um-item .ic{width:17px;height:17px;flex:none;color:var(--muted);}
 .um-item:hover .ic,.um-item.on .ic{color:var(--gold);}
 .um-sep{height:1px;background:var(--line);margin:5px 0;}
+
+/* ── Search everything ────────────────────────────────────*/
+.omni-wrap{position:relative;flex:1 1 300px;min-width:0;max-width:460px;}
+.omni-wrap .topbar-search{width:100%;}
+.omni-panel{
+  position:absolute;top:calc(100% + 7px);left:0;right:0;z-index:60;
+  max-height:min(62vh,520px);overflow-y:auto;padding:6px;
+  background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);
+  box-shadow:0 20px 48px -20px rgba(14,36,64,.45), 0 2px 6px -2px rgba(14,36,64,.16);
+}
+.omni-panel[hidden]{display:none;}
+.omni-head{
+  display:flex;align-items:center;gap:6px;
+  padding:9px 11px 5px;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);
+}
+.omni-head span{margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none;opacity:.7;}
+.omni-row{
+  display:block;width:100%;text-align:left;cursor:pointer;
+  padding:7px 11px;border:none;background:transparent;border-radius:var(--radius-sm);
+  font-family:inherit;transition:background .12s;
+}
+.omni-row:hover,.omni-row:focus-visible{background:var(--field);outline:none;}
+.omni-row .t{display:block;font-size:13.5px;color:var(--ink);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.omni-row .s{display:block;font-size:11.5px;color:var(--muted);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.omni-more{padding:3px 11px 8px;font-size:11.5px;color:var(--muted);}
+.omni-empty{padding:22px 14px;text-align:center;font-size:13px;color:var(--muted);}
+/* The leads table keeps its own search now that the header one is global */
+.fbar-search-inline{max-width:270px;margin-left:var(--s3);}
+@media (max-width:900px){
+  .omni-wrap{flex:1 1 180px;}
+  .fbar-search-inline{display:none;}
+}

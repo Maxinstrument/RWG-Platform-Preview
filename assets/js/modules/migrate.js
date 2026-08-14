@@ -198,7 +198,7 @@ window.RWG = window.RWG || {};
     title: 'Data migration',
     enabled: true,
     roles: ['admin'],
-    nav: [{ view: 'migrate', label: 'Data migration', icon: 'upload', where: 'user' }],
+    nav: [{ view: 'migrate', label: 'Data migration', icon: 'upload', where: 'user', menuOrder: 3 }],
     meta: { migrate: { t: 'Data migration', s: 'One-time import from the old scorecard' } },
 
     onEnter(view, ctx) { if (!D().isStarted()) D().init(ctx.userObj || RWG.auth.currentUser(), RWG.app.renderMain); },
