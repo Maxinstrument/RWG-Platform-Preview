@@ -91,14 +91,9 @@ window.RWG = window.RWG || {};
   function canEdit(c, user) { return user.role === 'admin' || c.agentUid === user.id; }
   const FAM = (p) => (p === 'wl' || p === 'term' || p === 'di') ? 'ins' : (p === 'annuity' ? 'ann' : (p === 'inv' ? 'inv' : 'flat'));
 
-  // Team-internal notes, but still no scripts or handlers in stored HTML.
-  function cleanHtml(html) {
-    return String(html || '')
-      .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
-      .replace(/<\s*(script|style|iframe|object|embed)[^>]*\/?\s*>/gi, '')
-      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-      .replace(/(href|src)\s*=\s*(["']?)\s*javascript:[^"'>\s]*\2/gi, '$1="#"');
-  }
+  // The note editor and its scrubber are shared (ui.js) — the opportunity
+  // window was where they started, not where they belong.
+  const cleanHtml = (html) => U().cleanHtml(html);
 
   let form = null;   // live money model while the window is open
 
@@ -197,10 +192,6 @@ window.RWG = window.RWG || {};
         </div>
       </div>` : '';
 
-    const details = cleanHtml((c && c.details) || '');
-    const toolBtn = (cmd, label, title) =>
-      `<button type="button" class="btn btn-quiet btn-sm op2-tool" data-cmd="${cmd}" title="${esc(title)}">${label}</button>`;
-
     const mount = document.getElementById('modal-mount');
     mount.innerHTML = `<div class="scrim" data-action="close-modal"></div>
       <div class="modal-card modal-lg">
@@ -260,16 +251,8 @@ window.RWG = window.RWG || {};
           </div>
 
           <div class="field-group"><label class="lbl">Details</label>
-            ${editable ? `<div class="rt-toolbar">
-              ${toolBtn('bold', '<b>B</b>', 'Bold')}${toolBtn('italic', '<i>I</i>', 'Italic')}${toolBtn('underline', '<u>U</u>', 'Underline')}
-              ${toolBtn('insertUnorderedList', '•≡', 'Bullet list')}${toolBtn('insertOrderedList', '1≡', 'Numbered list')}
-              ${toolBtn('link', '🔗', 'Insert link')}
-              <span class="topbar-spacer"></span>
-              ${toolBtn('date', 'Insert date', 'Stamp today into the notes')}
-            </div>` : ''}
-            <div id="op2-details" class="rt-body" data-ph="Anything worth remembering about this opportunity…"
-              ${editable ? 'contenteditable="true"' : ''}
-              style="${editable ? '' : 'border-radius:var(--radius-sm)'}">${details}</div></div>
+            ${U().noteEditor({ id: 'op2-details', value: (c && c.details) || '', editable: editable,
+              placeholder: 'Anything worth remembering about this opportunity…' })}</div>
 
           ${correct}
           ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}
@@ -327,20 +310,6 @@ window.RWG = window.RWG || {};
       applyMoney(form, 'fyc', fycIn.value);
       paintStatic();
     });
-    document.querySelectorAll('.op2-tool').forEach(b => {
-      b.addEventListener('mousedown', e => e.preventDefault());   // keep the text selection
-      b.addEventListener('click', () => {
-        const ed = byId('op2-details'); if (!ed) return;
-        ed.focus();
-        const cmd = b.dataset.cmd;
-        if (cmd === 'link') {
-          const url = prompt('Link to:'); if (url) document.execCommand('createLink', false, url);
-        } else if (cmd === 'date') {
-          const d = new Date();
-          document.execCommand('insertText', false, (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear() + ' — ');
-        } else document.execCommand(cmd, false, null);
-      });
-    });
     paintStatic();
     const t = byId('op2-title'); if (t && !c) t.focus();
   }
@@ -370,7 +339,7 @@ window.RWG = window.RWG || {};
     const dflt = sc.defaultRate(product);
     const custom = form.ratePct && dflt != null && Math.abs(form.ratePct / 100 - dflt) > 1e-6;
     const num = (i) => { const v = g(i); return v === '' ? null : (Number(v) || 0); };
-    const ed = document.getElementById('op2-details');
+    const hasDetails = !!document.getElementById('op2-details');
 
     const patch = {
       recordId: id || undefined,
@@ -384,7 +353,7 @@ window.RWG = window.RWG || {};
       benefit: num('op2-benefit'), renewalAnnual: num('op2-renewal'),
       coCreditUids: coUids, coCreditNames: coNames,
       title: title, sourceNote: g('op2-srcnote').trim() || null,
-      details: ed ? cleanHtml(ed.innerHTML) : (c ? c.details : null),
+      details: hasDetails ? U().noteRead('op2-details') : (c ? c.details : null),
       householdId: (c && c.householdId) || el.dataset.hh || null,
       stageId: c ? c.stageId : 'uncovered'
     };
@@ -486,6 +455,8 @@ window.RWG = window.RWG || {};
           ${tracks}
           <span class="pl-divider"></span>
           <button class="btn btn-sm btn-navy" data-action="nav" data-view="cases">☰ All cases</button>
+          <span class="topbar-spacer"></span>
+          <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
         </div>
         <div class="filterbar cs-bar">
         <div class="cs-bar-row">

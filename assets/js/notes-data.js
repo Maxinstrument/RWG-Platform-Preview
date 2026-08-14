@@ -66,11 +66,18 @@ RWG.notes = (function () {
   const MAX = 4000;
   function stripId(o) { const p = Object.assign({}, o); delete p.id; return p; }
 
-  // Notes are plain text. The rich-text note lives on the opportunity
-  // window, where it is scrubbed on the way in and out; a feed post has
-  // no reason to carry markup, and not accepting any is the cheapest way
-  // to be sure none is ever rendered.
+  // A note carries its words twice: `body` is the plain text — what gets
+  // searched, mentioned, previewed in the Trash — and `bodyHtml` is the
+  // same words with the formatting the writer applied. Older notes have
+  // no bodyHtml and read exactly as they always did.
   const plain = (s) => String(s == null ? '' : s).replace(/\s+$/, '').slice(0, MAX);
+  const MAX_HTML = MAX * 3;
+  function richOrNull(html, body) {
+    const s = String(html == null ? '' : html).trim();
+    if (!s || s === body) return null;
+    const clean = RWG.ui ? RWG.ui.cleanHtml(s) : s;
+    return /<[a-z]/i.test(clean) ? clean.slice(0, MAX_HTML) : null;
+  }
 
   // "@Maria" in the body, resolved against the book so a mention is a
   // pointer rather than a string. Unmatched @words stay as typed.
@@ -108,7 +115,7 @@ RWG.notes = (function () {
       if (h) rel = { relatedType: 'household', relatedId: h.id, relatedLabel: h.name };
     }
     const n = Object.assign({
-      id: ref.id, body: body,
+      id: ref.id, body: body, bodyHtml: richOrNull((fields || {}).bodyHtml, body),
       authorUid: (me && me.id) || null, authorName: (me && me.name) || '',
       mentions: mentions,
       createdAt: now(), updatedAt: now()

@@ -212,6 +212,32 @@
   </section>
 
   <section class="sg-sec">
+    <h2>Notes</h2>
+    <p>Every place in the CRM where you write something about a person, a family or a case is
+      this one control — the opportunity’s Details, a household’s Notes, a call log, the Home
+      composer. Build it with <code>RWG.ui.noteEditor({id, value, placeholder})</code> and read it
+      back with <code>noteRead(id)</code> (HTML) or <code>noteText(id)</code> (the words alone).
+      Never hand-roll a <code>&lt;textarea&gt;</code> for a note.</p>
+    <div class="field-group" style="max-width:640px">
+      <label class="lbl">Details</label>
+      <div class="rt-toolbar">
+        <button type="button" class="btn btn-quiet btn-sm"><b>B</b></button>
+        <button type="button" class="btn btn-quiet btn-sm"><i>I</i></button>
+        <button type="button" class="btn btn-quiet btn-sm"><u>U</u></button>
+        <button type="button" class="btn btn-quiet btn-sm">•≡</button>
+        <button type="button" class="btn btn-quiet btn-sm">1≡</button>
+        <button type="button" class="btn btn-quiet btn-sm">🔗</button>
+        <span class="topbar-spacer"></span>
+        <button type="button" class="btn btn-quiet btn-sm">Insert date</button>
+      </div>
+      <div class="rt-body">8/13/2026 · Carlos Temperan — met at the Coral Gables office.
+        Wants the <b>DROP</b> figures before March.</div>
+      <div class="hint">Insert date stamps the day <em>and</em> who stamped it: in a book the whole
+        team reads, an unsigned date is half a fact.</div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
     <h2>Table</h2>
     <div class="table-wrap">
       <table class="data">

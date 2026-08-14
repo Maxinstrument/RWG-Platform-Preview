@@ -306,14 +306,14 @@ window.RWG = window.RWG || {};
     const me = RWG.auth.currentUser();
     if (RWG.notes && RWG.notes.isStarted()) RWG.notes.all().forEach(n => push(
       n.createdAt, n.authorName, 'said', n.relatedLabel || '',
-      { body: n.body, noteId: n.id, mine: !!(me && n.authorUid === me.id) || ctx.isAdmin }));
+      { body: n.bodyHtml || n.body, noteId: n.id, mine: !!(me && n.authorUid === me.id) || ctx.isAdmin }));
     ev.sort((a, b) => b.ts - a.ts);
     const top = ev.slice(0, 9);
     if (!top.length) return card('Team activity', 'last 30 days', emptyRow('Quiet so far — moves, closes and completed steps land here as they happen.'));
     const rows = top.map(e => `<div class="list-row" style="gap:9px">
       ${avatar(e.who)}
       <span style="min-width:0;flex:1"><span style="font-size:12.5px;color:var(--ink)">${esc(firstName(e.who))} ${e.txt}</span>
-      ${e.body ? `<span class="hm-note-body">${esc(e.body)}</span>` : ''}
+      ${e.body ? `<span class="hm-note-body">${U().noteHtml(e.body)}</span>` : ''}
       ${e.sub ? `<span class="cell-sub" style="display:block;font-size:11px">${esc(e.sub)}</span>` : ''}</span>
       ${e.noteId && e.mine ? `<button class="btn btn-quiet btn-sm" style="flex:none;padding:1px 7px" data-action="hm-note-del" data-id="${esc(e.noteId)}" title="Delete this update">✕</button>` : ''}
       <span class="cell-sub" style="flex:none;font-size:11px">${timeAgo(e.ts)}</span>
@@ -626,8 +626,8 @@ window.RWG = window.RWG || {};
         <div class="hm-compose-row">
           ${U().avatar(user, 34)}
           <div style="flex:1;min-width:0">
-            <textarea id="hm-note" rows="2" placeholder="What happened? Type @ and a client's name to file it against their household."
-              ${disabled ? 'disabled' : ''}></textarea>
+            ${U().noteEditor({ id: 'hm-note', editable: !disabled, minHeight: '78px',
+              placeholder: "What happened? Type @ and a client's name to file it against their household." })}
             <div class="flex" style="gap:8px;align-items:center;margin-top:8px">
               <span class="hint" style="margin:0">${disabled
                 ? 'Connecting…'
@@ -767,10 +767,11 @@ window.RWG = window.RWG || {};
         if (st.compose === 'update') { const b = document.getElementById('hm-note'); if (b) b.focus(); }
       },
       'hm-note-post': () => {
-        const box = document.getElementById('hm-note');
-        const body = box ? box.value : '';
-        if (!body.trim()) { U().toast('Say something first'); return; }
-        const n = RWG.notes && RWG.notes.addNote({ body: body });
+        // The words are what gets searched, mentioned and previewed; the
+        // formatting rides along beside them.
+        const body = U().noteText('hm-note');
+        if (!body) { U().toast('Say something first'); return; }
+        const n = RWG.notes && RWG.notes.addNote({ body: body, bodyHtml: U().noteRead('hm-note') });
         if (!n) { U().toast('Could not post that'); return; }
         st.compose = '';
         RWG.app.renderMain();

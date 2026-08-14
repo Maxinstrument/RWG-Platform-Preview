@@ -965,6 +965,8 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
   padding:12px 14px;background:#fff;color:var(--ink);font-size:13.5px;line-height:1.6;
 }
 .rt-body:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,161,77,.18);}
+/* Read-only: no toolbar above it, so it keeps all four corners */
+.rt-body.rt-ro{border-radius:var(--radius-sm);background:var(--field);}
 .rt-body > :first-child{margin-top:0;}
 .rt-body p{margin:0 0 8px;}
 .rt-body ul,.rt-body ol{margin:0 0 8px;padding-left:20px;}
@@ -1006,19 +1008,23 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .tag-chip.on{background:var(--gold);border-color:var(--gold);color:#fff;}
 .tag-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77,.28);}
 
-/* ── Contacts screen ──────────────────────────────────────*/
-.ct-shell{display:grid;grid-template-columns:minmax(0,1fr) 288px;gap:var(--s4);align-items:start;}
-.ct-rail{display:flex;flex-direction:column;gap:var(--s4);}
+/* ── Contacts screen ──────────────────────────────────────
+   One full-width list. Tags and Export used to sit in a right
+   rail; tags are a filter in the toolbar now and Export is a
+   button beside Order, so the table gets the whole width. */
+.ct-shell{min-width:0;}
 .ct-name{display:flex;align-items:center;gap:10px;min-width:0;}
 .ct-name .cell-name{text-decoration:none;}
 .ct-name .cell-name:hover{color:var(--gold);}
-.ct-shell td a{color:var(--navy);text-decoration:none;}
-.ct-shell td a:hover{color:var(--gold);text-decoration:underline;}
-@media (max-width:1080px){
-  .ct-shell{grid-template-columns:minmax(0,1fr);}
-  .ct-rail{flex-direction:row;flex-wrap:wrap;}
-  .ct-rail > *{flex:1 1 260px;}
+.ct-shell td a,.ct-shell td .btn-link{color:var(--navy);text-decoration:none;}
+.ct-shell td a:hover,.ct-shell td .btn-link:hover{color:var(--gold);text-decoration:underline;}
+/* A button that reads as a link: used where a cell points somewhere but
+   the destination is a view, not a URL. */
+.btn-link{
+  background:none;border:0;padding:0;margin:0;font:inherit;font-size:12.5px;
+  color:var(--muted);cursor:pointer;text-align:left;
 }
+.btn-link:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77,.28);border-radius:3px;}
 
 /* ── Tasks screen ─────────────────────────────────────────
    Same list + rail shape as Contacts; the rail is narrower
@@ -1057,6 +1063,12 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
   background:var(--field);border:1px solid var(--line);border-radius:var(--radius-sm);
   font-size:12.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;
 }
+/* A written note carries its formatting into the feed and the timeline;
+   its blocks must not push the row apart at the top and bottom. */
+.hm-note-body > :first-child,.tl-note > :first-child{margin-top:0;}
+.hm-note-body > :last-child,.tl-note > :last-child{margin-bottom:0;}
+.hm-note-body p,.tl-note p{margin:0 0 6px;}
+.hm-note-body ul,.hm-note-body ol,.tl-note ul,.tl-note ol{margin:0 0 6px;padding-left:18px;}
 
 /* ── Report builder ───────────────────────────────────────
    Three labelled bands: what, narrowed how, showing what. The

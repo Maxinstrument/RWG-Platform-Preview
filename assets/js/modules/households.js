@@ -33,6 +33,21 @@ window.RWG = window.RWG || {};
   }
   const userName = (uid) => { const u = D().user(uid); return u ? u.name : ''; };
 
+  // There is one list of households and it lives inside Contacts. Landing on
+  // the old standalone view — a bookmark, an old button, "← All households" —
+  // hands you straight there instead of showing a second, slightly different
+  // copy of the same book. Returns false only if Contacts is switched off,
+  // in which case listHtml() below is still the fallback.
+  function toHouseholdList() {
+    const ctm = RWG.modules.get('contacts');
+    if (!ctm || ctm.enabled === false) return false;
+    ctm.state.scope = 'households';
+    st.currentId = null;
+    RWG.app.nav('contacts');
+    return true;
+  }
+  const hasContactsList = () => { const m = RWG.modules.get('contacts'); return !!m && m.enabled !== false; };
+
   // ── modals ─────────────────────────────────────────────────
   const mount = () => document.getElementById('modal-mount');
   function modal(title, sub, bodyHtml, footHtml) {
@@ -327,8 +342,11 @@ window.RWG = window.RWG || {};
       || H().contactName(a).localeCompare(H().contactName(b)));
     const isAdmin = ctx.isAdmin;
 
+    // The whole row opens the person, the same as on Contacts. Everything
+    // inside it that does its own thing carries its own action, and the
+    // kernel dispatches to the innermost match.
     const peopleRows = people.map(c => `
-      <tr>
+      <tr class="cs-row" data-action="hh-person-edit" data-id="${esc(c.id)}">
         <td><div class="cell-name">${esc(H().contactName(c) || '(no name)')}</div>
             <div class="cell-sub">${esc(c.employer || '')}</div></td>
         <td>${esc(c.relationship || '—')}</td>
@@ -445,7 +463,8 @@ window.RWG = window.RWG || {};
 
       <div class="card" style="margin-top:18px">
         <div class="card-head"><h3>Notes</h3></div>
-        <textarea id="hh-notes" style="min-height:90px" placeholder="Anything the whole team should know about this family…">${esc(h.notes || '')}</textarea>
+        ${U().noteEditor({ id: 'hh-notes', value: h.notes || '',
+          placeholder: 'Anything the whole team should know about this family…' })}
         <div class="flex" style="justify-content:flex-end;margin-top:10px">
           <button class="btn btn-navy btn-sm" data-action="hh-notes-save" data-id="${esc(h.id)}">Save notes</button>
         </div>
@@ -534,7 +553,7 @@ window.RWG = window.RWG || {};
 
   function opportunitiesCard(h) {
     const SD = RWG.scorecardData, SC = RWG.scorecard;
-    if (!SD.isStarted()) return '';
+    if (!SD || !SC || !SD.isStarted()) return '';
     const opps = SD.cases().filter(c => c.householdId === h.id)
       .sort((a, b) => String(b.openedWeek).localeCompare(String(a.openedWeek)));
     const open = opps.filter(c => c.state === 'Opened' || c.state === 'Submitted').length;
@@ -608,6 +627,13 @@ window.RWG = window.RWG || {};
       if (RWG.pipelines) RWG.pipelines.init();
       if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
       if (RWG.wf) RWG.wf.init();   // the ▶ Workflow button launches from here
+
+      // The list moved into Contacts; a household that no longer exists
+      // (deleted elsewhere, stale link) goes to the same place rather than
+      // silently showing the list under the wrong title.
+      if (view === 'households') { toHouseholdList(); return; }
+      if (view === 'household' && H().isStarted()
+        && !(st.currentId && H().household(st.currentId))) toHouseholdList();
     },
 
     onInput(e) {
@@ -641,7 +667,7 @@ window.RWG = window.RWG || {};
         mount().innerHTML = '';
         RWG.app.nav('household');
       },
-      'hh-back': () => { st.currentId = null; RWG.app.nav('households'); },
+      'hh-back': () => { if (!toHouseholdList()) { st.currentId = null; RWG.app.nav('households'); } },
 
       // household head
       'hh-edit': (el) => { const h = H().household(el.dataset.id); if (h) editHouseholdModal(h); },
@@ -658,15 +684,17 @@ window.RWG = window.RWG || {};
         RWG.app.renderMain();
       },
       'hh-notes-save': (el) => {
-        const ta = document.getElementById('hh-notes');
-        H().saveHousehold({ id: el.dataset.id, notes: ta ? ta.value : '' });
+        H().saveHousehold({ id: el.dataset.id, notes: U().noteRead('hh-notes') });
         U().toast('Notes saved', true);
       },
       'hh-delete': (el) => {
         const h = H().household(el.dataset.id); if (!h) return;
         if (H().contactsFor(h.id).length) { U().toast('Move its people out first'); return; }
         if (!confirm(`Delete "${h.name}"? Admins only, and it cannot be undone.`)) return;
-        H().deleteHousehold(h.id).then(() => { st.currentId = null; RWG.app.nav('households'); U().toast('Household deleted'); });
+        H().deleteHousehold(h.id).then(() => {
+          if (!toHouseholdList()) { st.currentId = null; RWG.app.nav('households'); }
+          U().toast('Household deleted');
+        });
       },
 
       // people
@@ -746,10 +774,11 @@ window.RWG = window.RWG || {};
       if (!H().isStarted()) return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Loading the book…</h3></div>`;
       if (view === 'household') {
         const h = st.currentId && H().household(st.currentId);
-        if (!h) { return listHtml(user, ctx); }
-        return detailHtml(h, user, ctx);
+        if (h) return detailHtml(h, user, ctx);
       }
-      return listHtml(user, ctx);
+      // onEnter (which runs next) redirects to Contacts, so this paints only
+      // when Contacts is switched off and this really is the households list.
+      return hasContactsList() ? '' : listHtml(user, ctx);
     }
   });
 })();

@@ -127,6 +127,7 @@ window.RWG = window.RWG || {};
         <span class="topbar-spacer"></span>
         ${lost ? `<span class="chip tier-low" title="Lost cases on this track — browse them in All cases">Lost · ${lost}</span>` : ''}
         <select id="pl-owner" class="fbar-select" style="width:auto"><option value="">All owners</option>${ownerOpts}</select>
+        <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
       </div>
       <p class="muted" style="font-size:12.5px;margin:0 0 12px">
         Drag a card, or use ‹ › on the card. Entering <b style="color:var(--gold)">Application</b> (or any gold-dot stage)

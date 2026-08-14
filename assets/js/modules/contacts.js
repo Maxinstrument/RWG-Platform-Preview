@@ -10,8 +10,10 @@
    so there is exactly one place a person is edited from. This
    module is a view over that, plus tags.
 
-   Clicking a name opens their household, because that is where
-   their cases, tasks and dates already are.
+   Clicking a person opens that person. The household is one click
+   further on, from the name in the Household column — a contacts
+   list that answers "who is this?" with a page about their family
+   is answering a question nobody asked.
    ============================================================ */
 window.RWG = window.RWG || {};
 
@@ -87,9 +89,9 @@ window.RWG = window.RWG || {};
   }
 
   // The whole row is the target. Anything inside it that does its own
-  // thing — the Edit button, a tag chip, a phone or email link — carries
-  // its own action (or is a link), and the kernel dispatches to the
-  // innermost match, so those keep working.
+  // thing — the Edit button, a tag chip, the household name, a phone or
+  // email link — carries its own action (or is a link), and the kernel
+  // dispatches to the innermost match, so those keep working.
   function row(c) {
     const h = hhOf(c);
     const nm = H().contactName(c) || '(no name)';
@@ -108,7 +110,8 @@ window.RWG = window.RWG || {};
             <div class="cell-sub">${esc(c.relationship || '')}</div>` : dash}</td>
       <td>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : dash}</td>
       <td>${tagCells(c)}</td>
-      <td>${h ? `<span class="cell-sub">${esc(h.name)}</span>` : dash}
+      <td>${h ? `<button class="btn-link" data-action="hh-open" data-id="${esc(h.id)}"
+                   title="Open the ${esc(h.name)}">${esc(h.name)}</button>` : dash}
           ${adv ? `<div class="cell-sub" style="opacity:.75">${esc(adv)}</div>` : ''}</td>
       <td class="end"><button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">Edit</button></td>
     </tr>`;
@@ -160,29 +163,21 @@ window.RWG = window.RWG || {};
     </tr>`;
   }
 
-  // ── the right rail ────────────────────────────────────────
-  function railHtml(list) {
-    const tags = H().allTags();
-    const tagCard = `<div class="card flush">
-      <div class="list-head"><span class="t">Tags</span>
-        <span class="topbar-spacer"></span>
-        ${st.tag ? '<button class="btn btn-quiet btn-sm" data-action="ct-tag" data-tag="">Clear</button>' : ''}</div>
-      ${tags.length
-        ? `<div style="padding:var(--s3)"><div class="tagwrap">${tags.map(t =>
-            `<button class="tag-chip${st.tag.toLowerCase() === t.tag.toLowerCase() ? ' on' : ''}"
-               data-action="ct-tag" data-tag="${esc(t.tag)}">${esc(t.tag)} <span style="opacity:.6">${t.count}</span></button>`).join('')}</div></div>`
-        : `<p class="list-hint">No tags yet. Add them on any person — "Client", "FRS", "March review" — and they become filters here.</p>`}
-    </div>`;
-
-    const exportCard = `<div class="card flush">
-      <div class="list-head"><span class="t">Export</span></div>
-      <div style="padding:var(--s3)">
-        <button class="btn btn-ghost btn-sm" data-action="ct-export" style="width:100%">⤓ Export ${list.length} to CSV</button>
-        <p class="hint" style="margin-top:8px">Exports exactly what the filters above are showing, in the order shown.</p>
-      </div>
-    </div>`;
-
-    return tagCard + exportCard;
+  function exportHouseholds() {
+    const list = householdRows();
+    if (!list.length) { U().toast('Nothing to export'); return; }
+    const sd = RWG.scorecardData;
+    const head = ['Household', 'Primary contact', 'People', 'Opportunities', 'Advisor', 'Source', 'A360', 'Created'];
+    const data = list.map(h => {
+      const prim = H().primaryContact(h.id);
+      const opps = (sd && sd.isStarted()) ? sd.cases().filter(c => c.householdId === h.id).length : '';
+      const adv = h.advisorName || (h.advisorUid ? (D().user(h.advisorUid) || {}).name : '') || '';
+      return [h.name, prim ? H().contactName(prim) : '', H().contactsFor(h.id).length, opps, adv,
+        h.source || '', h.a360Complete ? 'complete' : 'pending',
+        h.createdAt ? new Date(h.createdAt).toISOString().slice(0, 10) : ''];
+    });
+    U().downloadCSV(`RWG_households_${list.length}_${U().stampName()}.csv`, U().toCSV([head].concat(data)));
+    U().toast(`Exported ${list.length} household${list.length === 1 ? '' : 's'}`, true);
   }
 
   // ── the screen ────────────────────────────────────────────
@@ -197,6 +192,14 @@ window.RWG = window.RWG || {};
       `<option value="${esc(r)}" ${st.rel === r ? 'selected' : ''}>${esc(r)}</option>`).join('');
     const scopeOpts = [['people', 'People'], ['households', 'Households']].map(s =>
       `<option value="${s[0]}" ${st.scope === s[0] ? 'selected' : ''}>${s[1]}</option>`).join('');
+    // Tags have no registry — one exists because somebody wears it — so the
+    // list is the tags in use, most-used first, with how many wear each.
+    const tags = H().allTags();
+    // A tag you are filtered on stays listed even after the last person
+    // loses it — otherwise the filter is still on with nothing to switch off.
+    if (st.tag && !tags.some(t => t.tag.toLowerCase() === st.tag.toLowerCase())) tags.push({ tag: st.tag, count: 0 });
+    const tagOpts = tags.map(t =>
+      `<option value="${esc(t.tag)}" ${st.tag.toLowerCase() === t.tag.toLowerCase() ? 'selected' : ''}>${esc(t.tag)} · ${t.count}</option>`).join('');
 
     const sortBtn = (id, label) =>
       `<button class="btn btn-sm ${st.sort === id ? 'btn-navy' : 'btn-ghost'}" data-action="ct-sort" data-sort="${id}">${label}</button>`;
@@ -234,6 +237,8 @@ window.RWG = window.RWG || {};
           <div class="flex" style="gap:6px;align-items:center">
             <span class="cell-sub" style="margin-right:2px">Order</span>
             ${sortBtn('az', 'A–Z')}${sortBtn('za', 'Z–A')}${sortBtn('recent', 'Recent')}${sortBtn('created', 'Newest')}
+            <button class="btn btn-ghost btn-sm" data-action="ct-export"
+              title="Exports exactly what the filters are showing, in the order shown">⤓ Export</button>
             ${isHH
               ? `<button class="btn btn-gold btn-sm" data-action="hh-new">＋ New household</button>`
               : `<button class="btn btn-gold btn-sm" data-action="hh-person-add">＋ Add contact</button>`}
@@ -246,8 +251,7 @@ window.RWG = window.RWG || {};
                  value="${esc(st.q)}">
           <select id="ct-advisor"><option value="">Any advisor</option>${advOpts}</select>
           ${isHH ? '' : `<select id="ct-rel"><option value="">Any relationship</option>${relOpts}</select>`}
-          ${st.tag ? `<span class="chip tier-gold">tag: ${esc(st.tag)}</span>
-                      <button class="btn btn-quiet btn-sm" data-action="ct-tag" data-tag="">Clear tag</button>` : ''}
+          <select id="ct-tagsel" title="Tags in use"><option value="">Any tag</option>${tagOpts}</select>
           <span class="topbar-spacer"></span>
           ${isHH ? `<button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>` : ''}
           ${isHH && unattached ? `<button class="btn btn-navy btn-sm" data-action="nav" data-view="grouping"
@@ -255,7 +259,6 @@ window.RWG = window.RWG || {};
         </div>
         ${list.length ? table : empty}
       </div>
-      <div class="ct-rail">${railHtml(isHH ? [] : list)}</div>
     </div>`;
   }
 
@@ -264,7 +267,9 @@ window.RWG = window.RWG || {};
     title: 'Contacts',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'contacts', label: 'Contacts', icon: 'person' }],
+    // A household is a contact record seen at family grain, so Contacts stays
+    // lit while you are on one — you did not leave the area.
+    nav: [{ view: 'contacts', label: 'Contacts', icon: 'person', also: ['households', 'household'] }],
     meta: { contacts: { t: 'Contacts', s: 'Every person in the book' } },
     state: st,
 
@@ -297,24 +302,19 @@ window.RWG = window.RWG || {};
       if (e.target.id === 'ct-scope') { st.scope = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-advisor') { st.advisor = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-rel') { st.rel = e.target.value; RWG.app.renderMain(); }
+      if (e.target.id === 'ct-tagsel') { st.tag = e.target.value; RWG.app.renderMain(); }
     },
 
     actions: {
-      // Open a person: their household is where their cases, tasks and
-      // dates already live, so that is the record. A phone or email link
-      // inside the row is a real link and must win over the row.
+      // Open a person: the person. The person form is owned by Households —
+      // one place a human is edited from — so this hands off to it. A phone
+      // or email link inside the row is a real link and must win over the row.
       'ct-open': (el, e) => {
         if (e && e.target && e.target.closest && e.target.closest('a[href]')) return;
         const c = H().contact(el.dataset.id);
         if (!c) return;
-        if (!c.householdId) {
-          // Shouldn't happen — every person is created into a household —
-          // but say so rather than doing nothing if it ever does.
-          U().toast('That person is not attached to a household yet');
-          return;
-        }
         const hhm = RWG.modules.get('households');
-        if (hhm) hhm.actions['hh-open']({ dataset: { id: c.householdId } }, e);
+        if (hhm) hhm.actions['hh-person-edit']({ dataset: { id: c.id } }, e);
       },
       'ct-sort': (el) => { st.sort = el.dataset.sort; RWG.app.renderMain(); },
       'ct-tag': (el) => {
@@ -323,7 +323,10 @@ window.RWG = window.RWG || {};
         st.tag = (t && t.toLowerCase() === st.tag.toLowerCase()) ? '' : t;
         RWG.app.renderMain();
       },
+      // Exports what the screen is showing — people or households, filtered
+      // and in the order on screen. Anything else is a different report.
       'ct-export': () => {
+        if (st.scope === 'households') { exportHouseholds(); return; }
         const list = rows();
         if (!list.length) { U().toast('Nothing to export'); return; }
         const head = ['First name', 'Last name', 'Relationship', 'Phone', 'Email', 'Date of birth',

@@ -74,7 +74,7 @@ RWG.views.drawer = function (leadId, opts) {
       <div class="tl-body">
         <div class="tl-h">${U.esc(a.type)} ${a.disposition ? `<span class="disp">— ${U.esc(a.disposition)}</span>` : ''} ${a.reached ? '<span class="chip tier-high" style="margin-left:4px">Reached</span>' : ''}</div>
         <div class="tl-meta">${by ? U.esc(by.name) + ' · ' : ''}${U.fmtDateTime(a.at)}</div>
-        ${a.note ? `<div class="tl-note">${U.esc(a.note)}</div>` : ''}
+        ${a.note ? `<div class="tl-note">${U.noteHtml(a.note)}</div>` : ''}
       </div></div>`;
   }).join('') : `<p class="muted" style="font-size:13.5px">No activity logged yet.</p>`;
 
@@ -119,7 +119,7 @@ RWG.views.drawer = function (leadId, opts) {
 
   const notesSection = (l.notes && l.notes.trim()) ? `
       <div class="section-title">Notes</div>
-      <div class="card tight" style="white-space:pre-wrap;font-size:13px;line-height:1.55;color:var(--ink)">${U.esc(l.notes)}</div>` : '';
+      <div class="card tight" style="white-space:pre-wrap;font-size:13px;line-height:1.55;color:var(--ink)">${U.noteHtml(l.notes)}</div>` : '';
 
   const assignRow = isAdmin ? `
     <div class="detail-item"><div class="k">Assigned to</div>
@@ -201,7 +201,7 @@ RWG.views.drawer = function (leadId, opts) {
             <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;padding-top:8px">
               <input type="checkbox" id="act-reached" style="width:auto"> Counts as a <b style="color:var(--good)">reach</b></label></div>
         </div>
-        <textarea id="act-note" placeholder="Notes from the call…"></textarea>
+        ${U.noteEditor({ id: 'act-note', placeholder: 'Notes from the call…', minHeight: '84px' })}
         <div class="mt-8" style="display:flex;justify-content:flex-end;gap:8px">
           <button class="btn btn-ghost btn-sm" data-action="toggle-callback" data-id="${l.id}">📞 Log a Callback</button>
           <button class="btn btn-navy btn-sm" data-action="save-activity" data-id="${l.id}">＋ Log it</button>

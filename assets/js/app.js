@@ -453,7 +453,7 @@ RWG.app = (function () {
         <div class="field-row">${fg('Plan Type', sel('nl-planType', D.PLAN_TYPES, "Don't Know"))}${fg('Member Class', sel('nl-memberClass', D.MEMBER_CLASSES, 'Regular'))}</div>
         <div class="field-row">${fg('AFC / Salary', `<input id="nl-afc" type="number">`)}${fg('Employer', `<input id="nl-employer" type="text">`)}</div>
         ${assignRow}
-        ${fg('Notes', `<textarea id="nl-notes" placeholder="Context — where this lead came from, etc."></textarea>`)}
+        ${fg('Notes', U.noteEditor({ id: 'nl-notes', minHeight: '84px', placeholder: 'Context — where this lead came from, etc.' }))}
         <p class="gate-error" id="nl-err"></p>
       </div>
       <div class="modal-foot">
@@ -474,7 +474,7 @@ RWG.app = (function () {
       source: v('nl-source'), attended: v('nl-attended'),
       age: v('nl-age'), yos: v('nl-yos'), afc: v('nl-afc'),
       planType: v('nl-planType'), memberClass: v('nl-memberClass'),
-      employer: v('nl-employer'), notes: v('nl-notes'),
+      employer: v('nl-employer'), notes: U.noteRead('nl-notes'),
       assignedTo: (u.role === 'admin') ? (v('nl-assign') || null) : u.id
     };
     const lead = D.addLead(fields, u.id);
@@ -552,7 +552,7 @@ RWG.app = (function () {
     const dispo = $('#act-dispo') ? $('#act-dispo').value : '';
     let reached = $('#act-reached') ? $('#act-reached').checked : false;
     if (dispo === 'Reached (pitched)') reached = true;
-    const note = $('#act-note') ? $('#act-note').value.trim() : '';
+    const note = U.noteRead('act-note');
     D.addActivity(id, { type, disposition: dispo, note, reached, by: RWG.auth.currentUser().id });
     U.toast('Activity logged', true);
     refreshDrawer(); renderMain();
@@ -571,7 +571,7 @@ RWG.app = (function () {
     const v = $('#callback-dt') ? $('#callback-dt').value : '';
     if (!v) { U.toast('Pick a date & time first'); return; }
     const ts = new Date(v).getTime();
-    const note = $('#act-note') ? $('#act-note').value.trim() : '';
+    const note = U.noteRead('act-note');
     D.scheduleCallback(id, ts, note, RWG.auth.currentUser().id);
     U.toast('Callback scheduled 📞', true);
     refreshDrawer(); renderMain();
