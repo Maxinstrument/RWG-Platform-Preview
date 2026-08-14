@@ -82,7 +82,9 @@ RWG.omni = (function () {
         push('contacts', s, {
           title: name || '(no name)',
           sub: [c.relationship, hh ? hh.name : '', c.email].filter(Boolean).join(' · '),
-          action: hh ? 'hh-goto' : '', id: hh ? hh.id : ''
+          // Searching a person opens the person. It used to open their
+          // household, which left anyone without one unclickable.
+          action: 'ct-open', id: c.id
         });
       });
 

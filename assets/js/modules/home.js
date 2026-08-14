@@ -400,7 +400,7 @@ window.RWG = window.RWG || {};
     const q = H().contacts().filter(c => !c.advisorstream);
     if (!q.length) return card('AdvisorStream queue', '', emptyRow('Everyone in the book is on the newsletter. ✓'));
     const rows = q.slice(0, 6).map(c => `<div class="list-row mid" style="gap:9px">
-      <span style="min-width:0;flex:1;font-size:13px;color:var(--ink);font-weight:600;${c.householdId ? 'cursor:pointer' : ''}" ${c.householdId ? `data-action="hh-goto" data-id="${esc(c.householdId)}"` : ''}>${esc(H().contactName(c))}</span>
+      <span style="min-width:0;flex:1;font-size:13px;color:var(--ink);font-weight:600;cursor:pointer" data-action="ct-open" data-id="${esc(c.id)}">${esc(H().contactName(c))}</span>
       <span class="cell-sub" style="flex:none">not subscribed</span></div>`).join('');
     return card('AdvisorStream queue', String(q.length) + ' to add', rows
       + hint('Every prospect goes on the weekly newsletter. Toggle it on the household’s people table.'));

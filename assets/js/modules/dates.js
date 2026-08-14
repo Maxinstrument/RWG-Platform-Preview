@@ -322,8 +322,8 @@ window.RWG = window.RWG || {};
       const hh = c.householdId ? H().household(c.householdId) : null;
       return `<div class="flex" style="gap:11px;padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
         <div style="min-width:0;flex:1">
-          <div style="font-size:13.5px;color:var(--ink);font-weight:600;${hh ? 'cursor:pointer' : ''}"
-            ${hh ? `data-action="hh-goto" data-id="${esc(hh.id)}"` : ''}>${esc(H().contactName(c))}</div>
+          <div style="font-size:13.5px;color:var(--ink);font-weight:600;cursor:pointer"
+            data-action="ct-open" data-id="${esc(c.id)}">${esc(H().contactName(c))}</div>
           <div class="cell-sub" style="font-size:11.5px">${hh ? esc(hh.name) : '—'}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
         </div>
         <div style="flex:none;min-width:0;max-width:220px">

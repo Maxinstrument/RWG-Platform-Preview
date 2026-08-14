@@ -26,7 +26,9 @@ window.RWG = window.RWG || {};
   // scope: people | households. Households used to be their own screen;
   // they are the same book seen at a different grain, so they are a scope
   // here rather than a separate place to remember to look.
-  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note' };
+  // `from` is the screen the record was opened from, so the back link goes
+  // where you came from instead of always dumping you in the full list.
+  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note', from: null };
 
   const hhOf = (c) => (c.householdId ? H().household(c.householdId) : null);
   function advisorOf(c) {
@@ -154,7 +156,10 @@ window.RWG = window.RWG || {};
           </span>
         </div>
       </td>
-      <td>${prim ? esc(H().contactName(prim)) : dash}</td>
+      <td>${prim
+        ? `<button class="btn-link" data-action="ct-open" data-id="${esc(prim.id)}"
+             title="Open ${esc(H().contactName(prim))}">${esc(H().contactName(prim))}</button>`
+        : dash}</td>
       <td class="num">${people.length}</td>
       <td class="num">${opps || dash}</td>
       <td>${adv ? esc(adv) : dash}</td>
@@ -427,12 +432,34 @@ window.RWG = window.RWG || {};
     else owner.actions['cs-new']({ dataset: { hh: c.householdId || '', client: H().contactName(c) } });
   }
 
+  // A view id we can actually navigate back to, or nothing.
+  const backView = () => {
+    const f = st.from;
+    if (!f || f === 'contact') return null;
+    const M = RWG.modules;
+    if (M && M.moduleForView && !M.moduleForView(f)) return null;
+    return f;
+  };
+  // The link reads as the place you came from. A household says its own name;
+  // "Household" is true and tells you nothing at a glance.
+  function backLabel() {
+    const f = backView();
+    if (!f || f === 'contacts') return 'All contacts';
+    if (f === 'household') {
+      const c = H().contact(st.currentId);
+      const h = c ? hhOf(c) : null;
+      return h ? h.name : 'Household';
+    }
+    const m = RWG.modules && RWG.modules.metaFor ? RWG.modules.metaFor(f) : null;
+    return (m && m.t) || 'Back';
+  }
+
   function contactHtml(c, user, ctx) {
     const h = hhOf(c);
     const phone = c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(fmtPhone(c.phone))}</a>` : '';
     const email = c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '';
     return `
-      <button class="btn btn-quiet btn-sm" data-action="ct-back" style="margin-bottom:var(--s3)">← All contacts</button>
+      <button class="btn btn-quiet btn-sm" data-action="ct-back" style="margin-bottom:var(--s3)">← ${esc(backLabel())}</button>
       <div class="card" style="margin-bottom:var(--panel-gap)">
         <div class="flex" style="gap:var(--s3);align-items:flex-start;flex-wrap:wrap">
           ${U().avatar({ name: fullName(c) }, 54)}
@@ -601,19 +628,25 @@ window.RWG = window.RWG || {};
     },
 
     actions: {
-      // Open a person: the person. The person form is owned by Households —
-      // one place a human is edited from — so this hands off to it. A phone
-      // or email link inside the row is a real link and must win over the row.
+      // Open a person: the person. Every click on a name anywhere in the app
+      // lands here, so it must work from any screen — a phone or email link
+      // inside the row is a real link and must win over the row.
       'ct-open': (el, e) => {
         if (e && e.target && e.target.closest && e.target.closest('a[href]')) return;
         const c = H().contact(el.dataset.id);
         if (!c) return;
+        const at = RWG.app.state && RWG.app.state.view;
+        if (at && at !== 'contact') st.from = at;
         st.currentId = c.id;
         st.tab = 'note';
         const m = document.getElementById('modal-mount'); if (m) m.innerHTML = '';
         RWG.app.nav('contact');
       },
-      'ct-back': () => { st.currentId = null; RWG.app.nav('contacts'); },
+      'ct-back': () => {
+        const to = backView() || 'contacts';
+        st.currentId = null; st.from = null;
+        RWG.app.nav(to);
+      },
       'ct-tab': (el) => { st.tab = el.dataset.tab || 'note'; handoff(el.dataset.tab); },
       'ct-note-post': (el) => {
         const c = H().contact(el.dataset.id); if (!c) return;

@@ -234,10 +234,9 @@ window.RWG = window.RWG || {};
         cards.push(`<div class="card flush">
           <div class="list-head"><span class="t">Key dates ahead</span> <span class="cell-sub">14 days</span></div>
           ${bdays.map(b => {
-            const hh = H().household(b.contact.householdId);
             return `<div class="list-row" style="gap:9px">
               <span style="flex:none">🎂</span>
-              <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;${hh ? 'cursor:pointer' : ''}" ${hh ? `data-action="hh-goto" data-id="${esc(hh.id)}"` : ''}>${esc(H().contactName(b.contact))}</span>
+              <span style="min-width:0;flex:1"><span style="font-size:13px;color:var(--ink);font-weight:600;cursor:pointer" data-action="ct-open" data-id="${esc(b.contact.id)}">${esc(H().contactName(b.contact))}</span>
               <span class="cell-sub" style="display:block">turns ${b.turning}</span></span>
               <span class="cell-sub" style="flex:none">${b.inDays === 0 ? 'today' : 'in ' + b.inDays + 'd'}</span></div>`;
           }).join('')}</div>`);

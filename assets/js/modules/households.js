@@ -306,7 +306,10 @@ window.RWG = window.RWG || {};
       const prim = H().primaryContact(h.id);
       return `<tr class="cs-row" data-action="hh-open" data-id="${esc(h.id)}">
         <td><div class="cell-name">${esc(h.name)}</div><div class="cell-sub">${esc(h.source || '')}</div></td>
-        <td>${prim ? esc(H().contactName(prim)) : '<span class="muted">—</span>'}</td>
+        <td>${prim
+          ? `<button class="btn-link" data-action="ct-open" data-id="${esc(prim.id)}"
+               title="Open ${esc(H().contactName(prim))}">${esc(H().contactName(prim))}</button>`
+          : '<span class="muted">—</span>'}</td>
         <td class="num">${people.length}</td>
         <td>${h.advisorName ? esc(h.advisorName) : (h.advisorUid ? esc(userName(h.advisorUid)) : '<span class="muted">—</span>')}</td>
         <td>${h.a360Complete ? '<span class="chip tier-high">A360 ✓</span>' : '<span class="pill-soft">A360 pending</span>'}</td>
@@ -342,11 +345,13 @@ window.RWG = window.RWG || {};
       || H().contactName(a).localeCompare(H().contactName(b)));
     const isAdmin = ctx.isAdmin;
 
-    // The whole row opens the person, the same as on Contacts. Everything
-    // inside it that does its own thing carries its own action, and the
-    // kernel dispatches to the innermost match.
+    // The whole row opens the person's record — the same destination a click
+    // reaches from anywhere else in the app. Editing is a button, not the
+    // default: you look someone up far more often than you correct them.
+    // Everything inside the row that does its own thing carries its own
+    // action, and the kernel dispatches to the innermost match.
     const peopleRows = people.map(c => `
-      <tr class="cs-row" data-action="hh-person-edit" data-id="${esc(c.id)}">
+      <tr class="cs-row" data-action="ct-open" data-id="${esc(c.id)}">
         <td><div class="cell-name">${esc(H().contactName(c) || '(no name)')}</div>
             <div class="cell-sub">${esc(c.employer || '')}</div></td>
         <td>${esc(c.relationship || '—')}</td>
