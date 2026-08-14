@@ -918,16 +918,20 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* ── Home dashboard ──────────────────────────────────────── */
 .hm-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s4);align-items:start;}
 .hm-shell.cz-open{grid-template-columns:minmax(0,1fr) 236px;}
-.hm-full{display:block;margin-bottom:var(--s4);}
+.hm-full{display:flex;flex-direction:column;gap:var(--s4);margin-bottom:var(--s4);}
 /* Balanced columns, not a grid: a short widget can no longer leave a
    hole the height of the funnel standing next to it. */
 .hm-grid{columns:2;column-gap:var(--s4);}
 .hm-grid > *{break-inside:avoid;-webkit-column-break-inside:avoid;display:block;margin:0 0 var(--s4);}
 @media (max-width:1180px){ .hm-grid{columns:1;} .hm-shell.cz-open{grid-template-columns:minmax(0,1fr);} }
-/* Funnel + occupancy rows share one label column width so the two
-   charts read as a pair rather than two different charts. */
-.fn-lab{width:152px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-align:right;text-wrap:balance;}
-.oc-lab{width:152px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-wrap:balance;}
+/* The three tracks side by side. Each is a full funnel, so they get equal
+   columns and stack rather than shrink — a funnel squeezed under ~300px
+   loses its stage labels, which is the only part you read. */
+.hm-funnels{display:grid;grid-template-columns:repeat(var(--fn-count,3),minmax(0,1fr));
+  gap:var(--panel-gap);align-items:start;margin-bottom:var(--s3);}
+@media (max-width:1240px){ .hm-funnels{grid-template-columns:minmax(0,1fr);} }
+.fn-lab{width:130px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-align:right;text-wrap:balance;}
+.oc-lab{width:130px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-wrap:balance;}
 @media (max-width:760px){ .fn-lab,.oc-lab{width:96px;font-size:11px;} }
 
 /* ── Scorecard module ────────────────────────────────────── */

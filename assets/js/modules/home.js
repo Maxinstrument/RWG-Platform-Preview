@@ -36,7 +36,7 @@ window.RWG = window.RWG || {};
   // Home opens on the year — the widest honest read of the book — and
   // narrows from there. A quarter default hid business that was still
   // there, which is the wrong way round for a page you check every morning.
-  const st = { track: 'insurance', period: 'ytd', customize: false, on: null, compose: '' };
+  const st = { period: 'ytd', customize: false, on: null, compose: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -45,11 +45,18 @@ window.RWG = window.RWG || {};
   const firstName = (s) => (s || '').split(' ')[0];
 
   // ── the layout, per person, per browser ───────────────────
+  // Order matters: the week's numbers, then the three funnels, then the
+  // rest. Full-width widgets keep this order among themselves; the flow
+  // widgets fill the columns underneath in the order listed here.
   const DEFAULT_ON = {
-    admin: ['pace', 'closedmix', 'funnel', 'stale', 'occupancy', 'dates', 'activity'],
-    agent: ['mytasks', 'pace', 'closedmix', 'stale', 'dates', 'activity']
+    admin: ['pace', 'funnel', 'closedmix', 'stale', 'dates', 'activity'],
+    agent: ['mytasks', 'pace', 'funnel', 'closedmix', 'stale', 'dates', 'activity']
   };
-  const lsKey = (uid) => 'rwg.home.v1.' + uid;
+  // v2: the funnels became one full-width card holding all three tracks and
+  // moved under the week's numbers, and "Where cases sit" went away. A saved
+  // v1 order cannot express that, so everyone starts from the new default
+  // once and customises again from there.
+  const lsKey = (uid) => 'rwg.home.v2.' + uid;
 
   // A saved layout is a person's own arrangement and we never overwrite it.
   // But a widget built after they last saved has no opinion recorded either
@@ -244,8 +251,8 @@ window.RWG = window.RWG || {};
   }
   /* The pool the funnel is drawn from, factored out so the chart and the
      drill-down can never disagree: both read the same model. */
-  function funnelModel() {
-    const pl = P().pipeline(st.track) || P().pipelines()[0];
+  function funnelModel(plId) {
+    const pl = (plId && P().pipeline(plId)) || P().pipelines()[0];
     const cols = P().boardStages(pl);
     const start = periodStartKey();
     const pool = SD().cases().filter(c =>
@@ -282,10 +289,11 @@ window.RWG = window.RWG || {};
      Days matter as much as counts. Four sitting in Waiting on Signature
      for two days is a good week; two sitting there for six weeks is the
      problem. Both are on every row. */
-  function wFunnel(ctx) {
-    const m = funnelModel();
+  function funnelCard(plId) {
+    const m = funnelModel(plId);
     const cols = m.cols;
-    if (!m.pool.length) return card('Opportunity funnel', esc(m.pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
+    if (!m.pool.length) return card(m.pl.name, 'nothing yet',
+      emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track.'));
 
     const base = Math.max.apply(null, m.here.concat([1]));
     const dayChip = (d) => d >= 30 ? 'color:var(--bad);font-weight:700'
@@ -297,7 +305,7 @@ window.RWG = window.RWG || {};
       const isJam = i === m.jam;
       const color = isJam ? 'var(--bad)' : (BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened);
       return `<div class="flex fn-row${isJam ? ' fn-jam' : ''}" style="gap:10px;align-items:center;margin-bottom:3px;${n ? 'cursor:pointer' : ''}"
-          ${n ? `data-action="hm-drill" data-kind="fn-here" data-i="${i}"` : ''}
+          ${n ? `data-action="hm-drill" data-kind="fn-here" data-i="${i}" data-pl="${esc(m.pl.id)}"` : ''}
           title="${n ? `See the ${n} sitting in ${esc(s.label)}` : 'Nothing here'}">
           <span class="fn-lab">${esc(s.label)}</span>
           <span style="flex:1;display:flex;justify-content:center;min-width:0">
@@ -316,7 +324,7 @@ window.RWG = window.RWG || {};
     const lostMoney = m.lost.reduce((n, c) => n + headlineMoney(c), 0);
     const lostRow = m.lost.length ? `<div class="flex fn-drop"
         style="gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);cursor:pointer"
-        data-action="hm-drill" data-kind="fn-lost" title="See the ${m.lost.length} lost">
+        data-action="hm-drill" data-kind="fn-lost" data-pl="${esc(m.pl.id)}" title="See the ${m.lost.length} lost">
         <span class="fn-lab" style="color:var(--bad);font-weight:700">Lost</span>
         <span style="flex:1;display:flex;justify-content:center">
           <span style="height:19px;padding:0 10px;background:var(--bad);display:flex;align-items:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${m.lost.length}</span></span>
@@ -326,7 +334,7 @@ window.RWG = window.RWG || {};
     // The headline: the one stage to talk about, clickable straight to the
     // list of names so the discussion starts from the cases, not the number.
     const jam = m.jam;
-    const banner = jam >= 0 ? `<div class="fn-banner" data-action="hm-drill" data-kind="fn-here" data-i="${jam}"
+    const banner = jam >= 0 ? `<div class="fn-banner" data-action="hm-drill" data-kind="fn-here" data-i="${jam}" data-pl="${esc(m.pl.id)}"
         title="See the ${m.here[jam]} sitting in ${esc(cols[jam].label)}">
         <span class="fn-banner-k">Piling up</span>
         <span class="fn-banner-v">${esc(cols[jam].label)}</span>
@@ -337,13 +345,29 @@ window.RWG = window.RWG || {};
 
     const wonPct = m.reached[0] ? Math.round(100 * m.reached[m.reached.length - 1] / m.reached[0]) : 0;
     const live = m.here.reduce((n, x) => n + x, 0);
-    return card('Opportunity funnel', live + ' in play · ' + m.reached[0] + ' opened ' + esc(sinceLabel()),
+    return card(m.pl.name, live + ' in play · ' + m.reached[0] + ' opened',
       banner + `<div style="padding:10px var(--pad-panel) 4px">${rows}${lostRow}</div>` +
-      hint('Every opportunity appears <b>once</b>, in the stage it is in today — these ' + live
-        + ' plus ' + m.lost.length + ' lost is everything opened ' + PERIOD_LABEL[st.period] + '. '
-        + '<b>Oldest</b> is how long the longest-waiting one has sat there, so a full stage that moves '
-        + 'reads differently from one that does not. Click any bar for the names. '
-        + wonPct + '% of what opened reached a confirmed close.'));
+      hint(wonPct + '% of the ' + m.reached[0] + ' opened ' + PERIOD_LABEL[st.period]
+        + ' reached a confirmed close.'));
+  }
+
+  /* All three tracks at once. Insurance, investments and planning run on
+     different stages and different clocks, and a selector meant you could
+     only ever see one of them — so a jam on a track you were not looking
+     at was a jam nobody was looking at. Side by side on a desk, stacked on
+     a phone. */
+  function wFunnel(ctx) {
+    const pls = P().pipelines();
+    if (!pls.length) return '';
+    return `<div>
+      <div class="hm-funnels" style="--fn-count:${pls.length}">
+        ${pls.map(p => `<div>${funnelCard(p.id)}</div>`).join('')}
+      </div>
+      <p class="list-hint" style="padding-top:0">Every opportunity appears <b>once</b>, in the stage
+        it is in today. <b>Oldest</b> is how long the longest-waiting one has sat there, so a full
+        stage that is moving reads differently from one that is not — amber past a fortnight, red
+        past a month. Click any bar for the names behind it.</p>
+    </div>`;
   }
 
   // 3 · Needs help moving — the Monday list.
@@ -373,28 +397,9 @@ window.RWG = window.RWG || {};
     return card('Needs help moving', String(top.length), tbl + hint('Sorted oldest first. This is the Monday list.'));
   }
 
-  // 4 · Where cases are sitting — occupancy, not conversion.
-  function wOccupancy(ctx) {
-    const pl = P().pipeline(st.track) || P().pipelines()[0];
-    const working = P().boardStages(pl).filter(s => s.bucket !== 'Closed');
-    const rows = openCases().filter(c => P().pipelineForProduct(c.product).id === pl.id && !c.pendingClose);
-    const by = {};
-    rows.forEach(c => { const s = P().stageForCase(c); by[s] = (by[s] || 0) + 1; });
-    const pending = SD().cases().filter(c => c.pendingClose && !c.closedAt && P().pipelineForProduct(c.product).id === pl.id).length;
-    const shown = working.filter(s => by[s.id]);
-    if (!shown.length && !pending) return card('Where cases are sitting', esc(pl.name), emptyRow('Nothing open on this track right now.'));
-    const max = Math.max.apply(null, shown.map(s => by[s.id]).concat([pending, 1]));
-    const bar = (label, n, color) => `<div class="flex" style="gap:9px;align-items:center;padding:5px var(--pad-panel)">
-      <span class="oc-lab">${esc(label)}</span>
-      <span style="flex:1;height:13px;background:var(--field);min-width:0;border-radius:3px;overflow:hidden">
-        <span style="display:block;height:100%;width:${Math.round(100 * n / max)}%;background:${color};border-radius:3px"></span></span>
-      <span style="width:22px;flex:none;text-align:right;font-size:10.5px;color:var(--ink)">${n}</span>
-    </div>`;
-    return card('Where cases are sitting', 'right now · ' + esc(pl.name),
-      `<div style="padding:8px 0 2px">${shown.map(s => bar(s.label, by[s.id], BUCKET_DOT[s.bucket])).join('')}
-       ${pending ? bar('Awaiting partner confirm', pending, 'var(--good)') : ''}</div>`
-      + hint('Occupancy, not conversion. A pile-up here is a bottleneck.'));
-  }
+  /* "Where cases are sitting" lived here. It was the same count as the
+     funnel's own bars, on the same stages, one track at a time — so with
+     all three funnels on the page it was the same picture drawn twice. */
 
   // 5 · Important dates — the whole merged feed (birthdays with milestone
   // flags, policy anniversaries, custom dates), same truth as the Key
@@ -697,9 +702,8 @@ window.RWG = window.RWG || {};
 
   const WIDGETS = [
     { id: 'pace',        title: 'Weekly pace',          render: wPace, full: true },
-    { id: 'funnel',      title: 'Opportunity funnel',   render: wFunnel },
+    { id: 'funnel',      title: 'Opportunity funnels',  render: wFunnel, full: true },
     { id: 'stale',       title: 'Needs help moving',    render: wStale },
-    { id: 'occupancy',   title: 'Where cases sit',      render: wOccupancy },
     { id: 'dates',       title: 'Important dates',      render: wDates },
     { id: 'activity',    title: 'Team activity',        render: wActivity },
     { id: 'mytasks',     title: 'My tasks today',       render: wMyTasks },
@@ -790,7 +794,8 @@ window.RWG = window.RWG || {};
     let need = T().isStarted() ? T().dueCount(eff.id) : 0;
     if (ctx.isAdmin) need += SD().cases().filter(c => c.pendingClose && !c.closedAt).length;
 
-    const trackOpts = P().pipelines().map(p => `<option value="${esc(p.id)}" ${p.id === st.track ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    // No track selector: the funnels show all three at once, and nothing
+    // else on this page was ever filtered by track.
     // Shortest to longest, so narrowing down reads as moving up the list.
     const periodOpts = [['week', 'This week'], ['month', 'This month'], ['q', 'This quarter'],
         ['ytd', 'This year'], ['all', 'All time']]
@@ -818,7 +823,6 @@ window.RWG = window.RWG || {};
           <p class="muted" style="margin:3px 0 0;font-size:13px">Week ending ${esc(curLabel)}${need ? ` · <b style="color:var(--bad)">${need} item${need === 1 ? '' : 's'} need you</b>` : ' · nothing waiting on you'}</p>
         </div>
         <span class="topbar-spacer"></span>
-        <select id="hm-track" class="fbar-select" style="width:auto">${trackOpts}</select>
         <select id="hm-period" class="fbar-select" style="width:auto">${periodOpts}</select>
         <button class="btn ${st.customize ? 'btn-navy' : 'btn-gold'} btn-sm" data-action="hm-customize">${st.customize ? 'Done' : 'Customize'}</button>
       </div>
@@ -883,7 +887,6 @@ window.RWG = window.RWG || {};
     },
 
     onChange(e) {
-      if (e.target.id === 'hm-track') { st.track = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'hm-period') { st.period = e.target.value; RWG.app.renderMain(); }
     },
 
@@ -911,9 +914,9 @@ window.RWG = window.RWG || {};
           return;
         }
 
-        const m = funnelModel();
+        const m = funnelModel(el.dataset.pl);
         if (kind === 'fn-lost') {
-          openDrill('Lost', 'opened ' + sinceLabel(), m.lost,
+          openDrill(m.pl.name + ' · lost', 'opened ' + sinceLabel(), m.lost,
             'These left the board. Each row carries the reason it was marked lost.');
           return;
         }
@@ -923,7 +926,7 @@ window.RWG = window.RWG || {};
           // Longest-waiting first: at a Monday meeting the top of this list
           // is the conversation, not the bottom.
           const list = m.at[i].slice().sort((a, b) => stuckDays(b) - stuckDays(a));
-          openDrill('Sitting in ' + s.label,
+          openDrill(m.pl.name + ' · ' + s.label,
             list.length + (list.length === 1 ? ' opportunity' : ' opportunities'), list,
             'Everything parked in this stage right now, longest wait first. A case sits in one stage only, so nothing here is counted twice.');
         }
