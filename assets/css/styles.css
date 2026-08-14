@@ -974,3 +974,48 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .rp-goal{margin:10px 0;}
 .rp-goal-top{display:flex;justify-content:space-between;font-size:13px;color:var(--ink);margin-bottom:5px;}
 .rp-goal-top span:last-child{font-weight:600;color:var(--navy);}
+
+/* ── Filter bar inside a list surface ─────────────────────
+   Sits directly under .list-head. Controls drop to the small
+   height so a row of them shares one baseline with the buttons
+   in the head above. Used by Contacts and Tasks. */
+.list-toolbar{
+  display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
+  padding:var(--s2) var(--s3);
+  border-bottom:1px solid var(--line);background:var(--field);
+}
+.list-toolbar .input,
+.list-toolbar input,.list-toolbar select{min-height:var(--ctl-h-sm);padding:7px 11px;font-size:13px;}
+.list-toolbar select{padding-right:30px;background-position:right 9px center;}
+.list-toolbar .lbl,.list-toolbar .cell-sub{margin:0;white-space:nowrap;}
+/* "Filtering by [x] assigned to [y]" reads as a sentence, not a form */
+.list-toolbar .tb-word{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+/* ── Tags ─────────────────────────────────────────────────
+   A tag is a filter you can click, so it is a button everywhere
+   it appears — in a row, in the rail, in the person form. */
+.tagwrap{display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+.tag-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 9px;border-radius:20px;cursor:pointer;
+  font-family:inherit;font-size:11.5px;font-weight:600;line-height:1.5;
+  background:rgba(14,36,64,.05);color:var(--navy);
+  border:1px solid var(--line);transition:background .15s,border-color .15s,color .15s;
+}
+.tag-chip:hover{background:rgba(194,161,77,.14);border-color:var(--gold-soft);}
+.tag-chip.on{background:var(--gold);border-color:var(--gold);color:#fff;}
+.tag-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77,.28);}
+
+/* ── Contacts screen ──────────────────────────────────────*/
+.ct-shell{display:grid;grid-template-columns:minmax(0,1fr) 288px;gap:var(--s4);align-items:start;}
+.ct-rail{display:flex;flex-direction:column;gap:var(--s4);}
+.ct-name{display:flex;align-items:center;gap:10px;min-width:0;}
+.ct-name .cell-name{text-decoration:none;}
+.ct-name .cell-name:hover{color:var(--gold);}
+.ct-shell td a{color:var(--navy);text-decoration:none;}
+.ct-shell td a:hover{color:var(--gold);text-decoration:underline;}
+@media (max-width:1080px){
+  .ct-shell{grid-template-columns:minmax(0,1fr);}
+  .ct-rail{flex-direction:row;flex-wrap:wrap;}
+  .ct-rail > *{flex:1 1 260px;}
+}

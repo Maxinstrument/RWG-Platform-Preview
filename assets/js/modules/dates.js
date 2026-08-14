@@ -35,6 +35,21 @@ window.RWG = window.RWG || {};
   const st = { tab: 'dates', range: 60, kind: '', entries: {} };
 
   // ── the date math ─────────────────────────────────────────
+  // Lifecycle stamps (closedAt) are stored as UTC instants, but an
+  // anniversary is a calendar day. Slicing the ISO string takes the UTC
+  // day, which for anything confirmed after ~8pm in Florida is tomorrow —
+  // so a policy closed the evening of the 16th would keep its anniversary
+  // on the 17th forever. Read the local day off the instant instead.
+  // A plain 'YYYY-MM-DD' is already a calendar day and passes through.
+  function localDayKey(v) {
+    const s = String(v == null ? '' : v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s.slice(0, 10);
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
   function nextOccur(dateStr, today) {
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(String(dateStr))) return null;
     const t = today || new Date();
@@ -103,7 +118,7 @@ window.RWG = window.RWG || {};
 
     if (SD() && SD().isStarted()) {
       SD().cases().filter(c => c.closedAt).forEach(c => {
-        const n = nextOccur(String(c.closedAt).slice(0, 10), t);
+        const n = nextOccur(localDayKey(c.closedAt), t);
         if (!n || n.years < 1 || n.inDays > days) return;
         out.push({
           kind: 'anniversary', icon: '📜', when: n.when, inDays: n.inDays,
@@ -269,7 +284,7 @@ window.RWG = window.RWG || {};
       </p>`;
   }
 
-  RWG.dates = { nextOccur, milestone, upcoming, MILESTONES };
+  RWG.dates = { nextOccur, localDayKey, milestone, upcoming, MILESTONES };
 
   RWG.modules.register({
     id: 'dates',

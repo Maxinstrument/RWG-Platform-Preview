@@ -78,17 +78,41 @@ window.RWG = window.RWG || {};
 
   // One form for add + edit person. FRS block collapsed into two rows —
   // same fields the lead drawer knows, so a converted person looks familiar.
+  // hhId null means the caller (the Contacts page) has no household in hand,
+  // so the form grows a picker that can also create one on the spot.
   function personModal(hhId, c) {
     const v = (k) => c && c[k] != null ? c[k] : '';
     const relOpts = H().RELATIONSHIPS.map(r =>
       `<option ${c && c.relationship === r ? 'selected' : ''}>${r}</option>`).join('');
     const planOpts = ['', ...D().PLAN_TYPES].map(p =>
       `<option value="${esc(p)}" ${c && c.planType === p ? 'selected' : ''}>${esc(p || '—')}</option>`).join('');
-    modal(c ? 'Edit person' : 'Add a person', c ? '' : 'Spouses, children, anyone who belongs to this family.', `
+
+    const needsHh = !hhId;
+    const hhOpts = H().households().slice().sort((a, b) => a.name.localeCompare(b.name))
+      .map(h => `<option value="${esc(h.id)}">${esc(h.name)}</option>`).join('');
+    const hhBlock = needsHh ? `
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Household</label>
+          <select id="p-hh"><option value="">＋ Start a new household…</option>${hhOpts}</select></div>
+        <div class="field-group" id="p-hhnew-wrap"><label class="lbl">New household name</label>
+          <input id="p-hhnew" placeholder="e.g. Delgado Household"></div>
+      </div>` : '';
+
+    // Tags in use, so nobody invents "FRS" next to "frs".
+    const inUse = H().allTags().slice(0, 14);
+    const tagChips = inUse.length
+      ? `<div class="checkrow" style="margin-top:7px">${inUse.map(t =>
+          `<button type="button" class="chip" data-tagadd="${esc(t.tag)}"
+             style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600">${esc(t.tag)}</button>`).join('')}</div>`
+      : '';
+
+    modal(c ? 'Edit person' : 'Add a person',
+      c ? '' : (needsHh ? 'Everyone belongs to a household — pick one or start a new one.' : 'Spouses, children, anyone who belongs to this family.'), `
       <div class="field-row">
         <div class="field-group"><label class="lbl">First name</label><input id="p-first" value="${esc(v('firstName'))}"></div>
         <div class="field-group"><label class="lbl">Last name</label><input id="p-last" value="${esc(v('lastName'))}"></div>
       </div>
+      ${hhBlock}
       <div class="field-row">
         <div class="field-group"><label class="lbl">Relationship</label><select id="p-rel">${relOpts}</select></div>
         <div class="field-group"><label class="lbl">Date of birth</label><input id="p-dob" type="date" value="${esc(v('dob'))}"></div>
@@ -97,6 +121,10 @@ window.RWG = window.RWG || {};
         <div class="field-group"><label class="lbl">Phone</label><input id="p-phone" type="tel" value="${esc(v('phone'))}"></div>
         <div class="field-group"><label class="lbl">Email</label><input id="p-email" type="email" value="${esc(v('email'))}"></div>
       </div>
+      <div class="field-group"><label class="lbl">Tags</label>
+        <input id="p-tags" value="${esc((v('tags') || []).join(', '))}" placeholder="Client, FRS, March review">
+        <div class="hint">Separate with commas. Click one below to add it.</div>
+        ${tagChips}</div>
       <div class="section-title">FRS profile <span class="pill-soft" style="font-size:11px">optional</span></div>
       <div class="field-row">
         <div class="field-group"><label class="lbl">Employer</label><input id="p-employer" value="${esc(v('employer'))}"></div>
@@ -108,7 +136,34 @@ window.RWG = window.RWG || {};
       </div>
       <div id="p-dup" class="hint" style="color:var(--warn)"></div>`,
       `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-       <button class="btn btn-gold" data-action="hh-person-save" data-hh="${esc(hhId)}" ${c ? `data-id="${esc(c.id)}"` : ''}>${c ? 'Save' : 'Add person'}</button>`);
+       <button class="btn btn-gold" data-action="hh-person-save" ${hhId ? `data-hh="${esc(hhId)}"` : ''} ${c ? `data-id="${esc(c.id)}"` : ''}>${c ? 'Save' : 'Add person'}</button>`);
+
+    // Direct wiring: this modal opens over the Contacts view too, and the
+    // kernel only routes onInput/onChange to the module that owns the
+    // current view. Listeners on the elements always fire.
+    const card = mount().querySelector('.modal-card');
+    if (card) {
+      card.addEventListener('click', (e) => {
+        const b = e.target.closest ? e.target.closest('[data-tagadd]') : null;
+        if (!b) return;
+        e.preventDefault();
+        const box = document.getElementById('p-tags');
+        if (!box) return;
+        const next = H().parseTags(box.value + ',' + b.dataset.tagadd);
+        box.value = next.join(', ');
+        box.focus();
+      });
+    }
+    const hhSel = document.getElementById('p-hh');
+    if (hhSel) {
+      const sync = () => {
+        const wrap = document.getElementById('p-hhnew-wrap');
+        if (wrap) wrap.style.display = hhSel.value ? 'none' : '';
+      };
+      hhSel.addEventListener('change', sync);
+      sync();
+    }
+    const first = document.getElementById('p-first'); if (first && !c) first.focus();
   }
 
   function linkModal(hhId) {
@@ -606,11 +661,33 @@ window.RWG = window.RWG || {};
           firstName: g('p-first').trim(), lastName: g('p-last').trim(),
           relationship: g('p-rel'), dob: g('p-dob'), phone: g('p-phone').trim(),
           email: g('p-email').trim(), employer: g('p-employer').trim(),
-          planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc')
+          planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc'),
+          tags: H().parseTags(g('p-tags'))
         };
         if (!fields.firstName && !fields.lastName) { U().toast('A person needs a name'); return; }
-        if (el.dataset.id) H().saveContact(Object.assign({ id: el.dataset.id }, fields));
-        else H().addContact(Object.assign({ householdId: el.dataset.hh }, fields));
+
+        if (el.dataset.id) {
+          H().saveContact(Object.assign({ id: el.dataset.id }, fields));
+        } else {
+          // Adding. The household comes from the caller, from the picker, or
+          // gets created here — a person is never left without one.
+          let hhId = el.dataset.hh || '';
+          if (!hhId && document.getElementById('p-hh')) {
+            hhId = g('p-hh');
+            if (!hhId) {
+              const name = (g('p-hhnew') || '').trim()
+                || (fields.lastName ? fields.lastName + ' Household' : '');
+              if (!name) { U().toast('Name the new household, or pick an existing one'); return; }
+              const me = RWG.auth.currentUser();
+              const h = H().addHousehold({ name: name, advisorUid: me.id, advisorName: me.name || '' });
+              hhId = h.id;
+              // First person into a brand-new household is the primary client.
+              if (fields.relationship === 'Other') fields.relationship = 'Primary client';
+            }
+          }
+          if (!hhId) { U().toast('Pick a household for this person'); return; }
+          H().addContact(Object.assign({ householdId: hhId }, fields));
+        }
         mount().innerHTML = '';
         RWG.app.renderMain();
         U().toast('Saved', true);

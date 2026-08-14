@@ -88,6 +88,32 @@ RWG.hh = (function () {
       ((pk && phoneKey(c.phone) === pk) || (ek && emailKey(c.email) === ek))) || null;
   }
 
+  // ── tags ──
+  // There is no tag registry: a tag exists because a contact wears it.
+  // Nothing to keep in sync, and renaming is a find-and-replace over use.
+  const cleanTag = (s) => String(s == null ? '' : s).trim().replace(/\s+/g, ' ').slice(0, 40);
+  function parseTags(input) {
+    const seen = {}, out = [];
+    String(input == null ? '' : input).split(',').forEach(raw => {
+      const t = cleanTag(raw);
+      const k = t.toLowerCase();
+      if (t && !seen[k]) { seen[k] = 1; out.push(t); }
+    });
+    return out;
+  }
+  // Every tag in use, with a count, most-used first then alphabetical.
+  function allTags() {
+    const counts = {}, label = {};
+    cache.contacts.forEach(c => (c.tags || []).forEach(t => {
+      const k = cleanTag(t).toLowerCase(); if (!k) return;
+      counts[k] = (counts[k] || 0) + 1; label[k] = label[k] || cleanTag(t);
+    }));
+    return Object.keys(counts)
+      .map(k => ({ tag: label[k], count: counts[k] }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }
+  const hasTag = (c, tag) => (c.tags || []).some(t => cleanTag(t).toLowerCase() === cleanTag(tag).toLowerCase());
+
   // ── key dates (computed, never stored — a reminder is a query) ──
   // dob is 'yyyy-mm-dd'. Returns birthdays in the next `days`, soonest first.
   function upcomingBirthdays(days) {
@@ -157,6 +183,8 @@ RWG.hh = (function () {
       id: ref.id, householdId: null, firstName: '', lastName: '',
       relationship: 'Other', email: '', phone: '', dob: '', employer: '',
       planType: '', memberClass: '', yos: null, afc: null, age: null,
+      tags: [],                        // free-form labels; the tag list is derived from use
+      title: '', notes: '',            // job title, and anything the team should know
       leadId: null,                    // set when this person began as a lead
       advisorstream: false,            // on the newsletter list yet?
       createdAt: now(), createdBy: (me && me.id) || null, updatedAt: now()
@@ -390,6 +418,7 @@ RWG.hh = (function () {
     init, teardown, isStarted,
     households, household, contacts, contact, contactsFor, primaryContact, contactName,
     findDupContact, upcomingBirthdays,
+    parseTags, allTags, hasTag,
     addHousehold, saveHousehold, setA360, deleteHousehold,
     addContact, saveContact, setAdvisorstream, removeContact,
     linkHouseholds, unlinkHouseholds,

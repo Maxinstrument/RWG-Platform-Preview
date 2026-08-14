@@ -88,6 +88,25 @@ RWG.ui = (function () {
     </svg><div class="ring-center"><span class="big">${big}</span><span class="small">${small}</span></div></div>`;
   }
 
+  // ── CSV out ───────────────────────────────────────────────
+  // One implementation, so every screen that exports produces a file
+  // Excel opens the same way. Quote only when the cell needs it.
+  function csvCell(v) {
+    v = (v == null) ? '' : String(v);
+    return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+  // rows: array of arrays, first row is the header
+  const toCSV = (rows) => rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  function downloadCSV(filename, csv) {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });   // BOM = Excel reads UTF-8 cleanly
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  // Safe for filenames on every platform we care about.
+  const stampName = () => new Date().toISOString().slice(0, 10);
+
   let toastTimer;
   function toast(msg, good) {
     let wrap = document.getElementById('toast-wrap');
@@ -100,5 +119,5 @@ RWG.ui = (function () {
     setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; t.style.transition = '.3s'; setTimeout(() => t.remove(), 300); }, 2600);
   }
 
-  return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill };
+  return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName };
 })();
