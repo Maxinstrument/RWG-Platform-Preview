@@ -111,6 +111,14 @@ window.RWG = window.RWG || {};
   const scoped = (rows, ctx) => ctx.isAdmin ? rows : rows.filter(c => c.agentUid === ctx.eff.id);
   const openCases = () => SD().cases().filter(c => (c.state === 'Opened' || c.state === 'Submitted') && !c.closedAt);
   const headlineMoney = (c) => Number(SC().usesAum(c.product) ? c.aum : c.amount) || 0;
+  // Investment AUM runs into the millions, where "$4562k" is a number you
+  // have to decode. Past a million it reads in millions.
+  const fmtMoney = (n) => {
+    n = Math.round(Number(n) || 0);
+    if (!n) return '';
+    if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    return U().moneyK(n);
+  };
   // How long this case has been sitting where it is. stageAt is stamped on
   // every board move; anything written before that stamp existed falls back
   // to its last touch, which is the closest honest answer we have.
@@ -292,43 +300,47 @@ window.RWG = window.RWG || {};
   function funnelCard(plId) {
     const m = funnelModel(plId);
     const cols = m.cols;
-    if (!m.pool.length) return card(m.pl.name, 'nothing yet',
-      emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track.'));
+    if (!m.pool.length) return `<div class="card flush fn-card">
+      <div class="list-head"><span class="t">${esc(m.pl.name)}</span><span class="s">quiet</span></div>
+      <p class="list-empty" style="margin:auto 0">Nothing opened ${esc(PERIOD_LABEL[st.period])} on this track.</p>
+    </div>`;
 
     const base = Math.max.apply(null, m.here.concat([1]));
-    const dayChip = (d) => d >= 30 ? 'color:var(--bad);font-weight:700'
-      : d >= 14 ? 'color:var(--gold-ink);font-weight:700' : 'color:var(--muted)';
 
     const rows = cols.map((s, i) => {
       const n = m.here[i];
-      const w = Math.max(Math.round(100 * n / base), n ? 7 : 0);
       const isJam = i === m.jam;
-      const color = isJam ? 'var(--bad)' : (BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened);
-      return `<div class="flex fn-row${isJam ? ' fn-jam' : ''}" style="gap:10px;align-items:center;margin-bottom:3px;${n ? 'cursor:pointer' : ''}"
-          ${n ? `data-action="hm-drill" data-kind="fn-here" data-i="${i}" data-pl="${esc(m.pl.id)}"` : ''}
-          title="${n ? `See the ${n} sitting in ${esc(s.label)}` : 'Nothing here'}">
+      // An empty stage keeps its rail rather than showing a dash: the row
+      // still reads as part of the funnel, quietly, instead of as a gap.
+      if (!n) return `<div class="fn-row is-empty">
           <span class="fn-lab">${esc(s.label)}</span>
-          <span style="flex:1;display:flex;justify-content:center;min-width:0">
-            ${n
-              ? `<span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${n}</span>`
-              : '<span class="cell-sub" style="font-size:10px">—</span>'}</span>
-          <span style="width:74px;flex:none;text-align:right;line-height:1.25">
-            <span style="font-size:10.5px;color:var(--muted);display:block">${m.hereMoney[i] ? U().moneyK(m.hereMoney[i]) : ''}</span>
-            ${n && s.bucket !== 'Closed' ? `<span style="font-size:var(--fs-micro);display:block;${dayChip(m.oldest[i])}">${m.oldest[i]}d oldest</span>` : ''}
-          </span>
-        </div>`;
+          <span class="fn-track"></span>
+          <span class="fn-side"></span></div>`;
+      const w = Math.round(100 * n / base);
+      const cls = isJam ? 'is-jam' : (s.bucket === 'Closed' ? 'is-won' : s.bucket === 'Submitted' ? 'is-sub' : 'is-open');
+      // Days only when they mean something. "1d oldest" on every row is
+      // noise; a stage that has not moved in three weeks is the point.
+      const d = m.oldest[i];
+      const showDays = d >= 7 && s.bucket !== 'Closed';
+      return `<div class="fn-row ${cls}"
+          data-action="hm-drill" data-kind="fn-here" data-i="${i}" data-pl="${esc(m.pl.id)}"
+          title="See the ${n} sitting in ${esc(s.label)}${d ? ' · oldest ' + d + 'd' : ''}">
+          <span class="fn-lab">${esc(s.label)}</span>
+          <span class="fn-track"><span class="fn-bar" style="width:${w}%">${n}</span></span>
+          <span class="fn-side">
+            ${m.hereMoney[i] ? `<span class="fn-money">${fmtMoney(m.hereMoney[i])}</span>` : ''}
+            ${showDays ? `<span class="fn-days${d >= 30 ? ' is-late' : d >= 14 ? ' is-warn' : ''}">${d}d</span>` : ''}
+          </span></div>`;
     }).join('');
 
     // Lost cases are on no stage, so they get their own line or the bars
     // quietly fail to add up to what you opened.
     const lostMoney = m.lost.reduce((n, c) => n + headlineMoney(c), 0);
-    const lostRow = m.lost.length ? `<div class="flex fn-drop"
-        style="gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);cursor:pointer"
+    const lostRow = m.lost.length ? `<div class="fn-row is-lost"
         data-action="hm-drill" data-kind="fn-lost" data-pl="${esc(m.pl.id)}" title="See the ${m.lost.length} lost">
-        <span class="fn-lab" style="color:var(--bad);font-weight:700">Lost</span>
-        <span style="flex:1;display:flex;justify-content:center">
-          <span style="height:19px;padding:0 10px;background:var(--bad);display:flex;align-items:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${m.lost.length}</span></span>
-        <span style="width:74px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${lostMoney ? U().moneyK(lostMoney) : ''}</span>
+        <span class="fn-lab">Lost</span>
+        <span class="fn-track"><span class="fn-bar" style="width:${Math.round(100 * m.lost.length / base)}%">${m.lost.length}</span></span>
+        <span class="fn-side">${lostMoney ? `<span class="fn-money">${fmtMoney(lostMoney)}</span>` : ''}</span>
       </div>` : '';
 
     // The headline: the one stage to talk about, clickable straight to the
@@ -338,17 +350,20 @@ window.RWG = window.RWG || {};
         title="See the ${m.here[jam]} sitting in ${esc(cols[jam].label)}">
         <span class="fn-banner-k">Piling up</span>
         <span class="fn-banner-v">${esc(cols[jam].label)}</span>
-        <span class="fn-banner-s">${m.here[jam]} ${m.here[jam] === 1 ? 'opportunity' : 'opportunities'}${
-          m.oldest[jam] ? ' · oldest ' + m.oldest[jam] + ' day' + (m.oldest[jam] === 1 ? '' : 's') : ''}${
-          m.hereMoney[jam] ? ' · ' + U().moneyK(m.hereMoney[jam]) : ''}</span>
+        <span class="fn-banner-s">${m.here[jam]}${
+          m.oldest[jam] ? ' · ' + m.oldest[jam] + 'd' : ''}${
+          m.hereMoney[jam] ? ' · ' + fmtMoney(m.hereMoney[jam]) : ''}</span>
       </div>` : '';
 
     const wonPct = m.reached[0] ? Math.round(100 * m.reached[m.reached.length - 1] / m.reached[0]) : 0;
     const live = m.here.reduce((n, x) => n + x, 0);
-    return card(m.pl.name, live + ' in play · ' + m.reached[0] + ' opened',
-      banner + `<div style="padding:10px var(--pad-panel) 4px">${rows}${lostRow}</div>` +
-      hint(wonPct + '% of the ' + m.reached[0] + ' opened ' + PERIOD_LABEL[st.period]
-        + ' reached a confirmed close.'));
+    return `<div class="card flush fn-card">
+      <div class="list-head"><span class="t">${esc(m.pl.name)}</span>
+        <span class="s">${live} in play</span></div>
+      ${banner}
+      <div class="fn-body">${rows}${lostRow}</div>
+      <div class="fn-foot"><b>${wonPct}%</b> of ${m.reached[0]} closed</div>
+    </div>`;
   }
 
   /* All three tracks at once. Insurance, investments and planning run on
@@ -359,14 +374,8 @@ window.RWG = window.RWG || {};
   function wFunnel(ctx) {
     const pls = P().pipelines();
     if (!pls.length) return '';
-    return `<div>
-      <div class="hm-funnels" style="--fn-count:${pls.length}">
-        ${pls.map(p => `<div>${funnelCard(p.id)}</div>`).join('')}
-      </div>
-      <p class="list-hint" style="padding-top:0">Every opportunity appears <b>once</b>, in the stage
-        it is in today. <b>Oldest</b> is how long the longest-waiting one has sat there, so a full
-        stage that is moving reads differently from one that is not — amber past a fortnight, red
-        past a month. Click any bar for the names behind it.</p>
+    return `<div class="hm-funnels" style="--fn-count:${pls.length}">
+      ${pls.map(p => funnelCard(p.id)).join('')}
     </div>`;
   }
 

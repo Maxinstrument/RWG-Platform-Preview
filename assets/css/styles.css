@@ -924,14 +924,52 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .hm-grid{columns:2;column-gap:var(--s4);}
 .hm-grid > *{break-inside:avoid;-webkit-column-break-inside:avoid;display:block;margin:0 0 var(--s4);}
 @media (max-width:1180px){ .hm-grid{columns:1;} .hm-shell.cz-open{grid-template-columns:minmax(0,1fr);} }
-/* The three tracks side by side. Each is a full funnel, so they get equal
-   columns and stack rather than shrink — a funnel squeezed under ~300px
-   loses its stage labels, which is the only part you read. */
+/* ── The three funnels ────────────────────────────────────
+   Equal columns, equal heights, stacking rather than shrinking: a funnel
+   squeezed under ~300px loses its stage labels, which is the only part
+   you read. Cards stretch and pin their footer, so the close rates line
+   up across all three no matter how many stages a track has. */
 .hm-funnels{display:grid;grid-template-columns:repeat(var(--fn-count,3),minmax(0,1fr));
-  gap:var(--panel-gap);align-items:start;margin-bottom:var(--s3);}
+  gap:var(--panel-gap);align-items:stretch;}
 @media (max-width:1240px){ .hm-funnels{grid-template-columns:minmax(0,1fr);} }
-.fn-lab{width:130px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-align:right;text-wrap:balance;}
-.oc-lab{width:130px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-wrap:balance;}
+.fn-card{display:flex;flex-direction:column;}
+.fn-body{padding:var(--s2) var(--pad-panel) var(--s3);}
+.fn-foot{margin-top:auto;padding:9px var(--pad-panel) 11px;border-top:1px solid var(--line);
+  font-size:var(--fs-sub);color:var(--muted);}
+.fn-foot b{color:var(--navy);font-weight:700;font-variant-numeric:tabular-nums;}
+
+/* A row is label · rail · figures. The rail is always drawn, so an empty
+   stage reads as a quiet part of the funnel instead of a gap with a dash
+   in it — which was most of what made the card look broken. */
+.fn-row{display:flex;align-items:center;gap:9px;padding:2px 4px;border-radius:5px;}
+.fn-row:not(.is-empty){cursor:pointer;}
+.fn-row:not(.is-empty):hover{background:var(--hover-row);}
+.fn-lab{width:124px;flex:none;font-size:11.5px;line-height:1.2;color:var(--ink);
+  text-align:right;text-wrap:balance;}
+.fn-row.is-empty .fn-lab{color:var(--ink-ghost);}
+.fn-row.is-jam .fn-lab,.fn-row.is-lost .fn-lab{color:var(--bad);font-weight:700;}
+.fn-track{flex:1;min-width:0;height:22px;display:flex;align-items:center;
+  justify-content:center;position:relative;}
+.fn-track::before{content:"";position:absolute;left:0;right:0;height:2px;
+  background:var(--line);border-radius:2px;}
+.fn-bar{position:relative;height:22px;min-width:26px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;
+  background:var(--ink-ghost);}
+.is-open  .fn-bar{background:#5C6B7E;}
+.is-sub   .fn-bar{background:#C2A14D;}
+.is-won   .fn-bar{background:#2E7D5B;}
+.is-jam   .fn-bar,.is-lost .fn-bar{background:var(--bad);}
+.fn-side{width:58px;flex:none;text-align:right;line-height:1.15;
+  font-variant-numeric:tabular-nums;}
+.fn-money{display:block;font-size:var(--fs-micro);color:var(--muted);}
+/* Days appear only past a week. "1d" on every row was noise; three weeks
+   without movement is the whole point of the card. */
+.fn-days{display:block;font-size:var(--fs-micro);font-weight:700;color:var(--ink-ghost);}
+.fn-days.is-warn{color:var(--gold-ink);}
+.fn-days.is-late{color:var(--bad);}
+.fn-row.is-lost{margin-top:7px;padding-top:8px;border-top:1px solid var(--line);border-radius:0;}
+.oc-lab{width:124px;flex:none;font-size:11.5px;line-height:1.25;color:var(--ink);text-wrap:balance;}
 @media (max-width:760px){ .fn-lab,.oc-lab{width:96px;font-size:11px;} }
 
 /* ── Scorecard module ────────────────────────────────────── */
@@ -1493,18 +1531,22 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
 
 /* ── Funnel rows are live: every number opens its cases ───
    The hover is what tells you so before you click. */
-.fn-row:hover,.fn-drop:hover{background:var(--hover-row);border-radius:4px;}
 .dn-row:hover{background:var(--hover-row);border-radius:4px;}
-/* The fullest stage: the one line item the Monday meeting works on. */
-.fn-jam .fn-lab{color:var(--bad);font-weight:700;}
-.fn-banner{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;cursor:pointer;
-  margin:0 var(--pad-panel);padding:10px 14px;border-radius:8px;
-  background:rgba(176,58,46,.06);border:1px solid rgba(176,58,46,.22);}
-.fn-banner:hover{background:rgba(176,58,46,.11);}
+
+/* The fullest stage: the one line item the Monday meeting works on. A
+   rule with a tinted wash rather than a boxed panel — it should read as
+   part of the card, not as a warning stuck on top of it. */
+.fn-banner{display:flex;align-items:baseline;gap:9px;cursor:pointer;
+  margin:var(--s2) var(--pad-panel) 0;padding:8px 11px;
+  border-left:3px solid var(--bad);border-radius:0 7px 7px 0;
+  background:linear-gradient(90deg,rgba(176,58,46,.10),rgba(176,58,46,.02));}
+.fn-banner:hover{background:linear-gradient(90deg,rgba(176,58,46,.16),rgba(176,58,46,.04));}
 .fn-banner-k{font-size:var(--fs-micro);font-weight:700;letter-spacing:var(--track-caps);
   text-transform:uppercase;color:var(--bad);flex:none;}
-.fn-banner-v{font-size:var(--fs-panel);font-weight:700;color:var(--navy);min-width:0;}
-.fn-banner-s{font-size:var(--fs-sub);color:var(--muted);margin-left:auto;text-align:right;}
+.fn-banner-v{font-size:var(--fs-body);font-weight:700;color:var(--navy);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fn-banner-s{font-size:var(--fs-micro);color:var(--muted);margin-left:auto;flex:none;
+  font-variant-numeric:tabular-nums;}
 @media (max-width:1080px){
   .rec-shell{grid-template-columns:minmax(0,1fr);}
   .rec-rail{flex-direction:row;flex-wrap:wrap;}
