@@ -33,7 +33,10 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const dayMs = 86400000;
 
-  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '' };
+  // Home opens on the year — the widest honest read of the book — and
+  // narrows from there. A quarter default hid business that was still
+  // there, which is the wrong way round for a page you check every morning.
+  const st = { track: 'insurance', period: 'ytd', customize: false, on: null, compose: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -78,16 +81,21 @@ window.RWG = window.RWG || {};
   }
 
   // ── shared derivations ────────────────────────────────────
+  /* The cut-off every widget filters on. Cases are stamped by the Friday
+     their week ended, so "this week" is that Friday — not Monday's date,
+     which would exclude the week you are standing in. */
   function periodStartKey() {
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
+    if (st.period === 'week') return SC().currentWeekEnding();
     if (st.period === 'month') return dKey(y, m, 1);
     if (st.period === 'q') return dKey(y, m - (m % 3), 1);
     if (st.period === 'ytd') return dKey(y, 0, 1);
     return '';
   }
-  const PERIOD_LABEL = { month: 'this month', q: 'this quarter', ytd: 'this year', all: 'all time' };
+  const PERIOD_LABEL = { week: 'this week', month: 'this month', q: 'this quarter', ytd: 'this year', all: 'all time' };
   function sinceLabel() {
+    if (st.period === 'week') return 'this week';
     const k = periodStartKey();
     if (!k) return 'all time';
     return 'since ' + new Date(k + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
@@ -783,7 +791,9 @@ window.RWG = window.RWG || {};
     if (ctx.isAdmin) need += SD().cases().filter(c => c.pendingClose && !c.closedAt).length;
 
     const trackOpts = P().pipelines().map(p => `<option value="${esc(p.id)}" ${p.id === st.track ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-    const periodOpts = [['month', 'This month'], ['q', 'This quarter'], ['ytd', 'This year'], ['all', 'All time']]
+    // Shortest to longest, so narrowing down reads as moving up the list.
+    const periodOpts = [['week', 'This week'], ['month', 'This month'], ['q', 'This quarter'],
+        ['ytd', 'This year'], ['all', 'All time']]
       .map(p => `<option value="${p[0]}" ${p[0] === st.period ? 'selected' : ''}>${p[1]}</option>`).join('');
 
     // Full-width widgets sit above; the rest flow into balanced columns.
