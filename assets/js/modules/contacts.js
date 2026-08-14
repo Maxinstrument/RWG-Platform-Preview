@@ -231,7 +231,7 @@ window.RWG = window.RWG || {};
     return `<div class="ct-shell">
       <div class="card flush">
         <div class="list-head">
-          <span class="t" style="font-size:17px">Contacts</span>
+          <span class="t">Contacts</span>
           <span class="s">${list.length}${filtered && total !== list.length ? ' of ' + total : ''} ${isHH ? 'households' : 'people'}</span>
           <span class="topbar-spacer"></span>
           <div class="flex" style="gap:6px;align-items:center">

@@ -309,7 +309,7 @@ window.RWG = window.RWG || {};
     return `<div class="mw-grid">
       <div class="card flush">
         <div class="list-head">
-          <span class="t" style="font-size:17px">Tasks</span>
+          <span class="t">Tasks</span>
           <span class="s">${gps.overdue.length ? gps.overdue.length + ' overdue · ' : ''}${count} shown</span>
           <span class="topbar-spacer"></span>
           <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>

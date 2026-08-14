@@ -206,7 +206,7 @@ window.RWG = window.RWG || {};
     }).join('');
     const wonPct = counts[0] ? Math.round(100 * counts[counts.length - 1] / counts[0]) : 0;
     return card('Conversion funnel', counts[0] + ' opened ' + esc(sinceLabel()),
-      `<div style="padding:12px 16px 4px">${rows}</div>` +
+      `<div style="padding:12px var(--pad-panel) 4px">${rows}</div>` +
       hint('Of everything opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(pl.name) + ', how far it got. ' + wonPct + '% reached a confirmed close.'));
   }
 
@@ -248,7 +248,7 @@ window.RWG = window.RWG || {};
     const shown = working.filter(s => by[s.id]);
     if (!shown.length && !pending) return card('Where cases are sitting', esc(pl.name), emptyRow('Nothing open on this track right now.'));
     const max = Math.max.apply(null, shown.map(s => by[s.id]).concat([pending, 1]));
-    const bar = (label, n, color) => `<div class="flex" style="gap:9px;align-items:center;padding:4.5px 16px">
+    const bar = (label, n, color) => `<div class="flex" style="gap:9px;align-items:center;padding:5px var(--pad-panel)">
       <span class="oc-lab">${esc(label)}</span>
       <span style="flex:1;height:13px;background:var(--field);min-width:0;border-radius:3px;overflow:hidden">
         <span style="display:block;height:100%;width:${Math.round(100 * n / max)}%;background:${color};border-radius:3px"></span></span>
@@ -327,7 +327,7 @@ window.RWG = window.RWG || {};
     const today = T().todayKey();
     const due = T().openFor(ctx.eff.id).filter(t => t.dueDate && t.dueDate <= today)
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
-    const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+    const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
         <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">
         <span style="min-width:0;flex:1;font-size:13px;color:var(--ink)">${esc(t.title)}
           ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10px;margin-left:4px">⚙ ${esc(t.workflowName)}</span>` : ''}</span>
@@ -344,7 +344,7 @@ window.RWG = window.RWG || {};
     const sub = open.filter(c => c.state === 'Submitted');
     const opened = open.filter(c => c.state === 'Opened');
     const rev = (list) => list.reduce((n, c) => n + SC().deriveCase(c).revenue, 0);
-    const line = (label, list) => `<div class="flex" style="padding:10px 16px;border-bottom:1px solid rgba(14,36,64,.06);align-items:baseline;gap:9px">
+    const line = (label, list) => `<div class="flex" style="padding:10px var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);align-items:baseline;gap:9px">
       <span style="font-size:12.5px;color:var(--ink)">${label}</span><span class="topbar-spacer"></span>
       <span class="cell-sub">${list.length} case${list.length === 1 ? '' : 's'}</span>
       <span class="serif" style="font-size:17px;color:var(--navy)">${U().money(Math.round(rev(list)))}</span></div>`;
@@ -363,7 +363,7 @@ window.RWG = window.RWG || {};
     const rows = Object.keys(by).map(r => ({ r, n: by[r] })).sort((a, b) => b.n - a.n).slice(0, 6);
     const max = rows[0].n;
     return card('Lost reasons', lost.length + ' lost · last 90 days',
-      `<div style="padding:8px 0 6px">${rows.map(x => `<div class="flex" style="gap:9px;align-items:center;padding:4.5px 16px">
+      `<div style="padding:8px 0 6px">${rows.map(x => `<div class="flex" style="gap:9px;align-items:center;padding:5px var(--pad-panel)">
         <span class="oc-lab">${esc(x.r)}</span>
         <span style="flex:1;height:12px;background:var(--field);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(100 * x.n / max)}%;background:var(--bad);opacity:.75;border-radius:3px"></span></span>
         <span style="width:20px;flex:none;text-align:right;font-size:10.5px">${x.n}</span></div>`).join('')}</div>`);
@@ -374,7 +374,7 @@ window.RWG = window.RWG || {};
     const rows = SD().cases().filter(c => c.closedAt && Number(c.renewalAnnual) > 0);
     const sum = rows.reduce((n, c) => n + Number(c.renewalAnnual), 0);
     return card('Recurring book', '',
-      `<div style="padding:14px 16px 4px"><span class="serif" style="font-size:26px;color:var(--navy)">${U().money(Math.round(sum))}</span>
+      `<div style="padding:14px var(--pad-panel) 4px"><span class="serif" style="font-size:26px;color:var(--navy)">${U().money(Math.round(sum))}</span>
        <span class="cell-sub" style="margin-left:7px">a year · ${rows.length} polic${rows.length === 1 ? 'y' : 'ies'}</span></div>`
       + hint('Renewals captured at close. Reporting only — never counted in production, by decision.'));
   }
@@ -508,7 +508,7 @@ window.RWG = window.RWG || {};
     const rows = Object.keys(by).map(k => ({ k, n: by[k].n, rev: by[k].rev })).sort((a, b) => b.rev - a.rev);
     const max = rows[0].rev || 1;
     return card('Team leaderboard', 'closed revenue · ' + PERIOD_LABEL[st.period],
-      `<div style="padding:8px 0 6px">${rows.map((x, i) => `<div class="flex" style="gap:9px;align-items:center;padding:4.5px 16px">
+      `<div style="padding:8px 0 6px">${rows.map((x, i) => `<div class="flex" style="gap:9px;align-items:center;padding:5px var(--pad-panel)">
         <span class="cell-sub" style="width:14px;flex:none">${i + 1}</span>
         <span style="width:110px;flex:none;font-size:12px;color:var(--ink);font-weight:600">${esc(firstName(x.k))}</span>
         <span style="flex:1;height:12px;background:var(--field);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(100 * x.rev / max)}%;background:var(--gold);border-radius:3px"></span></span>
@@ -546,7 +546,7 @@ window.RWG = window.RWG || {};
     const pct = Math.min(100, Math.round(100 * booked / CH.ANNUAL_FYC_GOAL_TOTAL));
     const ahead = booked - paceTarget;
     return card('Chairman’s Club pace', 'week ' + week + ' of ' + CH.WEEKS_IN_SPRINT,
-      `<div style="padding:14px 16px 4px">
+      `<div style="padding:14px var(--pad-panel) 4px">
         <span class="serif" style="font-size:26px;color:var(--navy)">${U().moneyK(Math.round(booked))}</span>
         <span class="cell-sub" style="margin-left:7px">of ${U().moneyK(CH.ANNUAL_FYC_GOAL_TOTAL)} FYC</span>
         <div style="height:6px;background:var(--field);margin-top:10px;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${ahead >= 0 ? 'var(--good)' : 'var(--gold)'};border-radius:3px"></div></div>

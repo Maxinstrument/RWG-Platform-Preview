@@ -42,6 +42,56 @@
   --radius-lg:16px;          /* outer things: modals, sheets */
   --ctl-h:42px;              /* every text control is exactly this tall */
   --ctl-h-sm:38px;           /* toolbar-sized controls */
+
+  /* ── THE EDGE RULE ────────────────────────────────────────
+     A gap and an inset are different jobs, which is why the six
+     numbers above were never enough on their own. One inset per
+     level of containment, each ~0.7 of the level outside it:
+
+        screen 28  →  window 24  →  panel 20  →  cell 14
+
+     A new component picks its inset by counting how deep it sits.
+     Nothing in the app may invent a fifth number. Before this,
+     edges landed at 13/14/16/18/20/22/26 depending on the screen —
+     never nameable, always felt. ─────────────────────────── */
+  --gutter:28px;             /* .main and .topbar — the screen edge */
+  --pad-window:24px;         /* modal, drawer: a surface floating over the app */
+  --pad-panel:20px;          /* card, list surface, toolbar, table outer column */
+  --pad-cell:14px;           /* inside a panel: table cell, board column, note */
+  --panel-gap:var(--s4);     /* between two panels */
+
+  /* ── Type: one size per role ──────────────────────────────
+     Twenty-six sizes, eleven of them inside a 5px band, is not a
+     hierarchy — a half-pixel difference reads as a mistake, not a
+     distinction. Table and row text deliberately stays 13.5px:
+     that density is what five people read all day. */
+  --fs-hero:34px;            /* the one figure that owns a screen */
+  --fs-figure:26px;          /* a widget's number */
+  --fs-title:21px;           /* page title, modal title, drawer title */
+  --fs-panel:17px;           /* every panel heading, flush or padded */
+  --fs-body:14px;            /* prose, forms, buttons */
+  --fs-dense:13.5px;         /* table cells, list rows — unchanged, on purpose */
+  --fs-sub:12.5px;           /* secondary line, hint, form label */
+  --fs-micro:11px;           /* uppercase label, chip — the floor */
+  --track-caps:.08em;        /* the ONE tracking for uppercase labels */
+  --track-display:-.01em;    /* Fraunces tightens as it grows */
+  --lh-display:1.15; --lh-tight:1.3; --lh-body:1.5;
+
+  /* ── Inks that pass AA ────────────────────────────────────
+     Gold on white is 2.47:1. It may fill, border and dot; it may
+     never letter. Each accent gets a fill (above) and an ink. */
+  --gold-ink:#7A6220;        /* 6.6:1 on card, 5.2:1 on the gold chip fill */
+  --good-ink:#23664A;
+  --warn-ink:#8A4E12;
+  --bad-ink:#8F2A36;
+  --ink-ghost:#657386;       /* placeholders: was #9aa6b4 at 2.4:1 */
+  --on-navy-soft:rgba(255,255,255,.55);   /* sidebar labels: was .35 at 3.1:1 */
+
+  /* Navy carries the 3:1 a focus indicator needs; gold alone tops out
+     at 2.47:1, which is why the old gold halo was decoration. */
+  --focus:0 0 0 2px var(--card),0 0 0 4px var(--navy),0 0 0 6px rgba(194,161,77,.5);
+  --focus-on-navy:0 0 0 2px var(--navy-deep),0 0 0 4px var(--gold-soft);
+  --hover-row:rgba(194,161,77,.07);
 }
 
 *{box-sizing:border-box;}
@@ -100,7 +150,7 @@ a{color:inherit;}
 .icon-btn{
   display:inline-flex;align-items:center;justify-content:center;
   width:36px;height:36px;border-radius:9px;border:1px solid var(--line);
-  background:#fff;color:var(--muted);transition:.15s;
+  background:#fff;color:var(--muted);
 }
 .icon-btn:hover{border-color:var(--gold);color:var(--navy);}
 
@@ -134,10 +184,10 @@ a{color:inherit;}
 .gate-sub{color:var(--muted);font-size:13.5px;margin:0 0 22px;}
 .gate-card .field-group{text-align:left;margin-bottom:14px;}
 .gate-tabs{display:flex;gap:6px;background:rgba(14,36,64,.05);padding:5px;border-radius:11px;margin-bottom:24px;}
-.gate-tab{flex:1;padding:9px;border:none;background:transparent;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--muted);transition:.15s;}
+.gate-tab{flex:1;padding:9px;border:none;background:transparent;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--muted);}
 .gate-tab.active{background:#fff;color:var(--navy);box-shadow:0 2px 8px -4px rgba(14,36,64,.4);}
 .gate-error{color:var(--bad);font-size:13px;min-height:18px;margin:6px 0 0;}
-.linklike{background:none;border:none;color:#8a6f24;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;text-decoration-color:rgba(194,161,77,.5);}
+.linklike{background:none;border:none;color:var(--gold-ink);font-size:12.5px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;text-decoration-color:rgba(194,161,77,.5);}
 .linklike:hover{color:var(--gold);}
 .remember-lbl{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;}
 .remember-lbl input{accent-color:var(--gold);cursor:pointer;}
@@ -147,9 +197,9 @@ a{color:inherit;}
   color:var(--good);padding:14px;border-radius:10px;font-size:13.5px;margin-top:4px;
 }
 .demo-pills{margin-top:22px;padding-top:18px;border-top:1px dashed var(--line);}
-.demo-pills .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.demo-pills .lbl{color:var(--muted);margin-bottom:10px;}
 .demo-pills .row{display:flex;gap:8px;}
-.demo-pill{flex:1;padding:9px 6px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--ink);transition:.15s;}
+.demo-pill{flex:1;padding:9px 6px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--ink);}
 .demo-pill:hover{border-color:var(--gold);background:rgba(194,161,77,.07);}
 .demo-pill small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:2px;}
 
@@ -225,8 +275,11 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
   background:rgba(255,255,255,.85);backdrop-filter:blur(10px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
 }
-.topbar .page-title{font-size:21px;}
-.topbar .page-sub{color:var(--muted);font-size:13px;margin-top:1px;}
+.topbar .page-title{
+  font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:var(--fs-title);
+  line-height:var(--lh-display);letter-spacing:var(--track-display);color:var(--navy);
+}
+.topbar .page-sub{color:var(--muted);font-size:var(--fs-sub);margin-top:2px;}
 .topbar-spacer{flex:1;}
 .topbar-search{
   position:relative;width:280px;max-width:32vw;
@@ -251,12 +304,12 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .side-brand{display:flex;align-items:center;gap:12px;padding:4px 8px 18px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1);}
 .side-brand img{height:42px;width:auto;object-fit:contain;}
 .side-brand .t{font-family:'Fraunces',serif;font-size:13px;letter-spacing:.06em;line-height:1.2;}
-.side-brand .t small{display:block;font-family:'Hanken Grotesk',sans-serif;font-size:10px;color:var(--gold-soft);font-style:italic;letter-spacing:.04em;margin-top:2px;}
-.nav-label{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.35);padding:14px 12px 6px;}
+.side-brand .t small{display:block;font-family:'Hanken Grotesk',sans-serif;font-size:var(--fs-micro);color:var(--gold-soft);font-style:italic;letter-spacing:.04em;margin-top:2px;}
+.nav-label{padding:14px 12px 6px;}
 .nav-item{
   display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;
   color:rgba(255,255,255,.74);font-size:14px;font-weight:500;
-  border:1px solid transparent;transition:.15s;text-align:left;background:transparent;width:100%;
+  border:1px solid transparent;text-align:left;background:transparent;width:100%;
 }
 .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
 .nav-item.active{background:rgba(194,161,77,.16);color:#fff;border-color:rgba(194,161,77,.3);}
@@ -265,7 +318,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .sidebar .spacer{flex:1;}
 .side-foot{padding:12px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:rgba(255,255,255,.4);}
 
-.main{grid-area:main;padding:26px 28px 70px;overflow-x:hidden;}
+.main{grid-area:main;padding:var(--s5) var(--gutter) 72px;overflow-x:hidden;}
 
 /* admin "view as agent" banner */
 .viewas-banner{
@@ -282,15 +335,15 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
    ============================================================ */
 .card{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:22px;box-shadow:var(--shadow-card);
+  padding:var(--pad-panel);box-shadow:var(--shadow-card);
 }
-.card.tight{padding:16px;}
+.card.tight{padding:var(--s3);}
 .card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
 .card-head h3{font-size:17px;}
 .card-head .sub{color:var(--muted);font-size:12.5px;}
 .eyebrow{display:flex;align-items:center;gap:9px;margin:0 0 10px;}
 .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);}
-.eyebrow span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+.eyebrow span{color:var(--muted);}
 
 .grid{display:grid;gap:18px;}
 .grid-4{grid-template-columns:repeat(4,1fr);}
@@ -305,7 +358,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:18px 20px;box-shadow:var(--shadow-card);position:relative;overflow:hidden;
 }
-.stat .label{font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:600;text-transform:uppercase;}
+.stat .label{color:var(--muted);}
 .stat .value{font-family:'Fraunces',serif;font-size:34px;line-height:1.05;margin:8px 0 2px;color:var(--navy);}
 .stat .delta{font-size:12.5px;font-weight:600;}
 .stat .delta.up{color:var(--good);}
@@ -316,7 +369,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
    Badges / chips
    ============================================================ */
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:.02em;white-space:nowrap;}
-.tier-gold{background:var(--tier-gold-bg);color:#8a6f24;border:1px solid rgba(194,161,77,.4);}
+.tier-gold{background:var(--tier-gold-bg);color:var(--gold-ink);border:1px solid rgba(194,161,77,.4);}
 .tier-high{background:var(--tier-high-bg);color:var(--tier-high);border:1px solid rgba(46,125,91,.3);}
 .tier-medium{background:var(--tier-medium-bg);color:var(--tier-medium);border:1px solid rgba(176,105,31,.3);}
 .tier-low{background:var(--tier-low-bg);color:var(--tier-low);border:1px solid rgba(92,107,126,.3);}
@@ -330,7 +383,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .stage-new{background:rgba(92,107,126,.12);color:var(--muted);}
 .stage-attempting{background:rgba(176,105,31,.12);color:var(--warn);}
 .stage-reached{background:rgba(46,125,91,.12);color:var(--good);}
-.stage-appt-set{background:rgba(194,161,77,.16);color:#8a6f24;}
+.stage-appt-set{background:rgba(194,161,77,.16);color:var(--gold-ink);}
 .stage-appt-kept{background:var(--navy);color:#fff;}
 .stage-opportunity{background:linear-gradient(135deg,var(--gold),var(--gold-soft));color:var(--navy-deep);}
 .stage-no-opp{background:rgba(178,58,72,.1);color:var(--bad);}
@@ -345,15 +398,15 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .filterbar{
   display:flex;flex-direction:column;gap:10px;
   background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:10px 14px;margin-bottom:18px;box-shadow:var(--shadow-card);
+  padding:var(--s2) var(--pad-panel);margin-bottom:var(--panel-gap);box-shadow:var(--shadow-card);
 }
 .fbar-top,.fbar-bottom{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .fbar-bottom{padding-top:9px;border-top:1px solid var(--line);}
-.fbar-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+.fbar-label{color:var(--muted);}
 .fbar-tiers{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .fbar-tier{
   display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;
-  border:1px solid var(--line-strong);background:#fff;font-size:12.5px;font-weight:700;color:var(--muted);transition:.15s;
+  border:1px solid var(--line-strong);background:#fff;font-size:12.5px;font-weight:700;color:var(--muted);
 }
 .fbar-tier:hover{border-color:var(--gold);color:var(--ink);}
 .fbar-tier.on{background:var(--navy);color:#fff;border-color:var(--navy);}
@@ -376,7 +429,7 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
   box-shadow:var(--shadow-pop);padding:8px;min-width:210px;max-height:72vh;overflow-y:auto;
   animation:rise .14s ease backwards;
 }
-.pop-h{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:6px 8px 8px;}
+.pop-h{color:var(--muted);padding:6px 8px 8px;}
 .pop-row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;font-size:13.5px;font-weight:500;cursor:pointer;user-select:none;white-space:nowrap;}
 .pop-row:hover{background:rgba(194,161,77,.09);}
 .pop-row input{accent-color:var(--gold);}
@@ -408,7 +461,7 @@ input.pop-search{width:100%;min-height:34px;margin:2px 0 8px;padding:7px 10px;fo
 
 /* Active-filter summary chips */
 .chip-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
-.filter-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(194,161,77,.14);border:1px solid rgba(194,161,77,.4);color:#8a6f24;padding:4px 6px 4px 11px;border-radius:20px;font-size:12.5px;font-weight:600;}
+.filter-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(194,161,77,.14);border:1px solid rgba(194,161,77,.4);color:var(--gold-ink);padding:4px 6px 4px 11px;border-radius:20px;font-size:12.5px;font-weight:600;}
 .filter-chip b{color:var(--navy);font-weight:700;}
 .chip-x{border:none;background:rgba(14,36,64,.10);color:var(--muted);width:17px;height:17px;border-radius:50%;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .chip-x:hover{background:var(--bad);color:#fff;}
@@ -447,8 +500,8 @@ table.data tr.row-sel:hover{background:rgba(194,161,77,.18);}
 .table-wrap::-webkit-scrollbar-thumb:hover{background:var(--gold);}
 table.data{min-width:100%;border-collapse:collapse;font-size:13.5px;}
 table.data thead th{
-  text-align:left;padding:13px 14px;background:#FAF8F2;color:var(--muted);
-  font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+  text-align:left;padding:13px var(--pad-cell);background:#FAF8F2;color:var(--muted);
+  font-size:var(--fs-micro);letter-spacing:var(--track-caps);text-transform:uppercase;font-weight:700;
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;white-space:nowrap;cursor:pointer;user-select:none;
 }
 table.data thead th:hover{color:var(--navy);}
@@ -469,14 +522,14 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    ============================================================ */
 .board{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 14px;align-items:flex-start;}
 .board-col{flex:0 0 290px;background:rgba(14,36,64,.035);border:1px solid var(--line);border-radius:13px;display:flex;flex-direction:column;max-height:calc(100vh - 220px);}
-.board-col-head{padding:13px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);position:sticky;top:0;}
+.board-col-head{padding:12px var(--pad-cell);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);position:sticky;top:0;}
 .board-col-head .ttl{font-weight:700;font-size:13px;}
 .board-col-head .cnt{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:11.5px;font-weight:700;padding:1px 9px;color:var(--muted);}
 .board-col-head .bar{width:8px;height:8px;border-radius:50%;}
-.board-col-body{padding:10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
+.board-col-body{padding:var(--s2) var(--pad-cell) var(--pad-cell);display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
 .lead-card{
-  background:#fff;border:1px solid var(--line);border-radius:11px;padding:13px;
-  box-shadow:0 4px 14px -10px rgba(14,36,64,.4);transition:.15s;cursor:pointer;
+  background:#fff;border:1px solid var(--line);border-radius:11px;padding:var(--pad-cell);
+  box-shadow:0 4px 14px -10px rgba(14,36,64,.4);cursor:pointer;
 }
 .lead-card:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(14,36,64,.5);}
 .lead-card.draggable{cursor:grab;}
@@ -487,7 +540,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .lead-card .lc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}
 .lead-card .lc-name{font-weight:700;color:var(--navy);font-size:14px;}
 .lead-card .lc-meta{color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:9px;}
-.lead-card .lc-why{font-size:11.5px;color:#8a6f24;background:var(--tier-gold-bg);padding:5px 8px;border-radius:7px;line-height:1.35;margin-bottom:9px;}
+.lead-card .lc-why{font-size:11.5px;color:var(--gold-ink);background:var(--tier-gold-bg);padding:5px 8px;border-radius:7px;line-height:1.35;margin-bottom:9px;}
 .lead-card .lc-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;border-top:1px solid var(--line);padding-top:9px;}
 .lead-card .lc-foot .attempts{font-size:11.5px;color:var(--muted);}
 
@@ -521,7 +574,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .drawer.leaving{transform:translateX(100%);transition:transform .2s cubic-bezier(.5,0,.85,.5);}
 /* A repaint is not an arrival: logging a call must not re-slide the panel. */
 .drawer.no-enter{animation:none;}
-.drawer-head{background:linear-gradient(160deg,var(--navy),var(--navy-deep));color:#fff;padding:22px 24px;border-bottom:3px solid var(--gold);}
+.drawer-head{background:linear-gradient(160deg,var(--navy),var(--navy-deep));color:#fff;padding:var(--pad-window);border-bottom:3px solid var(--gold);}
 .drawer-head .dh-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
 .drawer-head h2{color:#fff;font-size:23px;}
 .drawer-head .dh-sub{color:rgba(255,255,255,.7);font-size:13px;margin-top:4px;}
@@ -539,11 +592,11 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .hist-change .harr{color:var(--gold);font-weight:700;}
 .hist-change b{color:var(--navy);}
 .hist-note{font-size:13px;color:var(--ink);padding:3px 0;}
-.drawer-body{flex:1;overflow-y:auto;padding:20px 24px 40px;}
+.drawer-body{flex:1;overflow-y:auto;padding:var(--pad-window) var(--pad-window) 44px;}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:6px 0 8px;}
-.detail-item .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:3px;}
+.detail-item .k{color:var(--muted);margin-bottom:3px;}
 .detail-item .v{font-size:14.5px;font-weight:600;color:var(--ink);}
-.section-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:22px 0 12px;display:flex;align-items:center;gap:8px;}
+.section-title{color:var(--muted);margin:var(--s5) 0 var(--s3);display:flex;align-items:center;gap:8px;}
 .section-title::after{content:"";flex:1;height:1px;background:var(--line);}
 
 /* Activity timeline */
@@ -560,7 +613,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* Log activity quick form */
 .log-box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;}
 .type-toggle{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
-.type-toggle button{flex:1;min-width:64px;padding:8px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--muted);transition:.15s;}
+.type-toggle button{flex:1;min-width:64px;padding:8px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--muted);}
 .type-toggle button.active{background:var(--navy);color:#fff;border-color:var(--navy);}
 
 /* ============================================================
@@ -592,7 +645,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    <div> wrapping them next to a close button. */
 .modal-head{
   display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:var(--s3);
-  padding:var(--s5) var(--s5) var(--s3);flex:none;
+  padding:var(--pad-window) var(--pad-window) var(--s3);flex:none;
   border-bottom:1px solid var(--line);
 }
 .modal-head > *{grid-column:1;min-width:0;}
@@ -605,9 +658,9 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   background:rgba(14,36,64,.06);color:var(--muted);font-size:16px;
 }
 .modal-head .drawer-close:hover{background:rgba(14,36,64,.12);color:var(--navy);}
-.modal-body{padding:var(--s4) var(--s5);overflow-y:auto;flex:1;min-height:0;}
+.modal-body{padding:var(--s4) var(--pad-window);overflow-y:auto;flex:1;min-height:0;}
 .modal-foot{
-  padding:var(--s3) var(--s5) var(--s5);flex:none;
+  padding:var(--s3) var(--pad-window) var(--pad-window);flex:none;
   display:flex;gap:var(--s2);justify-content:flex-end;align-items:center;flex-wrap:wrap;
   border-top:1px solid var(--line);
 }
@@ -628,30 +681,30 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .card.flush{padding:0;overflow:hidden;}
 .list-head{
   display:flex;align-items:center;gap:var(--s2);
-  padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);
+  padding:var(--s3) var(--pad-panel);border-bottom:1px solid var(--line);
 }
 .list-head .t{font-family:'Fraunces',Georgia,serif;font-size:14.5px;color:var(--navy);font-weight:500;}
 .list-head .s{font-size:12px;color:var(--muted);}
 .list-group{
-  padding:var(--s2) var(--s4);background:var(--field);border-bottom:1px solid var(--line);
-  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--muted);
+  padding:var(--s2) var(--pad-panel);background:var(--field);border-bottom:1px solid var(--line);
+  color:var(--muted);
 }
 .list-group.bad{background:rgba(178,58,72,.07);color:var(--bad);}
 .list-row{
   display:flex;align-items:flex-start;gap:11px;
-  padding:var(--s2) var(--s4);border-bottom:1px solid rgba(14,36,64,.06);
+  padding:var(--s2) var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);
 }
 .list-row:last-child{border-bottom:none;}
 .list-row.mid{align-items:center;}
 .list-row .grow{min-width:0;flex:1;}
 .list-row .end{flex:none;text-align:right;}
 .list-row .ic{flex:none;font-size:15px;line-height:1.3;}
-.list-foot{padding:var(--s2) var(--s4);border-top:1px solid var(--line);}
+.list-foot{padding:var(--s2) var(--pad-panel);border-top:1px solid var(--line);}
 /* The explanatory line under a card — same voice, same colour, everywhere */
 .list-note{font-size:12px;line-height:1.5;color:var(--muted);margin:var(--s2) 2px 0;}
 /* …and the same line when it sits inside the card, under the rows */
-.list-hint{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0;padding:var(--s2) var(--s4) var(--s3);}
-.list-empty{font-size:13px;line-height:1.5;color:var(--muted);margin:0;padding:var(--s4);}
+.list-hint{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0;padding:var(--s2) var(--pad-panel) var(--s3);}
+.list-empty{font-size:var(--fs-dense);line-height:1.5;color:var(--muted);margin:0;padding:var(--s4) var(--pad-panel);}
 
 /* ============================================================
    Goal ring & funnel
@@ -673,7 +726,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* Leaderboard */
 .lb-row{display:grid;grid-template-columns:30px 1fr repeat(4,minmax(58px,auto));gap:12px;align-items:center;padding:12px 6px;border-bottom:1px solid var(--line);font-size:13.5px;}
 .lb-row:last-child{border-bottom:none;}
-.lb-row.head{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:8px 6px;}
+.lb-row.head{color:var(--muted);padding:8px 6px;}
 .lb-row .rank{font-family:'Fraunces',serif;color:var(--gold);font-weight:600;text-align:center;}
 .lb-row .who{display:flex;align-items:center;gap:10px;font-weight:600;}
 .lb-row .mn{text-align:center;font-variant-numeric:tabular-nums;}
@@ -684,7 +737,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .dropzone{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   border:2px dashed var(--line-strong);border-radius:14px;padding:40px 24px;text-align:center;
-  background:rgba(194,161,77,.04);transition:.18s;cursor:pointer;min-height:210px;
+  background:rgba(194,161,77,.04);cursor:pointer;min-height:210px;
 }
 .dropzone:hover,.dropzone.drag{border-color:var(--gold);background:rgba(194,161,77,.09);}
 .dropzone.drag{transform:scale(.995);}
@@ -769,7 +822,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .lrc-sel input{width:20px;height:20px;accent-color:var(--gold);}
 .lrc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
 .lrc-cell{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.lrc-cell .k{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+.lrc-cell .k{color:var(--muted);}
 .lrc-cell .v{font-size:13.5px;font-weight:600;color:var(--ink);}
 .lrc-stage{display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:0;cursor:pointer;align-self:flex-start;}
 .lrc-stage .caret{color:var(--muted);font-size:11px;}
@@ -850,7 +903,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .tile-ic .ic{width:22px;height:22px;}
 .tile-t{font-family:'Fraunces',serif;font-size:19px;color:var(--navy);}
 .tile-d{font-size:13.5px;color:var(--muted);line-height:1.5;}
-.tile-go{margin-top:8px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);}
+.tile-go{margin-top:8px;}
 
 .tile-soon{cursor:default;opacity:.62;box-shadow:none;background:var(--field);}
 .tile-soon:hover{transform:none;box-shadow:none;border-color:var(--line);}
@@ -886,12 +939,10 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .sc-addcase{border-top:1px solid var(--line);margin-top:14px;padding-top:16px;}
 .sc-add-h{font-family:'Fraunces',serif;font-size:16px;color:var(--navy);margin-bottom:12px;}
 .sc-add-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr .9fr 1fr;gap:12px;align-items:end;}
-.sc-add-grid label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:5px;}
 .sc-add-grid input,.sc-add-grid select{width:100%;}
 .sc-add-grid .hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
 .sc-add-actions{display:flex;gap:10px;margin-top:14px;}
 .sc-activity{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
-.sc-act label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:5px;}
 .sc-act input{width:100%;}
 .sc-derived{margin-top:14px;font-size:13px;}
 .sc-derived b{color:var(--navy);}
@@ -915,7 +966,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .sc-daily td.sc-metric,.sc-daily tbody th.sc-metric{text-align:left;font-weight:600;color:var(--navy);font-size:13px;}
 .sc-dayh{text-align:center;}
 .sc-dayh span{display:block;font-weight:700;color:var(--navy);}
-.sc-dayh small{display:block;font-weight:500;color:var(--muted);font-size:10.5px;margin-top:1px;}
+.sc-dayh small{display:block;font-weight:500;color:var(--muted);font-size:var(--fs-micro);margin-top:1px;}
 .sc-weektot{text-align:right;}
 input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;margin:0;}
 .sc-daily td{text-align:center;padding:6px 5px;}
@@ -929,7 +980,7 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .mw-line:last-child{border-bottom:0;padding-bottom:0;}
 .mw-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px;}
 .mw-label{font-size:12.5px;color:var(--navy);font-weight:600;}
-.mw-auto{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:rgba(14,36,64,.06);border-radius:4px;padding:1px 5px;margin-left:6px;font-weight:700;}
+.mw-auto{color:var(--muted);background:rgba(14,36,64,.06);border-radius:4px;padding:1px 5px;margin-left:6px;font-weight:700;}
 .mw-val{font-size:12.5px;font-weight:700;color:var(--navy);white-space:nowrap;font-variant-numeric:tabular-nums;}
 .mw-goal{color:var(--muted);font-weight:500;}
 .mw-bar{height:6px;border-radius:999px;background:rgba(14,36,64,.08);overflow:hidden;}
@@ -959,7 +1010,6 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .cs-row{cursor:pointer;}
 .cs-row:hover td{background:var(--field);}
 .cs-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-.cs-modal-grid label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:5px;}
 .cs-modal-grid input,.cs-modal-grid select{width:100%;}
 .cs-modal-grid .hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
 .cs-correct{margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--line);}
@@ -986,7 +1036,7 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 
 /* Rich-text notes: toolbar and canvas are one control */
 .rt-toolbar{
-  display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:6px 8px;
+  display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:6px 5px;
   border:1px solid var(--line-strong);border-bottom:none;
   border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:var(--field);
 }
@@ -994,7 +1044,7 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .rt-body{
   min-height:120px;max-height:260px;overflow-y:auto;
   border:1px solid var(--line-strong);border-radius:0 0 var(--radius-sm) var(--radius-sm);
-  padding:12px 14px;background:#fff;color:var(--ink);font-size:13.5px;line-height:1.6;
+  padding:12px var(--pad-cell);background:#fff;color:var(--ink);font-size:var(--fs-dense);line-height:1.6;
 }
 .rt-body:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,161,77,.18);}
 /* Read-only: no toolbar above it, so it keeps all four corners */
@@ -1015,7 +1065,7 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
    in the head above. Used by Contacts and Tasks. */
 .list-toolbar{
   display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
-  padding:var(--s2) var(--s3);
+  padding:var(--s2) var(--pad-panel);
   border-bottom:1px solid var(--line);background:var(--field);
 }
 .list-toolbar .input,
@@ -1227,7 +1277,7 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
    min-width — because a select that is wider than its content is
    what pushed this to two rows in the first place. */
 .list-toolbar.tb-inline{
-  flex-wrap:nowrap;gap:6px;padding:7px var(--s3);
+  flex-wrap:nowrap;gap:6px;padding:7px var(--pad-panel);
   overflow-x:auto;scrollbar-width:thin;
 }
 .list-toolbar.tb-inline select{
@@ -1272,3 +1322,129 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
   .btn:active{transform:none;}
   .lead-card.dragging{transform:none;}
 }
+
+/* ============================================================
+   The system, stated once
+
+   Everything below exists because the same visual role was being
+   declared in many places with slightly different numbers. Source
+   order matters here: the uppercase micro-label block comes first,
+   then the form-label rule overrides it — a form label is sentence
+   case everywhere, which is what the comment at the top of the
+   Controls section always intended.
+   ============================================================ */
+
+/* ── One uppercase micro-label. Was six sizes and eleven trackings
+      (.02 .04 .05 .06 .08 .1 .12 .13 .14 .16 .18em) for one role. ── */
+.nav-label,.eyebrow span,.stat .label,.fbar-label,.pop-h,.list-group,
+.section-title,.detail-item .k,.lb-row.head,.lrc-cell .k,.omni-head,
+.mw-auto,.tile-go,.demo-pills .lbl,.sc-add-grid label,.cs-modal-grid label,.sc-act label{
+  font-family:'Hanken Grotesk',system-ui,sans-serif;
+  font-size:var(--fs-micro);font-weight:700;
+  letter-spacing:var(--track-caps);text-transform:uppercase;
+  line-height:var(--lh-tight);
+}
+/* The login wordmark is a logotype, not a UI label. */
+.gate-brand{font-size:13px;letter-spacing:.18em;}
+.nav-label,.side-foot{color:var(--on-navy-soft);}   /* was 3.1:1 on navy */
+
+/* ── A form label is sentence case. This must stay after the block
+      above, or the two competing label styles come straight back. ── */
+label.lbl,.cs-modal-grid label,.sc-add-grid label,.sc-act label{
+  display:block;font-size:var(--fs-sub);font-weight:600;color:var(--ink);
+  line-height:1.4;letter-spacing:0;text-transform:none;margin:0 0 var(--s1);
+}
+
+/* ── Panel titles agree. .list-head .t was 14.5px against .card-head h3
+      at 17px, which is why two screens patched it inline to 17. ── */
+.card-head h3,.list-head .t,.empty h3,.dropzone h3,.sc-add-h,.cs-correct-h{
+  font-family:'Fraunces',Georgia,serif;font-weight:500;
+  font-size:var(--fs-panel);line-height:var(--lh-tight);
+  letter-spacing:0;color:var(--navy);
+}
+.modal-head h2,.modal-head h3,.drawer-head h2{
+  font-size:var(--fs-title);line-height:var(--lh-display);letter-spacing:var(--track-display);
+}
+
+/* ── Display numbers were inheriting weight 400 from body, so a 34px
+      money figure was lighter than the 17px heading above it. And
+      .dn-total had no font-family at all — the doughnut's total was
+      the only big number in the app set in the body face. ── */
+.stat .value,.sc-big,.rp-club-num,.dn-total,.ring .ring-center .big,.funnel-row .fv{
+  font-family:'Fraunces',Georgia,serif;font-weight:600;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:var(--track-display);line-height:1.05;color:var(--navy);
+}
+/* Money in a column must not wander, wherever it is rendered. */
+table.data td,table.data th,.mw-val,.lb-row .mn,.dn-val,.dn-pct{font-variant-numeric:tabular-nums;}
+
+/* ── The table's outer columns join the panel edge; interior cells keep
+      14px, because horizontal room in a dense table is the scarce thing. ── */
+table.data thead th:first-child,table.data tbody td:first-child{padding-left:var(--pad-panel);}
+table.data thead th:last-child,table.data tbody td:last-child{padding-right:var(--pad-panel);}
+table.data thead th.sel-th,table.data td.sel-cell{padding-left:var(--pad-panel);padding-right:var(--s1);}
+
+/* ── Row hover. .cs-row painted the CELL with --field (#FBFAF6 on white,
+      a 1.6% difference), which beat the row's gold tint — so the widest
+      table in the app had no usable hover at all. ── */
+table.data tbody tr:hover{background:var(--hover-row);}
+.cs-row:hover td{background:var(--hover-row);}
+.pop-row:hover,.pop-sort:hover{background:var(--hover-row);}
+
+/* ── Focus. Ten interactive components had none; the one ring that did
+      exist composited to ~1.1:1, where the spec asks for 3:1. ── */
+.btn:focus-visible,.icon-btn:focus-visible,.um-item:focus-visible,
+.pop-row:focus-visible,.pop-sort:focus-visible,.fbar-tier:focus-visible,
+.type-toggle button:focus-visible,.gate-tab:focus-visible,.demo-pill:focus-visible,
+.th-filter:focus-visible,.chip-x:focus-visible,.linklike:focus-visible,
+.tag-chip:focus-visible,.btn-link:focus-visible,button.user-chip:focus-visible,
+.omni-row:focus-visible,.cs-th:focus-visible,.drawer-edit:focus-visible{
+  outline:none;box-shadow:var(--focus);position:relative;z-index:2;
+}
+.sidebar .nav-item:focus-visible,.drawer-head .drawer-close:focus-visible{
+  outline:none;box-shadow:var(--focus-on-navy);position:relative;z-index:2;
+}
+.chip-x:focus-visible{box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--navy);}
+input:focus,select:focus,textarea:focus,.rt-body:focus{
+  outline:none;border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(14,36,64,.14),0 0 0 4px rgba(194,161,77,.5);
+}
+/* A ring that fades in reads as the app lagging behind the keyboard. */
+input:focus,select:focus,textarea:focus,.rt-body:focus,
+.btn:focus-visible,.nav-item:focus-visible{transition:none;}
+
+/* ── Gold may fill, border and dot. At 2.47:1 on white it may never
+      letter — least of all as a hover state on the two densest tables,
+      where the affordance was making the name harder to read. ── */
+.tile-go,.lb-row .rank,.pop-actions button,.gold-text,.hist-change .harr,
+table.data thead th .arrow,.board-col.drop-target .drop-hint,
+.linklike,.linklike:hover,.th-filter.on{color:var(--gold-ink);}
+.cs-row:hover .cell-name,.ct-name .cell-name:hover,.cs-table th .cs-th:hover,
+.ct-shell td a:hover,.ct-shell td .btn-link:hover{
+  color:var(--navy);text-decoration:underline;
+  text-decoration-color:var(--gold);text-decoration-thickness:1.5px;text-underline-offset:3px;
+}
+/* .btn-gold already proves gold takes dark text; white on gold is 2.47:1. */
+.tag-chip.on{background:var(--gold);border-color:var(--gold);color:var(--navy-deep);}
+.tier-gold{color:var(--gold-ink);}
+.tier-high{color:var(--good-ink);}
+.tier-medium{color:var(--warn-ink);}
+.stage-appt-set{color:var(--gold-ink);}
+.filter-chip,.lead-card .lc-why{color:var(--gold-ink);}
+input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-ghost);}
+
+/* ── `transition:<time>` is `transition:all` — it re-evaluates every
+      animatable property on every recalculation, and silently animates
+      whatever a future state rule adds. On a drag target that matters. ── */
+.icon-btn,.gate-tab,.demo-pill,.nav-item,.fbar-tier,.type-toggle button{
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease;
+}
+.lead-card,.pl-card{transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;}
+.lead-card.dragging{transition:none;}   /* the lift is instant, not a 150ms fade */
+.dropzone{transition:background-color .18s ease,border-color .18s ease;}
+.dropzone .dz-ic{transition:transform .18s ease;}   /* was declared inside :hover,
+   so the icon eased up and snapped back down */
+
+/* A hover that lands on the same frame as the cursor and releases gently
+   is most of what "expensive" means when nobody can name it. */
+.btn:hover,.nav-item:hover,table.data tbody tr:hover,.cs-row:hover td{transition-duration:0ms;}
