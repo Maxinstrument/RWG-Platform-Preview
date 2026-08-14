@@ -196,11 +196,27 @@ RWG.app = (function () {
     const impersonating = !!state.viewAs;
     // Topbar extras are opt-in: a module declares chrome:{search:'leads', newLead:true}
     const chrome = RWG.modules.forRole(role).reduce((a, m) => Object.assign(a, m.chrome || {}), {});
-    const navHtml = RWG.modules.navFor(role).map(n => {
+    // A nav entry may declare:
+    //   where:'user'  → lives in the menu under your name, not the sidebar
+    //   also:[views]  → sibling views that keep this entry highlighted, so a
+    //                   hub with tabs stays lit while you are on one of them
+    const allNav = RWG.modules.navFor(role);
+    const isOn = (n) => state.view === n.view || (n.also || []).indexOf(state.view) >= 0;
+    const navHtml = allNav.filter(n => n.where !== 'user').map(n => {
       const badge = n.badge ? n.badge() : 0;
-      return `<button class="nav-item ${state.view === n.view ? 'active' : ''}" data-action="nav" data-view="${n.view}">
+      return `<button class="nav-item ${isOn(n) ? 'active' : ''}" data-action="nav" data-view="${n.view}">
         ${ICONS[n.icon] || ''}<span>${n.label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</button>`;
     }).join('');
+    const userNav = allNav.filter(n => n.where === 'user');
+    const userMenuHtml = `
+      <div class="user-menu" id="user-menu" hidden>
+        <div class="um-head">${U.esc(user.name)}<span>${U.esc(user.email || (role === 'admin' ? 'Owner' : 'Agent'))}</span></div>
+        ${userNav.map(n => `<button class="um-item ${isOn(n) ? 'on' : ''}" data-action="nav" data-view="${n.view}">
+            ${ICONS[n.icon] || ''}<span>${n.label}</span></button>`).join('')}
+        ${userNav.length ? '<div class="um-sep"></div>' : ''}
+        <a class="um-item" href="guide.html" target="_blank" rel="noopener"><span>Guide</span></a>
+        <button class="um-item" data-action="logout"><span>Sign out</span></button>
+      </div>`;
     const banner = impersonating
       ? `<div class="viewas-banner">👁 Viewing as <b>${U.esc(user.name)}</b> — their exact cockpit. Changes you make here save on their behalf.<button class="btn btn-sm" data-action="exit-view-as">Exit agent view</button></div>`
       : '';
@@ -223,7 +239,14 @@ RWG.app = (function () {
           <div class="topbar-spacer"></div>
           ${chrome.search ? `<div class="topbar-search">${ICONS.search}<input id="global-search" type="search" placeholder="Search leads…" value="${U.esc(state.search)}"></div>` : ''}
           ${chrome.newLead ? `<button class="btn btn-gold btn-sm" data-action="add-lead" style="white-space:nowrap">＋ New Lead</button>` : ''}
-          <div class="user-chip">${U.avatar(user, 32)}<div class="meta"><div class="nm">${U.esc(user.name)}</div><div class="rl">${impersonating ? 'Agent (view)' : (role === 'admin' ? 'Owner' : 'Agent')}</div></div></div>
+          <div class="user-wrap">
+            <button class="user-chip" data-action="toggle-user-menu" aria-haspopup="true" aria-expanded="false">
+              ${U.avatar(user, 32)}
+              <div class="meta"><div class="nm">${U.esc(user.name)}</div><div class="rl">${impersonating ? 'Agent (view)' : (role === 'admin' ? 'Owner' : 'Agent')}</div></div>
+              <span class="um-caret">▾</span>
+            </button>
+            ${userMenuHtml}
+          </div>
         </header>
         <main class="main">${banner}<div id="main-content"></div></main>
       </div>
@@ -232,6 +255,21 @@ RWG.app = (function () {
     document.body.classList.add('in-app');
     renderMain();
   }
+
+  function closeUserMenu() {
+    const m = $('#user-menu');
+    if (m && !m.hidden) m.hidden = true;
+    const b = document.querySelector('.user-chip');
+    if (b) b.setAttribute('aria-expanded', 'false');
+  }
+  // Clicking anywhere that is not the menu closes it — the usual contract
+  // for a dropdown, and cheaper than a scrim.
+  document.addEventListener('click', (e) => {
+    const t = (e.target && e.target.nodeType === 1) ? e.target : null;
+    if (!t) return;
+    if (t.closest('.user-wrap')) return;
+    closeUserMenu();
+  });
 
   function setMeta() {
     const m = RWG.modules.metaFor(state.view) || { t: '', s: '' };
@@ -730,8 +768,16 @@ RWG.app = (function () {
         break;
       }
       case 'logout': state.view = null; RWG.auth.logout(); break;   // onAuthChange re-renders
-      case 'nav': nav(el.dataset.view); break;
+      case 'nav': closeUserMenu(); nav(el.dataset.view); break;
       case 'toggle-menu': { const sb = $('#sidebar'); if (sb) sb.classList.toggle('open'); break; }
+      case 'toggle-user-menu': {
+        const m = $('#user-menu');
+        if (m) {
+          m.hidden = !m.hidden;
+          if (el.setAttribute) el.setAttribute('aria-expanded', String(!m.hidden));
+        }
+        break;
+      }
       case 'open-lead': openLead(el.dataset.id); break;
       case 'close-drawer': closeDrawer(); break;
       case 'edit-lead': openLead(el.dataset.id, true); break;

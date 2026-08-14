@@ -29,9 +29,10 @@ RWG.modules.register({
       { view: 'dashboard', label: 'Command Center', icon: 'dashboard' },
       { view: 'leads',     label: 'All Leads',      icon: 'leads' },
       { view: 'agents',    label: 'Team',           icon: 'team', badge: () => RWG.data.pendingUsers().length },
-      { view: 'reports',   label: 'Lead Reports',   icon: 'reports' },
+      // 'reports' (Lead Reports) is now the Leads tab inside the Reports
+      // hub, and 'archive' (Deleted Leads) folded into the Trash — both
+      // views stay registered so old deep-links still render.
       { view: 'upload',    label: 'Upload & Assign',icon: 'upload' },
-      { view: 'archive',   label: 'Deleted Leads',  icon: 'archive' },
       // Lead scoring moved into CRM Settings (phase 7); the old view
       // stays registered so a stale deep-link still renders.
     ],
@@ -43,11 +44,16 @@ RWG.modules.register({
     ]
   },
 
+  // Views the module owns that no longer have a sidebar entry: 'reports' is
+  // the Leads tab inside the Reports hub, 'archive' folded into the Trash,
+  // 'settings' moved to CRM Settings. All still render if you land on them.
+  views: ['reports', 'archive', 'settings'],
+
   meta: {
     dashboard: { t: 'Command Center', s: 'Team performance, live' },
     leads:     { t: 'All Leads',      s: 'Every lead across the team' },
     agents:    { t: 'Team',           s: 'Agents & approvals' },
-    reports:   { t: 'Lead Reports', s: 'Call activity & appointments, week by week' },
+    reports:   { t: 'Reports', s: 'Leads — call activity and appointments, week by week' },
     upload:    { t: 'Upload & Assign',s: 'Import and distribute lead lists' },
     archive:   { t: 'Deleted Leads',  s: 'Archived records — restore or erase' },
     settings:  { t: 'Scoring & Settings', s: 'Tune the lead-quality engine' },
@@ -72,8 +78,11 @@ RWG.modules.register({
   },
 
   render(view, user, ctx) {
-    return (ctx.role === 'admin')
+    const body = (ctx.role === 'admin')
       ? RWG.views.admin.render(view, user, ctx)
       : RWG.views.agent.render(view, user, ctx);
+    // The lead report is a tab of the Reports hub, so it wears the strip.
+    if (view === 'reports' && RWG.reportTabs) return RWG.reportTabs('reports', ctx) + body;
+    return body;
   }
 });

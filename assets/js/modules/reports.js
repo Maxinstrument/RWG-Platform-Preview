@@ -418,12 +418,16 @@ window.RWG = window.RWG || {};
     title: 'Reports',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'reports', label: 'Reports', icon: 'reports' }],
-    meta: { reports: { t: 'Reports', s: 'Ask the book a question' } },
+    // One Reports entry in the sidebar; Production and Lead reports are tabs
+    // inside it, so the entry stays lit while you are on either of them.
+    // NB the view id is `report_build`, not `reports` — the Leads module has
+    // owned a view called `reports` since long before this screen existed.
+    nav: [{ view: 'report_build', label: 'Reports', icon: 'reports', also: ['report_week', 'reports'] }],
+    meta: { report_build: { t: 'Reports', s: 'Ask the book a question' } },
     state: st,
 
     home: {
-      tile: () => ({ icon: 'reports', title: 'Reports', desc: 'Ask the book a question and export the answer.', view: 'reports' })
+      tile: () => ({ icon: 'reports', title: 'Reports', desc: 'Ask the book a question and export the answer.', view: 'report_build' })
     },
 
     onEnter() {
@@ -556,9 +560,26 @@ window.RWG = window.RWG || {};
 
     render(view, user, ctx) {
       if (!SD().isStarted() || !H().isStarted()) {
-        return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Warming the book…</h3></div>`;
+        return RWG.reportTabs('report_build', ctx)
+          + `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Warming the book…</h3></div>`;
       }
-      return builderHtml(ctx) + resultsHtml();
+      return RWG.reportTabs('report_build', ctx) + builderHtml(ctx) + resultsHtml();
     }
   });
+
+  /* One tab strip, rendered by all three report screens, so they read as
+     one area with three views rather than three separate pages that
+     happen to be about reporting. Declared on RWG so the Leads module and
+     the production report can use it without importing anything. */
+  RWG.reportTabs = function (active, ctx) {
+    const tabs = [
+      { view: 'report_build', label: 'Build a report' },
+      { view: 'report_week', label: 'Production', admin: true },
+      { view: 'reports', label: 'Leads', admin: true }
+    ].filter(t => !t.admin || (ctx && ctx.isAdmin));
+    if (tabs.length < 2) return '';
+    return `<div class="flex" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">${
+      tabs.map(t => `<button class="btn btn-sm ${t.view === active ? 'btn-navy' : 'btn-ghost'}"
+        data-action="nav" data-view="${t.view}">${esc(t.label)}</button>`).join('')}</div>`;
+  };
 })();

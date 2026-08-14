@@ -421,7 +421,10 @@ window.RWG = window.RWG || {};
     title: 'All Cases',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'cases', label: 'All Cases', icon: 'cases' }],
+    // No sidebar entry: "All cases" is a button in the Pipeline header,
+    // beside the pipeline tabs, where you are already thinking about cases.
+    nav: [],
+    views: ['cases'],
     meta: { cases: { t: 'All Cases', s: 'The whole team\'s book' } },
 
     state: { search: '', f: { agent: '', product: '', source: '', state: '', openedWeek: '' }, viewAll: true, week: null, sortKey: 'openedWeek', sortDir: 'desc' },
@@ -454,6 +457,12 @@ window.RWG = window.RWG || {};
       'cs-open': (el) => oppWindow({ id: el.dataset.id }),
       'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null }),
       'cs-save': (el) => saveWindow(el),
+      // Back to the board, on the track you clicked.
+      'cs-to-board': (el) => {
+        const pm = RWG.modules.get('pipeline');
+        if (pm && el.dataset.pl) pm.state.pl = el.dataset.pl;
+        RWG.app.nav('pipeline');
+      },
       'cs-view-hh': (el) => {
         document.getElementById('modal-mount').innerHTML = '';
         const hhm = RWG.modules.get('households');
@@ -469,7 +478,16 @@ window.RWG = window.RWG || {};
       const sel = (id, cur, opts) => `<select id="csf-${id}" class="fbar-select"><option value="">All ${id}</option>${opts.map(o => `<option value="${esc(o)}" ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
       const weekOpts = recentWeeks(20).map(w => `<option value="${w}" ${w === st.week ? 'selected' : ''}>Week ending ${w}${w === S().currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
 
-      const bar = `<div class="filterbar cs-bar">
+      // The same header the board wears, so the two read as one area with
+      // two ways of looking at it rather than two unrelated screens.
+      const tracks = (RWG.pipelines.pipelines() || []).map(p =>
+        `<button class="btn btn-sm btn-ghost" data-action="cs-to-board" data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
+      const bar = `<div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          ${tracks}
+          <span class="pl-divider"></span>
+          <button class="btn btn-sm btn-navy" data-action="nav" data-view="cases">☰ All cases</button>
+        </div>
+        <div class="filterbar cs-bar">
         <div class="cs-bar-row">
           <input id="cs-search" class="input cs-search" type="search" placeholder="Search client or agent…" value="${esc(st.search)}">
           <button class="btn btn-quiet btn-sm" data-action="cs-toggle-all">${st.viewAll ? 'All weeks' : 'This week only'}</button>

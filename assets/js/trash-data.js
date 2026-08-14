@@ -33,7 +33,10 @@ RWG.trash = (function () {
     contacts:   { kind: 'Person',    icon: '👤' },
     cases:      { kind: 'Opportunity', icon: '📁' },
     tasks:      { kind: 'Task',      icon: '✓'  },
-    notes:      { kind: 'Note',      icon: '💬' }
+    notes:      { kind: 'Note',      icon: '💬' },
+    // Leads keep their original deleted_leads archive; the Trash screen
+    // adapts those rows into this shape so there is one bin, not two.
+    leads:      { kind: 'Lead',      icon: '✦'  }
   };
   const kindOf = (coll) => (KINDS[coll] || { kind: coll, icon: '•' });
 

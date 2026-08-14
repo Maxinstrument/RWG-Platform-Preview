@@ -21,7 +21,10 @@ window.RWG = window.RWG || {};
   const U = () => RWG.ui;
   const esc = (s) => U().esc(s);
 
-  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '' };
+  // scope: people | households. Households used to be their own screen;
+  // they are the same book seen at a different grain, so they are a scope
+  // here rather than a separate place to remember to look.
+  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people' };
 
   const hhOf = (c) => (c.householdId ? H().household(c.householdId) : null);
   function advisorOf(c) {
@@ -108,6 +111,52 @@ window.RWG = window.RWG || {};
     </tr>`;
   }
 
+  // ── households, the same book at family grain ─────────────
+  function householdRows() {
+    const q = st.q.trim().toLowerCase();
+    let list = H().households();
+    if (q) {
+      list = list.filter(h =>
+        h.name.toLowerCase().indexOf(q) >= 0
+        || String(h.source || '').toLowerCase().indexOf(q) >= 0
+        || H().contactsFor(h.id).some(c => H().contactName(c).toLowerCase().indexOf(q) >= 0));
+    }
+    if (st.advisor) list = list.filter(h => h.advisorUid === st.advisor);
+    if (st.tag) list = list.filter(h => H().contactsFor(h.id).some(c => H().hasTag(c, st.tag)));
+    const sorters = {
+      az: (a, b) => a.name.localeCompare(b.name),
+      za: (a, b) => b.name.localeCompare(a.name),
+      recent: (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0),
+      created: (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+    };
+    return list.sort(sorters[st.sort] || sorters.az);
+  }
+
+  function householdRow(h) {
+    const people = H().contactsFor(h.id);
+    const prim = H().primaryContact(h.id);
+    const sd = RWG.scorecardData;
+    const opps = (sd && sd.isStarted()) ? sd.cases().filter(c => c.householdId === h.id).length : 0;
+    const adv = h.advisorName || (h.advisorUid ? (D().user(h.advisorUid) || {}).name : '') || '';
+    return `<tr>
+      <td>
+        <div class="ct-name">
+          <span class="hh-badge">🏠</span>
+          <span style="min-width:0">
+            <span class="cell-name" data-action="hh-open" data-id="${esc(h.id)}" style="cursor:pointer;display:block">${esc(h.name)}</span>
+            <span class="cell-sub">${esc(h.source || '')}</span>
+          </span>
+        </div>
+      </td>
+      <td>${prim ? `<span data-action="hh-open" data-id="${esc(h.id)}" style="cursor:pointer">${esc(H().contactName(prim))}</span>` : dash}</td>
+      <td class="num">${people.length}</td>
+      <td class="num">${opps || dash}</td>
+      <td>${adv ? esc(adv) : dash}</td>
+      <td>${h.a360Complete ? '<span class="chip tier-high">A360 ✓</span>' : '<span class="pill-soft">A360 pending</span>'}</td>
+      <td class="end"><button class="btn btn-quiet btn-sm" data-action="hh-open" data-id="${esc(h.id)}">Open</button></td>
+    </tr>`;
+  }
+
   // ── the right rail ────────────────────────────────────────
   function railHtml(list) {
     const tags = H().allTags();
@@ -135,50 +184,75 @@ window.RWG = window.RWG || {};
 
   // ── the screen ────────────────────────────────────────────
   function screenHtml(user, ctx) {
-    const list = rows();
-    const total = H().contacts().length;
+    const isHH = st.scope === 'households';
+    const list = isHH ? householdRows() : rows();
+    const total = isHH ? H().households().length : H().contacts().length;
     const users = D().users().filter(u => u.status === 'active');
     const advOpts = users.map(u =>
       `<option value="${esc(u.id)}" ${st.advisor === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
     const relOpts = H().RELATIONSHIPS.map(r =>
       `<option value="${esc(r)}" ${st.rel === r ? 'selected' : ''}>${esc(r)}</option>`).join('');
+    const scopeOpts = [['people', 'People'], ['households', 'Households']].map(s =>
+      `<option value="${s[0]}" ${st.scope === s[0] ? 'selected' : ''}>${s[1]}</option>`).join('');
 
     const sortBtn = (id, label) =>
       `<button class="btn btn-sm ${st.sort === id ? 'btn-navy' : 'btn-ghost'}" data-action="ct-sort" data-sort="${id}">${label}</button>`;
 
-    const body = list.length
+    const table = isHH
       ? `<div class="table-wrap"><table class="data">
+           <thead><tr><th>Household</th><th>Primary contact</th><th class="num">People</th><th class="num">Opps</th><th>Advisor</th><th>A360</th><th></th></tr></thead>
+           <tbody>${list.map(householdRow).join('')}</tbody></table></div>`
+      : `<div class="table-wrap"><table class="data">
            <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Tags</th><th>Household</th><th></th></tr></thead>
-           <tbody>${list.map(row).join('')}</tbody></table></div>`
+           <tbody>${list.map(row).join('')}</tbody></table></div>`;
+
+    const empty = isHH
+      ? `<div class="empty" style="padding:48px 16px"><div class="ec">🏠</div>
+           <h3>${total ? 'No households match' : 'The book starts here'}</h3>
+           <p>${total ? 'Loosen the search.' : 'Convert a lead whose appointment was kept, or add a contact and start a household with them.'}</p></div>`
       : `<div class="empty" style="padding:48px 16px"><div class="ec">👥</div>
            <h3>${total ? 'Nobody matches' : 'No people yet'}</h3>
            <p>${total ? 'Loosen the search or clear the tag filter.' : 'People arrive when a lead converts, or add one by hand.'}</p></div>`;
 
-    const filtered = st.q || st.tag || st.advisor || st.rel;
+    const filtered = st.q || st.tag || st.advisor || (!isHH && st.rel);
+
+    // The one-time grouping pass, offered while any case still lacks a
+    // household and gone the day the last one is attached.
+    const sd = RWG.scorecardData;
+    const unattached = (ctx.isAdmin && sd && sd.isStarted())
+      ? sd.cases().filter(c => !c.householdId).length : 0;
 
     return `<div class="ct-shell">
       <div class="card flush">
         <div class="list-head">
           <span class="t" style="font-size:17px">Contacts</span>
-          <span class="s">${list.length}${filtered && total !== list.length ? ' of ' + total : ''}</span>
+          <span class="s">${list.length}${filtered && total !== list.length ? ' of ' + total : ''} ${isHH ? 'households' : 'people'}</span>
           <span class="topbar-spacer"></span>
           <div class="flex" style="gap:6px;align-items:center">
             <span class="cell-sub" style="margin-right:2px">Order</span>
             ${sortBtn('az', 'A–Z')}${sortBtn('za', 'Z–A')}${sortBtn('recent', 'Recent')}${sortBtn('created', 'Newest')}
-            <button class="btn btn-gold btn-sm" data-action="hh-person-add">＋ Add contact</button>
+            ${isHH
+              ? `<button class="btn btn-gold btn-sm" data-action="hh-new">＋ New household</button>`
+              : `<button class="btn btn-gold btn-sm" data-action="hh-person-add">＋ Add contact</button>`}
           </div>
         </div>
         <div class="list-toolbar">
-          <input id="ct-q" class="input" type="search" placeholder="Name, email, phone, employer, tag…"
-                 value="${esc(st.q)}" style="max-width:320px">
-          <select id="ct-advisor" style="max-width:180px"><option value="">Any advisor</option>${advOpts}</select>
-          <select id="ct-rel" style="max-width:170px"><option value="">Any relationship</option>${relOpts}</select>
+          <select id="ct-scope" class="ct-scope">${scopeOpts}</select>
+          <input id="ct-q" class="input ct-q" type="search"
+                 placeholder="${isHH ? 'Household, person or source…' : 'Name, email, phone, employer, tag…'}"
+                 value="${esc(st.q)}">
+          <select id="ct-advisor"><option value="">Any advisor</option>${advOpts}</select>
+          ${isHH ? '' : `<select id="ct-rel"><option value="">Any relationship</option>${relOpts}</select>`}
           ${st.tag ? `<span class="chip tier-gold">tag: ${esc(st.tag)}</span>
                       <button class="btn btn-quiet btn-sm" data-action="ct-tag" data-tag="">Clear tag</button>` : ''}
+          <span class="topbar-spacer"></span>
+          ${isHH ? `<button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ✦</button>` : ''}
+          ${isHH && unattached ? `<button class="btn btn-navy btn-sm" data-action="nav" data-view="grouping"
+              title="One-time pass: attach every existing case to a household">⚡ Group existing cases · ${unattached}</button>` : ''}
         </div>
-        ${body}
+        ${list.length ? table : empty}
       </div>
-      <div class="ct-rail">${railHtml(list)}</div>
+      <div class="ct-rail">${railHtml(isHH ? [] : list)}</div>
     </div>`;
   }
 
@@ -202,6 +276,9 @@ window.RWG = window.RWG || {};
     onEnter() {
       const me = RWG.auth.currentUser();
       if (!H().isStarted()) H().init(me, RWG.app.renderMain);
+      // The households scope counts each family's opportunities.
+      const sd = RWG.scorecardData;
+      if (sd && !sd.isStarted()) sd.init(me, RWG.app.renderMain);
     },
 
     onInput(e) {
@@ -214,6 +291,7 @@ window.RWG = window.RWG || {};
     },
 
     onChange(e) {
+      if (e.target.id === 'ct-scope') { st.scope = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-advisor') { st.advisor = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-rel') { st.rel = e.target.value; RWG.app.renderMain(); }
     },

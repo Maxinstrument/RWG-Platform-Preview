@@ -121,8 +121,11 @@ window.RWG = window.RWG || {};
     return `
       <div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px">
         ${tabs}
+        <span class="pl-divider"></span>
+        <button class="btn btn-sm btn-ghost" data-action="nav" data-view="cases"
+          title="Every case on every track, as a table — including lost ones">☰ All cases</button>
         <span class="topbar-spacer"></span>
-        ${lost ? `<span class="chip tier-low" title="Lost cases on this track — browse them in All Cases">Lost · ${lost}</span>` : ''}
+        ${lost ? `<span class="chip tier-low" title="Lost cases on this track — browse them in All cases">Lost · ${lost}</span>` : ''}
         <select id="pl-owner" class="fbar-select" style="width:auto"><option value="">All owners</option>${ownerOpts}</select>
       </div>
       <p class="muted" style="font-size:12.5px;margin:0 0 12px">
@@ -267,7 +270,7 @@ window.RWG = window.RWG || {};
     title: 'Pipeline',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'pipeline', label: 'Pipeline', icon: 'board' }],
+    nav: [{ view: 'pipeline', label: 'Pipeline', icon: 'board', also: ['cases'] }],
     meta: { pipeline: { t: 'Pipeline', s: 'Every open opportunity, stage by stage' } },
     state: st,
 

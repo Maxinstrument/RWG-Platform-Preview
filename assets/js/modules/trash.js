@@ -18,10 +18,35 @@ window.RWG = window.RWG || {};
 
   const st = { rows: null, loading: false, err: '', kind: '', busy: {} };
 
+  /* Two archives feed one bin. Leads have had their own since long before
+     this screen existed (deleted_leads, with its own restore and purge),
+     and rewriting that would mean migrating live archived records for no
+     gain. So it is adapted here instead: same row shape, same two buttons,
+     and the origin remembered on `legacy` so the actions route correctly. */
+  function adaptLead(r) {
+    return {
+      id: r.id, legacy: 'lead',
+      coll: 'leads', originalId: r.originalId || r.id,
+      kind: 'Lead', label: r.name || '(no name)',
+      snapshot: r.lead || {},
+      stageAtDeletion: r.stageAtDeletion || '',
+      ownerAtDeletion: r.ownerAtDeletion || '',
+      deletedAt: r.deletedAt, deletedBy: r.deletedBy, deletedByName: r.deletedByName
+    };
+  }
+
   function load() {
     st.loading = true; st.err = '';
-    TR().fetchAll()
-      .then(rows => { st.rows = rows; st.loading = false; RWG.app.renderMain(); })
+    const D = RWG.data;
+    const leads = (D && D.fetchDeletedLeads)
+      ? D.fetchDeletedLeads().then(rows => rows.map(adaptLead)).catch(() => [])
+      : Promise.resolve([]);
+    Promise.all([TR().fetchAll().catch(e => { st.err = (e && e.message) || 'could not read the bin'; return []; }), leads])
+      .then(([a, b]) => {
+        st.rows = a.concat(b).sort((x, y) => (y.deletedAt || 0) - (x.deletedAt || 0));
+        st.loading = false;
+        RWG.app.renderMain();
+      })
       .catch(e => {
         st.loading = false;
         st.err = (e && e.message) || 'could not read the bin';
@@ -43,6 +68,9 @@ window.RWG = window.RWG || {};
     }
     if (r.coll === 'tasks') return [s.assigneeName, s.dueDate ? 'due ' + s.dueDate : ''].filter(Boolean).join(' · ');
     if (r.coll === 'notes') return s.authorName ? 'posted by ' + s.authorName : '';
+    if (r.legacy === 'lead') {
+      return [r.stageAtDeletion, r.ownerAtDeletion ? 'was ' + r.ownerAtDeletion + "'s" : ''].filter(Boolean).join(' · ');
+    }
     return '';
   }
 
@@ -130,12 +158,15 @@ window.RWG = window.RWG || {};
     title: 'Trash',
     enabled: true,
     roles: ['admin'],
-    nav: [{ view: 'trash', label: 'Trash', icon: 'archive' }],
+    nav: [{ view: 'trash', label: 'Trash', icon: 'archive', where: 'user' }],
     meta: { trash: { t: 'Trash', s: 'Deleted records, waiting on a partner' } },
     state: st,
 
     onEnter() {
       const me = RWG.auth.currentUser();
+      // Households, so a restored person can be checked for an orphaned
+      // household. The deleted-leads archive needs no listener — like the
+      // trash collection, it is a direct read that lives outside the caches.
       if (RWG.hh && !RWG.hh.isStarted()) RWG.hh.init(me, RWG.app.renderMain);
       if (st.rows === null && !st.loading) load();
     },
@@ -145,8 +176,13 @@ window.RWG = window.RWG || {};
       'tr-kind': (el) => { st.kind = el.dataset.kind || ''; RWG.app.renderMain(); },
       'tr-restore': (el) => {
         const id = el.dataset.id;
+        const row = (st.rows || []).find(r => r.id === id);
+        const isLead = row && row.legacy === 'lead';
         st.busy[id] = true; RWG.app.renderMain();
-        TR().restore(id)
+        const job = isLead
+          ? RWG.data.restoreLead(row.originalId).then(() => row)
+          : TR().restore(id);
+        job
           .then(r => {
             st.rows = (st.rows || []).filter(x => x.id !== id);
             delete st.busy[id];
@@ -164,7 +200,10 @@ window.RWG = window.RWG || {};
         const name = row ? (row.label || 'this record') : 'this record';
         if (!confirm('Permanently delete ' + name + '?\n\nThis is the one action in the CRM that cannot be undone.')) return;
         st.busy[id] = true; RWG.app.renderMain();
-        TR().purge(id)
+        const job = (row && row.legacy === 'lead')
+          ? RWG.data.purgeDeletedLead(row.originalId)
+          : TR().purge(id);
+        job
           .then(() => {
             st.rows = (st.rows || []).filter(x => x.id !== id);
             delete st.busy[id];

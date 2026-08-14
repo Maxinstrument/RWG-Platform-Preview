@@ -566,8 +566,11 @@ window.RWG = window.RWG || {};
     title: 'Households',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'households', label: 'Households', icon: 'team' }],
-    views: ['household'],
+    // No sidebar entry: households are a scope inside Contacts now. Both
+    // views stay owned here, so the list still renders if you land on it
+    // and the detail screen is unchanged.
+    nav: [],
+    views: ['households', 'household'],
     meta: {
       households: { t: 'Households', s: 'The book — every client family in one place' },
       household:  { t: 'Household',  s: 'People, dates, connections and history' }

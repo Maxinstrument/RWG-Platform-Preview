@@ -520,7 +520,7 @@ window.RWG = window.RWG || {};
     title: 'CRM Settings',
     enabled: true,
     roles: ['admin'],
-    nav: [{ view: 'crm-settings', label: 'CRM Settings', icon: 'settings' }],
+    nav: [{ view: 'crm-settings', label: 'CRM Settings', icon: 'settings', where: 'user' }],
     meta: { 'crm-settings': { t: 'CRM Settings', s: 'Stages, workflows, rates and reasons — yours to change' } },
     state: st,
 

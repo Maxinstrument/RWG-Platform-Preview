@@ -261,8 +261,10 @@ window.RWG = window.RWG || {};
     title: 'Reports',
     enabled: true,
     roles: ['admin'],
-    nav: [{ view: 'report_week', label: 'Production Reports', icon: 'reports' }],
-    meta: { report_week: { t: 'Production Reports', s: 'Cases, premium & pace, week by week' } },
+    // No sidebar entry of its own: this is the "Production" tab inside Reports.
+    nav: [],
+    views: ['report_week'],
+    meta: { report_week: { t: 'Reports', s: 'Production — cases, premium and pace, week by week' } },
 
     state: { week: null, who: '__team__' },
 
@@ -288,7 +290,7 @@ window.RWG = window.RWG || {};
         <select id="rp-who" class="fbar-select">${whoOptions(st.who)}</select>
         <select id="rp-week" class="fbar-select">${weekOpts}</select></div></div>`;
       const body = st.who === '__team__' ? teamView(week) : personView(st.who, week);
-      return controls + body;
+      return (RWG.reportTabs ? RWG.reportTabs('report_week', ctx) : '') + controls + body;
     }
   });
 
