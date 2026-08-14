@@ -95,6 +95,37 @@ window.RWG = window.RWG || {};
   // window was where they started, not where they belong.
   const cleanHtml = (html) => U().cleanHtml(html);
 
+  /* The work this opportunity has generated, read-only. The task list can
+     now say which case a step belongs to; this is the same fact from the
+     other side — open the case and see what is outstanding and on whom.
+     Deliberately not tickable: this window is mid-edit, and a checkbox that
+     changes data behind an unsaved form is a good way to lose both. */
+  function stepsBlock(recordId) {
+    const T = RWG.tasks;
+    if (!recordId || !T || !T.isStarted()) return '';
+    const steps = T.all().filter(t => t.relatedType === 'case' && t.relatedId === recordId)
+      .sort((a, b) => (a.workflowStep || 0) - (b.workflowStep || 0)
+        || String(a.dueDate).localeCompare(String(b.dueDate)));
+    if (!steps.length) return '';
+    const today = T.todayKey();
+    const open = steps.filter(t => t.status !== 'done').length;
+    const wfName = (steps.find(t => t.workflowName) || {}).workflowName;
+    return `<div class="cs-correct" style="margin-top:var(--s3)">
+      <div class="cs-correct-h">Work on this opportunity
+        <span class="muted">${open ? open + ' open of ' + steps.length : 'all ' + steps.length + ' done'}${wfName ? ' · ' + esc(wfName) : ''}</span></div>
+      ${steps.map(t => {
+        const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
+        return `<div class="flex" style="gap:10px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--line)">
+          <span style="flex:none;color:${t.status === 'done' ? 'var(--good)' : 'var(--muted)'};font-size:12px">${t.status === 'done' ? '✓' : '○'}</span>
+          <span style="min-width:0;flex:1;font-size:13.5px;${t.status === 'done' ? 'opacity:.55;text-decoration:line-through' : ''}">${esc(t.title)}
+            ${t.required && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px;margin-left:6px">required to close</span>' : ''}</span>
+          <span class="pill-soft" style="flex:none;font-size:11px">${esc((t.assigneeName || '').split(' ')[0] || '—')}</span>
+          <span class="cell-sub" style="flex:none;font-size:11.5px;${late ? 'color:var(--bad);font-weight:700' : ''}">${esc(t.dueDate || '')}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
   let form = null;   // live money model while the window is open
 
   function moneyInit(c, product) {
@@ -254,6 +285,7 @@ window.RWG = window.RWG || {};
             ${U().noteEditor({ id: 'op2-details', value: (c && c.details) || '', editable: editable,
               placeholder: 'Anything worth remembering about this opportunity…' })}</div>
 
+          ${stepsBlock(c ? c.recordId : null)}
           ${correct}
           ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}
         </div>
@@ -402,6 +434,8 @@ window.RWG = window.RWG || {};
 
     onEnter(view, ctx) {
       if (!D().isStarted()) D().init(ctx.userObj || RWG.auth.currentUser(), RWG.app.renderMain);
+      // the opportunity window lists the workflow steps opened against a case
+      if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
       if (!this.state.week) this.state.week = S().currentWeekEnding();
     },
 

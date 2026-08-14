@@ -228,7 +228,17 @@ window.RWG = window.RWG || {};
   function fireWorkflows(id) {
     const c = SD().caseById(id); if (!c || !RWG.wf) return;
     const started = RWG.wf.autoLaunch(c);
-    if (started.length) U().toast(started.join(' + ') + ' workflow started — the steps are on My Work', true);
+    if (!started.length) return;
+    // Say who has the work. Most workflow steps land on the case manager,
+    // and a toast that says 'on My Work' sends you to look in the wrong list.
+    const T = RWG.tasks, who = {};
+    if (T && T.isStarted()) {
+      T.all().filter(t => t.relatedType === 'case' && t.relatedId === id && t.status !== 'done')
+        .forEach(t => { const n = (t.assigneeName || '').split(' ')[0]; if (n) who[n] = 1; });
+    }
+    const names = Object.keys(who);
+    U().toast(started.join(' + ') + ' started — ' +
+      (names.length ? names.join(' and ') + ' now ' + (names.length > 1 ? 'have' : 'has') + ' the steps' : 'the steps are on Tasks'), true);
   }
 
   // Required workflow steps hold the door to Won shut (phase 4). The

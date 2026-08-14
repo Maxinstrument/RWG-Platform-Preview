@@ -484,7 +484,12 @@ window.RWG = window.RWG || {};
   function openTasksCard(h) {
     const T = RWG.tasks;
     if (!T || !T.isStarted()) return '';
-    const open = T.open().filter(t => t.relatedType === 'household' && t.relatedId === h.id)
+    // Everything owed on this family, whether the task points at the household
+    // itself or at one of their cases. A workflow step for the Vargas policy
+    // belongs on the Vargas screen — it used to appear only in whichever
+    // person's list it was assigned to, which is not where you go looking.
+    const open = T.open().filter(t =>
+      (t.relatedType === 'household' && t.relatedId === h.id) || t.householdId === h.id)
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
     if (!open.length) return '';
     const today = T.todayKey();

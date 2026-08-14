@@ -222,6 +222,11 @@ RWG.wf = (function () {
         assigneeUid: who.uid, assigneeName: who.name,
         dueDate: dueKey(start, s.dueDays),
         relatedType: rel.type, relatedId: rel.id, relatedLabel: rel.label,
+        // A step is ABOUT the case and FOR the family. Carrying the household
+        // too is what lets an underwriting task show up on the client's screen
+        // instead of only in whoever-was-assigned's list.
+        householdId: hhId || null,
+        clientName: (c && c.clientName) || '',
         required: !!s.required, gate: s.gate || null,
         workflowId: wfId, workflowTemplate: tplId, workflowName: tpl.name,
         workflowKey: key, workflowStep: i

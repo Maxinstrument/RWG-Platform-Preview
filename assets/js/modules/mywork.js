@@ -100,7 +100,8 @@ window.RWG = window.RWG || {};
           ${hhOpts ? `<div class="field-group"><label class="lbl">Household <span class="pill-soft" style="font-size:10.5px">optional</span></label>
             <select id="tk-hh"><option value="">— none —</option>${hhOpts}</select></div>` : ''}
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
-            <input id="tk-note" value="${esc(v('note', ''))}"></div>
+            ${U().noteEditor({ id: 'tk-note', value: v('note', ''), minHeight: '84px',
+              placeholder: 'Anything worth remembering about this task…' })}</div>
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
@@ -118,12 +119,29 @@ window.RWG = window.RWG || {};
   }
 
   // ── task rows ─────────────────────────────────────────────
+  // Two questions, two chips: WHO is this for, and WHAT is it about.
+  // An underwriting step used to answer neither from the task list — you had
+  // the step title and nothing else, which is no use at 8am with eleven of them.
+  const chipBtn = (act, id, label, icon) =>
+    `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
+      data-action="${act}" data-id="${esc(id)}" title="${esc(label)}">${icon ? icon + ' ' : ''}${esc(label)}</button>`;
+
   function relatedChip(t) {
-    if (!t.relatedId) return '';
-    const act = { household: 'hh-goto', case: 'cs-open', lead: 'open-lead' }[t.relatedType];
-    if (!act) return '';
-    return `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"
-      data-action="${act}" data-id="${esc(t.relatedId)}">${t.relatedType === 'household' ? U().icon('household','ic-inline') + ' ' : ''}${esc(t.relatedLabel || t.relatedType)}</button>`;
+    const out = [];
+    const hh = t.householdId && RWG.hh && RWG.hh.isStarted() ? RWG.hh.household(t.householdId) : null;
+    // The family first — that is the name you recognise.
+    if (hh && !(t.relatedType === 'household' && t.relatedId === t.householdId)) {
+      out.push(chipBtn('hh-goto', hh.id, hh.name, U().icon('household', 'ic-inline')));
+    }
+    if (t.relatedId) {
+      const act = { household: 'hh-goto', case: 'cs-open', lead: 'open-lead' }[t.relatedType];
+      if (act) {
+        const isHh = t.relatedType === 'household';
+        out.push(chipBtn(act, t.relatedId, t.relatedLabel || t.relatedType,
+          isHh ? U().icon('household', 'ic-inline') : (t.relatedType === 'case' ? U().icon('cases', 'ic-inline') : '')));
+      }
+    }
+    return out.join('');
   }
   function dueLabel(t, today) {
     if (t.status === 'done') return `<span class="cell-sub">${t.doneAt ? U().fmtRelative(t.doneAt) : 'done'}</span>`;
@@ -158,7 +176,7 @@ window.RWG = window.RWG || {};
           ${t.repeat && t.repeat !== 'none' ? '<span class="cell-sub" style="font-size:11px" title="Repeats">↻</span>' : ''}
           ${priorityFlag(t)}
           ${showAssignee ? `<span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>` : ''}
-          ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}
+          ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${U().noteHtml(t.note)}</span>` : ''}
         </div>
       </div>
       <div class="end" style="padding-top:3px">${dueLabel(t, today)}</div>
@@ -404,13 +422,15 @@ window.RWG = window.RWG || {};
         const t0 = el.dataset.id ? T().task(el.dataset.id) : null;
         const keepRel = t0 && t0.relatedType && t0.relatedType !== 'household' && !hh;
         const fields = {
-          title: title, note: g('tk-note').trim(),
+          title: title, note: U().noteRead('tk-note'),
           assigneeUid: uid || u.id, assigneeName: u.name || '',
           dueDate: g('tk-due') || T().todayKey(),
           category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
           relatedType: keepRel ? t0.relatedType : (hh ? 'household' : null),
           relatedId: keepRel ? t0.relatedId : (hh ? hh.id : null),
-          relatedLabel: keepRel ? t0.relatedLabel : (hh ? hh.name : '')
+          relatedLabel: keepRel ? t0.relatedLabel : (hh ? hh.name : ''),
+          // Who it is for, kept even when the pointer is a case.
+          householdId: hh ? hh.id : (keepRel ? (t0.householdId || null) : null)
         };
         if (el.dataset.id) T().saveTask(Object.assign({ id: el.dataset.id }, fields));
         else T().addTask(fields);

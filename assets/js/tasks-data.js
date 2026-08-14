@@ -159,7 +159,11 @@ RWG.tasks = (function () {
       id: ref.id, title: '', note: '',
       assigneeUid: (me && me.id) || null, assigneeName: (me && me.name) || '',
       dueDate: todayKey(), status: 'open', doneAt: null, doneBy: null,
-      relatedType: null, relatedId: null, relatedLabel: '',
+      // relatedType/Id is what the task is ABOUT — usually the case.
+      // householdId is who it is FOR, carried alongside so a task about a
+      // policy still surfaces on the family's screen. A task pointed at a
+      // household has both, and they agree.
+      relatedType: null, relatedId: null, relatedLabel: '', householdId: null,
       required: false, workflowId: null,
       category: '', priority: 'none', repeat: 'none',
       createdAt: now(), createdBy: (me && me.id) || null,

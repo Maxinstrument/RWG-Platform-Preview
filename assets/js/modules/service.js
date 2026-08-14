@@ -66,7 +66,7 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">Due</label><input id="sv-due" type="date" value="${esc(due)}"></div>
           </div>
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
-            <input id="sv-note" placeholder="policy #, carrier, who called…"></div>
+            ${U().noteEditor({ id: 'sv-note', minHeight: '84px', placeholder: 'policy #, carrier, who called…' })}</div>
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
@@ -93,7 +93,7 @@ window.RWG = window.RWG || {};
             data-action="hh-goto" data-id="${esc(t.relatedId)}">${U().icon('household','ic-inline')} ${esc(t.relatedLabel || '')}</button>` : ''}
           <span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>
           ${t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
-          ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${esc(t.note)}</span>` : ''}
+          ${t.note ? `<span class="cell-sub" style="font-size:11.5px">${U().noteHtml(t.note)}</span>` : ''}
         </div>
       </div>
       <div class="end" style="padding-top:2px">
@@ -179,7 +179,7 @@ window.RWG = window.RWG || {};
         const u = D().user(uid) || RWG.auth.currentUser();
         T().addTask({
           kind: 'service', serviceType: type, waiting: false,
-          title: title, note: g('sv-note').trim(),
+          title: title, note: U().noteRead('sv-note'),
           assigneeUid: uid || u.id, assigneeName: u.name || '',
           dueDate: g('sv-due') || T().todayKey(),
           relatedType: 'household', relatedId: h.id, relatedLabel: h.name
