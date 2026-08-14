@@ -182,6 +182,36 @@
   </section>
 
   <section class="sg-sec">
+    <h2>Filter bars</h2>
+    <p>Two shapes, and the difference is whether the controls are a form or a sentence. A form may
+      wrap onto a second row; a sentence may not, because a wrapped sentence stops reading as one.</p>
+    <div class="card flush" style="margin-bottom:14px">
+      <div class="list-head"><span class="t">Form shape</span><span class="s">Contacts</span></div>
+      <div class="list-toolbar">
+        <select class="ct-scope"><option>People</option><option>Households</option></select>
+        <input type="search" placeholder="Name, email, phone, employer, tag…">
+        <select><option>Any advisor</option><option>Maryurie Ramos</option></select>
+        <select><option>Any relationship</option><option>Primary client</option></select>
+      </div>
+      <p class="list-hint">Controls size to their content; the search box takes the slack.</p>
+    </div>
+    <div class="card flush">
+      <div class="list-head"><span class="t">Sentence shape</span><span class="s">Tasks</span></div>
+      <div class="list-toolbar tb-inline">
+        <span class="tb-word">Filtering by</span>
+        <select><option>Upcoming</option><option>Completed</option></select>
+        <select><option>All work</option><option>Service requests</option></select>
+        <span class="tb-word">assigned to</span>
+        <select><option>me</option><option>anyone</option></select>
+        <span class="tb-word">in category</span>
+        <select><option>all categories</option><option>Underwriting</option></select>
+      </div>
+      <p class="list-hint">Add <code>.tb-inline</code>. One row, smaller controls, scrolls sideways
+        rather than wrapping — until tablet width, where it becomes a form again.</p>
+    </div>
+  </section>
+
+  <section class="sg-sec">
     <h2>Table</h2>
     <div class="table-wrap">
       <table class="data">

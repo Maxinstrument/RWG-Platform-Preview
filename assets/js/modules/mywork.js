@@ -314,7 +314,7 @@ window.RWG = window.RWG || {};
           <span class="topbar-spacer"></span>
           <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>
         </div>
-        <div class="list-toolbar">
+        <div class="list-toolbar tb-inline">
           <span class="tb-word">Filtering by</span>
           ${sel('tk-f-when', whenOpts)}
           ${sel('tk-f-kind', kindOpts)}

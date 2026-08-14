@@ -1173,3 +1173,28 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
   .omni-wrap{flex:1 1 180px;}
   .fbar-search-inline{display:none;}
 }
+
+/* ── A filter bar that reads as one sentence ──────────────
+   Used where the controls ARE the sentence ("Filtering by
+   Upcoming, All work, assigned to me…"). A sentence that wraps
+   onto a second line stops reading as one, so this variant stays
+   on a single row and scrolls sideways only when it truly cannot
+   fit. Controls shrink to the size of their longest option — no
+   min-width — because a select that is wider than its content is
+   what pushed this to two rows in the first place. */
+.list-toolbar.tb-inline{
+  flex-wrap:nowrap;gap:6px;padding:7px var(--s3);
+  overflow-x:auto;scrollbar-width:thin;
+}
+.list-toolbar.tb-inline select{
+  min-width:0;max-width:none;width:auto;flex:0 0 auto;
+  min-height:30px;padding:3px 26px 3px 9px;font-size:12.5px;
+  background-position:right 7px center;background-size:9px;
+  border-radius:8px;
+}
+.list-toolbar.tb-inline .tb-word{font-size:12.5px;flex:0 0 auto;}
+.list-toolbar.tb-inline .btn-sm{min-height:30px;padding:3px 10px;font-size:12px;flex:0 0 auto;}
+/* Below tablet the sentence gives up and becomes a form again */
+@media (max-width:720px){
+  .list-toolbar.tb-inline{flex-wrap:wrap;overflow-x:visible;}
+}
