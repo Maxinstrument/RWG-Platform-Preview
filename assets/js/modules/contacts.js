@@ -26,7 +26,7 @@ window.RWG = window.RWG || {};
   // scope: people | households. Households used to be their own screen;
   // they are the same book seen at a different grain, so they are a scope
   // here rather than a separate place to remember to look.
-  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people' };
+  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note' };
 
   const hhOf = (c) => (c.householdId ? H().household(c.householdId) : null);
   function advisorOf(c) {
@@ -180,6 +180,290 @@ window.RWG = window.RWG || {};
     U().toast(`Exported ${list.length} household${list.length === 1 ? '' : 's'}`, true);
   }
 
+  /* ══ the contact record ═══════════════════════════════════
+     One person, everything about them, and the three things you
+     start from a person: a note, a task, an opportunity. No
+     calendar tab — appointments live on the lead record and in
+     the advisors' own calendars, and a second half-wired one
+     here would be worse than none.
+
+     Nothing on this screen is new data. It is the household
+     spine, the lead they came from, their cases and their tasks,
+     assembled around one human instead of around a family. ── */
+
+  const fullName = (c) => H().contactName(c) || '(no name)';
+
+  function rowLine(label, value, sub) {
+    if (value == null || value === '') return '';
+    return `<div class="list-row mid"><span class="grow">
+        <span class="cell-sub" style="display:block">${esc(label)}</span>
+        <span style="font-size:var(--fs-dense);color:var(--ink)">${value}</span>
+        ${sub ? `<span class="cell-sub" style="display:block">${esc(sub)}</span>` : ''}
+      </span></div>`;
+  }
+
+  // "How did this person become a client?" — assembled from stamps that
+  // already exist. Every line is a fact somebody's action wrote, not a
+  // guess: who did it, when, and what it was.
+  function historyRows(c) {
+    const out = [];
+    const h = hhOf(c);
+    const uname = (uid) => { const u = uid && D().user(uid); return (u && u.name) || ''; };
+    const lead = c.leadId && D().lead ? D().lead(c.leadId) : null;
+
+    if (lead) {
+      const src = lead.listName || lead.source || '';
+      out.push({ at: lead.createdAt || 0, t: 'Arrived as a lead',
+        s: src ? 'from ' + src : '', who: '' });
+      const kept = (lead.activities || []).filter(a => a.disposition === 'Appointment Set');
+      if (kept.length) out.push({ at: kept[0].at, t: 'Appointment set', s: '', who: uname(kept[0].by) });
+      if (lead.apptDate) out.push({ at: lead.apptDate, t: 'Appointment', s: 'kept — the meeting that started it', who: '' });
+    }
+    if (h) {
+      out.push({ at: h.convertedAt || h.createdAt || 0,
+        t: lead ? 'Became a client' : 'Added to the book',
+        s: h.name + (h.source ? ' · ' + h.source : ''),
+        who: uname(h.convertedBy || h.createdBy) });
+    }
+    out.push({ at: c.createdAt || 0, t: 'Contact record created', s: '', who: uname(c.createdBy) });
+
+    const sd = RWG.scorecardData;
+    if (sd && sd.isStarted() && h) {
+      const mine = sd.cases().filter(x => x.householdId === h.id);
+      const first = mine.slice().sort((a, b) => String(a.openedWeek).localeCompare(String(b.openedWeek)))[0];
+      if (first) out.push({ at: Date.parse((first.openedWeek || '') + 'T12:00:00') || 0,
+        t: 'First opportunity opened', s: first.title || RWG.scorecard.productName(first.product), who: first.agentName || '' });
+      mine.filter(x => x.closedAt).forEach(x => out.push({ at: Date.parse(x.closedAt) || 0,
+        t: 'Closed and confirmed', s: x.title || RWG.scorecard.productName(x.product), who: x.agentName || '' }));
+    }
+    return out.filter(e => e.at).sort((a, b) => a.at - b.at);
+  }
+
+  function historyCard(c) {
+    const rows = historyRows(c);
+    const body = rows.length ? rows.map(e => `<div class="list-row">
+        <span class="grow">
+          <span style="font-size:var(--fs-dense);color:var(--ink)">${esc(e.t)}</span>
+          ${e.s ? `<span class="cell-sub" style="display:block">${esc(e.s)}</span>` : ''}
+          <span class="cell-sub" style="display:block">${U().fmtDate(e.at)}${e.who ? ' · ' + esc(e.who) : ''}</span>
+        </span></div>`).join('')
+      : '<p class="list-empty">Nothing stamped yet. This fills itself in as the record is worked.</p>';
+    return `<div class="card flush"><div class="list-head"><span class="t">History</span>
+      <span class="s">how they got here</span></div>${body}</div>`;
+  }
+
+  function peopleCard(c) {
+    const h = hhOf(c);
+    if (!h) return `<div class="card flush"><div class="list-head"><span class="t">Household</span></div>
+      <p class="list-empty">Not attached to a household yet.</p></div>`;
+    const others = H().contactsFor(h.id).filter(x => x.id !== c.id);
+    return `<div class="card flush">
+      <div class="list-head"><span class="t">Household</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-quiet btn-sm" data-action="hh-open" data-id="${esc(h.id)}">Open ${esc(h.name)} →</button></div>
+      ${others.length ? others.map(o => `<div class="list-row mid">
+          <span class="grow"><span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600;cursor:pointer"
+              data-action="ct-open" data-id="${esc(o.id)}">${esc(fullName(o))}</span>
+            <span class="cell-sub" style="display:block">${esc(o.relationship || '')}</span></span>
+          <span class="end"><button class="btn btn-quiet btn-sm" data-action="ct-open" data-id="${esc(o.id)}">Open</button></span>
+        </div>`).join('')
+        : '<p class="list-empty">The only person on this household.</p>'}</div>`;
+  }
+
+  function oppsCard(c) {
+    const sd = RWG.scorecardData, sc = RWG.scorecard;
+    if (!sd || !sd.isStarted() || !c.householdId) return '';
+    const rows = sd.cases().filter(x => x.householdId === c.householdId)
+      .sort((a, b) => String(b.openedWeek).localeCompare(String(a.openedWeek)));
+    return `<div class="card flush">
+      <div class="list-head"><span class="t">Opportunities</span><span class="s">${rows.length}</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(c.householdId)}"
+          data-client="${esc(fullName(c))}">＋ New</button></div>
+      ${rows.length ? rows.map(x => `<div class="list-row mid" data-action="cs-open" data-id="${esc(x.recordId)}" style="cursor:pointer">
+          <span class="grow"><span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(x.title || sc.productName(x.product))}</span>
+            <span class="cell-sub" style="display:block">${esc(sc.productName(x.product))} · ${esc(x.state || '')}</span></span>
+          <span class="end num" style="font-size:var(--fs-dense)">${U().money(sc.usesAum(x.product) ? x.aum : x.amount)}</span>
+        </div>`).join('')
+        : '<p class="list-empty">Nothing open. Start one from the ＋ above.</p>'}</div>`;
+  }
+
+  function datesCard(c) {
+    const rows = [];
+    if (c.dob) {
+      const b = H().upcomingBirthdays(400).find(x => x.contact.id === c.id);
+      if (b) rows.push({ t: 'Birthday', s: b.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+        + ' · turns ' + b.turning, d: b.inDays });
+    }
+    (c.keyDates || []).forEach(k => rows.push({ t: k.label || 'Key date', s: k.note || '', d: null, raw: k.date }));
+    if (!rows.length) return '';
+    return `<div class="card flush"><div class="list-head"><span class="t">Dates</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-quiet btn-sm" data-action="kd-add" data-contact="${esc(c.id)}">＋</button></div>
+      ${rows.map(r => `<div class="list-row mid"><span class="grow">
+          <span style="font-size:var(--fs-dense);color:var(--ink)">${esc(r.t)}</span>
+          ${r.s ? `<span class="cell-sub" style="display:block">${esc(r.s)}</span>` : ''}</span>
+        <span class="end cell-sub">${r.d != null ? (r.d === 0 ? 'today' : 'in ' + r.d + 'd') : esc(String(r.raw || '').slice(0, 10))}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  function detailsCard(c) {
+    const h = hhOf(c);
+    const adv = advisorOf(c);
+    const tags = (c.tags || []).map(t =>
+      `<button class="tag-chip" data-action="ct-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('');
+    return `<div class="card flush">
+      <div class="list-head"><span class="t">Details</span>
+        <span class="topbar-spacer"></span>
+        <button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">✎ Edit</button></div>
+      ${rowLine('Relationship', esc(c.relationship || '—'))}
+      ${rowLine('Advisor', esc(adv || '—'))}
+      ${rowLine('Household', h ? `<button class="btn-link" data-action="hh-open" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')}
+      ${rowLine('Source', esc((h && h.source) || '—'))}
+      ${rowLine('Employer', esc(c.employer || '—'), c.title || '')}
+      ${rowLine('Plan type', esc(c.planType || '—'),
+        [c.yos != null && c.yos !== '' ? c.yos + ' yrs service' : '', c.afc ? U().money(c.afc) + ' AFC' : ''].filter(Boolean).join(' · '))}
+      ${rowLine('Date of birth', c.dob ? esc(fmtDobLocal(c.dob)) : '—')}
+      ${tags ? `<div class="list-row"><span class="grow"><span class="cell-sub" style="display:block">Tags</span>
+        <span class="tagwrap" style="margin-top:4px">${tags}</span></span></div>` : ''}
+      ${rowLine('Newsletter', c.advisorstream
+        ? '<span class="chip tier-high">On the AdvisorStream list</span>'
+        : '<span class="pill-soft">Not on the list</span>')}
+    </div>`;
+  }
+  const fmtDobLocal = (dob) => {
+    const p = String(dob).split('-').map(Number);
+    if (p.length !== 3) return dob;
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  function wfCard(c) {
+    const W = RWG.wf, T = RWG.tasks, SD = RWG.scorecardData;
+    if (!W || !T || !T.isStarted() || !c.householdId) return '';
+    const caseIds = (SD && SD.isStarted()) ? SD.cases().filter(x => x.householdId === c.householdId).map(x => x.recordId) : [];
+    const list = W.instancesFor(c.householdId, caseIds);
+    if (!list.length) return '';
+    return `<div class="card flush"><div class="list-head"><span class="t">Workflows</span><span class="s">${list.length}</span></div>
+      ${list.map(w => {
+        const done = w.done >= w.total;
+        return `<div class="list-row"><span class="grow">
+          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(w.name)}</span>
+          <span class="cell-sub" style="display:block">${esc(w.label || '')}</span>
+          ${w.next ? `<span class="cell-sub" style="display:block">Next: ${esc(w.next.title)} · ${esc((w.next.assigneeName || '').split(' ')[0])}</span>` : ''}
+        </span><span class="end cell-sub" style="${done ? 'color:var(--good);font-weight:700' : ''}">${done ? '✓ done' : w.done + '/' + w.total}</span></div>`;
+      }).join('')}</div>`;
+  }
+
+  // The activity feed: what has actually been said and done about this person.
+  function feedRows(c) {
+    const ev = [];
+    const N = RWG.notes, T = RWG.tasks;
+    if (N && N.isStarted()) {
+      N.all().filter(n => (n.relatedType === 'contact' && n.relatedId === c.id)
+        || (c.householdId && n.relatedType === 'household' && n.relatedId === c.householdId))
+        .forEach(n => ev.push({ at: n.createdAt, who: n.authorName, kind: 'note', body: n.bodyHtml || n.body, id: n.id }));
+    }
+    if (T && T.isStarted() && c.householdId) {
+      T.all().filter(t => t.householdId === c.householdId && t.status === 'done' && t.doneAt)
+        .forEach(t => ev.push({ at: t.doneAt, who: t.assigneeName, kind: 'done', body: '', txt: 'completed <b>' + esc(t.title) + '</b>' }));
+    }
+    historyRows(c).forEach(e => ev.push({ at: e.at, who: e.who, kind: 'stamp', txt: esc(e.t) + (e.s ? ' <span class="cell-sub">· ' + esc(e.s) + '</span>' : '') }));
+    return ev.sort((a, b) => b.at - a.at).slice(0, 40);
+  }
+
+  function feedCard(c, user) {
+    const rows = feedRows(c);
+    return `<div class="card flush">
+      <div class="list-head"><span class="t">Activity</span><span class="s">newest first</span></div>
+      ${rows.length ? rows.map(e => `<div class="list-row">
+          ${U().avatar({ name: e.who || '·' }, 26)}
+          <span class="grow" style="min-width:0">
+            <span style="font-size:var(--fs-dense);color:var(--ink)">${e.kind === 'note'
+              ? '<b>' + esc(e.who || 'Someone') + '</b> wrote'
+              : '<b>' + esc(e.who || 'Someone') + '</b> ' + (e.txt || '')}</span>
+            ${e.body ? `<span class="hm-note-body">${U().noteHtml(e.body)}</span>` : ''}
+          </span>
+          <span class="end cell-sub">${U().fmtRelative(e.at)}</span>
+        </div>`).join('')
+        : '<p class="list-empty">Nothing yet. Post the first note above.</p>'}</div>`;
+  }
+
+  // Three tabs, and Note is the only one with a form here — Task and
+  // Opportunity open the real windows those records already have.
+  function composer(c, user) {
+    const tab = (id, label, ic) =>
+      `<button class="btn btn-sm ${st.tab === id ? 'btn-navy' : 'btn-ghost'}" data-action="ct-tab" data-tab="${id}">${U().icon(ic, 'ic-inline')} ${label}</button>`;
+    const N = RWG.notes;
+    const off = !N || !N.isStarted();
+    return `<div class="card hm-composer">
+      <div class="flex" style="gap:6px;flex-wrap:wrap;align-items:center">
+        ${tab('note', 'Note', 'scorecard')}${tab('task', 'Task', 'today')}${tab('opp', 'Opportunity', 'cases')}
+      </div>
+      ${st.tab === 'note' ? `<div class="hm-compose-row">
+        ${U().avatar(user, 34)}
+        <div style="flex:1;min-width:0">
+          ${U().noteEditor({ id: 'ct-note', editable: !off, minHeight: '78px',
+            placeholder: 'Add a note about ' + fullName(c) + '…' })}
+          <div class="flex" style="gap:8px;align-items:center;margin-top:8px">
+            <span class="hint" style="margin:0">${off ? 'Connecting…' : 'Everyone sees this. It files against ' + esc(fullName(c)) + '.'}</span>
+            <span class="topbar-spacer"></span>
+            <button class="btn btn-gold btn-sm" data-action="ct-note-post" data-id="${esc(c.id)}" ${off ? 'disabled' : ''}>Post</button>
+          </div>
+        </div></div>` : ''}
+    </div>`;
+  }
+
+  // Task and Opportunity open the real windows those records already have,
+  // rather than a second copy of each form living on this screen.
+  function handoff(tab) {
+    if (tab === 'note') { RWG.app.renderMain(); return; }
+    const c = st.currentId && H().contact(st.currentId);
+    st.tab = 'note';
+    if (!c) { RWG.app.renderMain(); return; }
+    const owner = RWG.modules.actionOwner(tab === 'task' ? 'tk-new' : 'cs-new');
+    if (!owner) { U().toast('That screen has not loaded yet — try again in a moment'); return; }
+    RWG.app.renderMain();
+    if (tab === 'task') owner.actions['tk-new']({ dataset: { hh: c.householdId || '', contact: c.id } });
+    else owner.actions['cs-new']({ dataset: { hh: c.householdId || '', client: H().contactName(c) } });
+  }
+
+  function contactHtml(c, user, ctx) {
+    const h = hhOf(c);
+    const phone = c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(fmtPhone(c.phone))}</a>` : '';
+    const email = c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '';
+    return `
+      <button class="btn btn-quiet btn-sm" data-action="ct-back" style="margin-bottom:var(--s3)">← All contacts</button>
+      <div class="card" style="margin-bottom:var(--panel-gap)">
+        <div class="flex" style="gap:var(--s3);align-items:flex-start;flex-wrap:wrap">
+          ${U().avatar({ name: fullName(c) }, 54)}
+          <div style="min-width:0">
+            <h3 style="font-size:var(--fs-title)">${esc(fullName(c))}</h3>
+            <div class="cell-sub">${esc([c.title, c.employer].filter(Boolean).join(' at ') || c.relationship || '')}</div>
+            <div class="tag-row" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
+              ${h ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-open" data-id="${esc(h.id)}">${U().icon('household', 'ic-inline')} ${esc(h.name)}</button>` : ''}
+              ${c.relationship ? `<span class="pill-soft">${esc(c.relationship)}</span>` : ''}
+              ${c.leadId ? `<button class="pill-soft" style="cursor:pointer" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record they came from — full call history">Came from a lead</button>` : ''}
+            </div>
+          </div>
+          <span class="topbar-spacer"></span>
+          <div style="text-align:right">
+            <div style="font-size:var(--fs-dense)">${phone || '<span class="muted">no phone</span>'}</div>
+            <div style="font-size:var(--fs-dense);margin-top:2px">${email || '<span class="muted">no email</span>'}</div>
+            <div class="flex" style="gap:6px;margin-top:10px;justify-content:flex-end">
+              <button class="btn btn-ghost btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">✎ Edit</button>
+              ${ctx.isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Remove this person (admin)">Delete</button>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rec-shell">
+        <div style="min-width:0">${composer(c, user)}${feedCard(c, user)}</div>
+        <div class="rec-rail">
+          ${datesCard(c)}${wfCard(c)}${detailsCard(c)}${peopleCard(c)}${oppsCard(c)}${historyCard(c)}
+        </div>
+      </div>`;
+  }
+
   // ── the screen ────────────────────────────────────────────
   function screenHtml(user, ctx) {
     const isHH = st.scope === 'households';
@@ -269,8 +553,12 @@ window.RWG = window.RWG || {};
     roles: ['admin', 'agent'],
     // A household is a contact record seen at family grain, so Contacts stays
     // lit while you are on one — you did not leave the area.
-    nav: [{ view: 'contacts', label: 'Contacts', icon: 'person', also: ['households', 'household'] }],
-    meta: { contacts: { t: 'Contacts', s: 'Every person in the book' } },
+    nav: [{ view: 'contacts', label: 'Contacts', icon: 'person', also: ['households', 'household', 'contact'] }],
+    views: ['contact'],
+    meta: {
+      contacts: { t: 'Contacts', s: 'Every person in the book' },
+      contact:  { t: 'Contact',  s: 'One person — their family, their work, their history' }
+    },
     state: st,
 
     home: {
@@ -281,9 +569,16 @@ window.RWG = window.RWG || {};
       })
     },
 
-    onEnter() {
+    onEnter(view) {
       const me = RWG.auth.currentUser();
       if (!H().isStarted()) H().init(me, RWG.app.renderMain);
+      if (view === 'contact') {
+        // The record assembles notes, tasks, cases and workflows around one person.
+        if (RWG.notes && !RWG.notes.isStarted()) RWG.notes.init(me, RWG.app.renderMain);
+        if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(me, RWG.app.renderMain);
+        if (RWG.pipelines) RWG.pipelines.init();
+        if (RWG.wf) RWG.wf.init();
+      }
       // The households scope counts each family's opportunities.
       const sd = RWG.scorecardData;
       if (sd && !sd.isStarted()) sd.init(me, RWG.app.renderMain);
@@ -313,8 +608,24 @@ window.RWG = window.RWG || {};
         if (e && e.target && e.target.closest && e.target.closest('a[href]')) return;
         const c = H().contact(el.dataset.id);
         if (!c) return;
-        const hhm = RWG.modules.get('households');
-        if (hhm) hhm.actions['hh-person-edit']({ dataset: { id: c.id } }, e);
+        st.currentId = c.id;
+        st.tab = 'note';
+        const m = document.getElementById('modal-mount'); if (m) m.innerHTML = '';
+        RWG.app.nav('contact');
+      },
+      'ct-back': () => { st.currentId = null; RWG.app.nav('contacts'); },
+      'ct-tab': (el) => { st.tab = el.dataset.tab || 'note'; handoff(el.dataset.tab); },
+      'ct-note-post': (el) => {
+        const c = H().contact(el.dataset.id); if (!c) return;
+        const body = U().noteText('ct-note');
+        if (!body) { U().toast('Say something first'); return; }
+        const n = RWG.notes && RWG.notes.addNote({
+          body: body, bodyHtml: U().noteRead('ct-note'),
+          relatedType: 'contact', relatedId: c.id, relatedLabel: H().contactName(c)
+        });
+        if (!n) { U().toast('Could not post that'); return; }
+        RWG.app.renderMain();
+        U().toast('Posted to ' + H().contactName(c), true);
       },
       'ct-sort': (el) => { st.sort = el.dataset.sort; RWG.app.renderMain(); },
       'ct-tag': (el) => {
@@ -345,6 +656,11 @@ window.RWG = window.RWG || {};
 
     render(view, user, ctx) {
       if (!H().isStarted()) return `<div class="empty" style="padding:60px"><div class="ec">⏳</div><h3>Loading the book…</h3></div>`;
+      if (view === 'contact') {
+        const c = st.currentId && H().contact(st.currentId);
+        if (c) return contactHtml(c, user, ctx);
+        st.currentId = null;   // deleted, or a stale link — the list is the honest fallback
+      }
       return screenHtml(user, ctx);
     }
   });

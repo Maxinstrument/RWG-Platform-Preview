@@ -238,7 +238,7 @@ window.RWG = window.RWG || {};
           <div class="field-row">
             <div class="field-group"><label class="lbl">Regarding — household / client</label>
               <div class="flex" style="gap:8px;align-items:center">
-                <input id="op2-client" value="${esc((c && c.clientName) || (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : ''))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
+                <input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : ''))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
                 ${hh ? `<button class="btn btn-quiet btn-sm" style="flex:none" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button>` : ''}
               </div>
               ${hh ? `<div class="hint">${esc(hh.name)}</div>` : '<div class="hint">Not linked to a household yet.</div>'}</div>
@@ -458,7 +458,9 @@ window.RWG = window.RWG || {};
         a.download = 'RWG_cases_' + S().currentWeekEnding() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
       },
       'cs-open': (el) => oppWindow({ id: el.dataset.id }),
-      'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null }),
+      // From a contact record the client name rides along, so the person you
+      // clicked is the client — not whoever happens to be primary on the family.
+      'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null, clientName: el.dataset.client || '' }),
       'cs-save': (el) => saveWindow(el),
       // Back to the board, on the track you clicked.
       'cs-to-board': (el) => {

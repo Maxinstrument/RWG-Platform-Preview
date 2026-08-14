@@ -1473,3 +1473,15 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
 .topbar-search svg{width:17px;height:17px;}
 /* The empty-state medallion holds one large glyph, centred. */
 .empty .ec .ic-lg{width:26px;height:26px;}
+
+/* ── The contact record ───────────────────────────────────
+   Work on the left, facts on the right. Same shape as Tasks
+   and the old Contacts rail, so the eye already knows it. */
+.rec-shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:var(--panel-gap);align-items:start;}
+.rec-rail{display:flex;flex-direction:column;gap:var(--panel-gap);min-width:0;}
+.rec-shell .list-row .end{white-space:nowrap;}
+@media (max-width:1080px){
+  .rec-shell{grid-template-columns:minmax(0,1fr);}
+  .rec-rail{flex-direction:row;flex-wrap:wrap;}
+  .rec-rail > *{flex:1 1 300px;}
+}
