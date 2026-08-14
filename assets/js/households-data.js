@@ -187,6 +187,7 @@ RWG.hh = (function () {
       planType: '', memberClass: '', yos: null, afc: null, age: null,
       tags: [],                        // free-form labels; the tag list is derived from use
       title: '', notes: '',            // job title, and anything the team should know
+      keyDates: [],                    // DROP windows, retirement dates — a person's, not a family's
       leadId: null,                    // set when this person began as a lead
       advisorstream: false,            // on the newsletter list yet?
       createdAt: now(), createdBy: (me && me.id) || null, updatedAt: now()

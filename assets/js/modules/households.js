@@ -340,6 +340,7 @@ window.RWG = window.RWG || {};
           : '<span class="pill-soft">no email</span>'}</td>
         <td style="white-space:nowrap">
           ${c.leadId && D().lead(c.leadId) ? `<button class="btn btn-quiet btn-sm" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record this person came from — full call history">History</button>` : ''}
+          <button class="btn btn-quiet btn-sm" data-action="kd-add" data-contact="${esc(c.id)}" title="Add a key date for this person">⭐ Date</button>
           <button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">Edit</button>
           ${isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Remove this person (admin)">✕</button>` : ''}
         </td>
@@ -354,6 +355,23 @@ window.RWG = window.RWG || {};
         <div class="tl-meta">${b.inDays === 0 ? 'today' : 'in ' + b.inDays + ' day' + (b.inDays === 1 ? '' : 's')} · ${b.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</div>
       </div></div>`).join('')
       : `<p class="muted" style="font-size:13px">No birthdays in the next 60 days${people.some(p => !p.dob) ? ' — add dates of birth to power the reminders' : ''}.</p>`;
+
+    // Key dates belong to a person; anything still filed against the
+    // household is shown as such, with a nudge to say whose it is.
+    const kdRows = people.map(c => (c.keyDates || []).map(k => `
+      <div class="tl-item"><div class="tl-ic">⭐</div><div class="tl-body">
+        <div class="tl-h">${esc(k.label || 'Key date')} <span class="cell-sub">· ${esc(H().contactName(c))}</span></div>
+        <div class="tl-meta">${esc(fmtDob(k.date))}${k.repeat === 'yearly' ? ' · every year' : ''}${k.note ? ' · ' + esc(k.note) : ''}
+          <button class="btn btn-quiet btn-sm" data-action="kd-del" data-contact="${esc(c.id)}" data-kd="${esc(k.id)}" style="margin-left:6px">remove</button></div>
+      </div></div>`).join('')).join('')
+      + (h.keyDates || []).map(k => `
+      <div class="tl-item"><div class="tl-ic">⭐</div><div class="tl-body">
+        <div class="tl-h">${esc(k.label || 'Key date')}</div>
+        <div class="tl-meta">${esc(fmtDob(k.date))}${k.note ? ' · ' + esc(k.note) : ''}
+          <button class="chip tier-medium" style="font-size:10.5px;cursor:pointer;margin-left:6px"
+            data-action="kd-move" data-hh="${esc(h.id)}" data-kd="${esc(k.id)}"
+            title="Key dates belong to a person now — click to say whose">on the household · assign →</button></div>
+      </div></div>`).join('');
 
     const links = (h.links || []).map(l => {
       const other = H().household(l.householdId);
@@ -413,12 +431,7 @@ window.RWG = window.RWG || {};
             <span class="topbar-spacer"></span>
             <button class="btn btn-ghost btn-sm" data-action="kd-add" data-hh="${esc(h.id)}">＋ Key date</button></div>
           ${bdayRows}
-          ${(h.keyDates || []).map(k => `
-            <div class="tl-item"><div class="tl-ic">⭐</div><div class="tl-body">
-              <div class="tl-h">${esc(k.label)}</div>
-              <div class="tl-meta">${esc(k.date)}${k.repeat === 'yearly' ? ' · every year' : ''}${k.note ? ' · ' + esc(k.note) : ''}
-                <button class="btn btn-quiet btn-sm" data-action="kd-del" data-hh="${esc(h.id)}" data-kd="${esc(k.id)}" style="margin-left:6px">✕</button></div>
-            </div></div>`).join('')}
+          ${kdRows}
         </div>
         <div class="card">
           <div class="card-head"><h3>Connected to</h3><span class="sub">${(h.links || []).length}</span></div>

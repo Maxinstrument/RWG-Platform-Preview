@@ -91,7 +91,11 @@ window.RWG = window.RWG || {};
           remindTitle: 'Call ' + H().contactName(b.contact) + ' — birthday ' + fmtShort(b.date)
         });
       });
-      H().households().forEach(h => (h.keyDates || []).forEach(k => {
+      /* Custom key dates belong to a person: a DROP window is Maria's, not
+         the Vargases'. Dates recorded against the household before that was
+         true still surface here, flagged, with a button to move them onto
+         whoever they were always about. */
+      const pushCustom = (k, owner) => {
         let when, inDays;
         if (k.repeat === 'yearly') {
           const n = nextOccur(k.date, t); if (!n) return;
@@ -105,15 +109,26 @@ window.RWG = window.RWG || {};
           when = lit;
         }
         if (inDays > days) return;
+        const who = owner.contact ? H().contactName(owner.contact) : '';
+        const hh = owner.hh;
         out.push({
           kind: 'custom', icon: '⭐', when, inDays,
           title: k.label || 'Key date',
-          sub: h.name + (k.note ? ' · ' + k.note : ''), advisor: h.advisorName || '',
-          hhId: h.id, kdId: k.id,
-          key: 'kd:' + h.id + ':' + k.id + ':' + when.getFullYear(),
-          remindTitle: (k.label || 'Key date') + ' — ' + h.name
+          sub: [who, hh ? hh.name : '', k.note].filter(Boolean).join(' · '),
+          advisor: (hh && hh.advisorName) || '',
+          hhId: hh ? hh.id : null,
+          contactId: owner.contact ? owner.contact.id : null,
+          legacy: !owner.contact,          // still filed against the household
+          kdId: k.id,
+          key: 'kd:' + (owner.contact ? owner.contact.id : (hh ? hh.id : '?')) + ':' + k.id + ':' + when.getFullYear(),
+          remindTitle: (k.label || 'Key date') + ' — ' + (who || (hh ? hh.name : ''))
         });
-      }));
+      };
+
+      H().contacts().forEach(c => (c.keyDates || []).forEach(k =>
+        pushCustom(k, { contact: c, hh: c.householdId ? H().household(c.householdId) : null })));
+      H().households().forEach(h => (h.keyDates || []).forEach(k =>
+        pushCustom(k, { contact: null, hh: h })));
     }
 
     if (SD() && SD().isStarted()) {
@@ -159,16 +174,63 @@ window.RWG = window.RWG || {};
   const mount = () => document.getElementById('modal-mount');
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
-  function kdModal(presetHh) {
+  // People, grouped under their household, so a long book stays navigable
+  // and it is obvious which family a name belongs to.
+  function personOptions(selectedId) {
     const hhs = H().households().slice().sort((a, b) => a.name.localeCompare(b.name));
-    const opts = hhs.map(h => `<option value="${esc(h.id)}" ${h.id === presetHh ? 'selected' : ''}>${esc(h.name)}</option>`).join('');
+    const loose = H().contacts().filter(c => !c.householdId || !H().household(c.householdId));
+    const group = (label, people) => {
+      if (!people.length) return '';
+      return `<optgroup label="${esc(label)}">${people
+        .slice().sort((a, b) => H().contactName(a).localeCompare(H().contactName(b)))
+        .map(c => `<option value="${esc(c.id)}" ${c.id === selectedId ? 'selected' : ''}>${esc(H().contactName(c) || '(no name)')}</option>`)
+        .join('')}</optgroup>`;
+    };
+    return hhs.map(h => group(h.name, H().contactsFor(h.id))).join('')
+      + group('No household', loose);
+  }
+
+  /* Moving a legacy household date onto a person: add to the person and
+     remove from the household in the same turn, so the date is never in
+     both places (it would surface twice) nor in neither. */
+  function moveKeyDate(h, k, c) {
+    H().saveContact({ id: c.id, keyDates: (c.keyDates || []).concat([k]) });
+    H().saveHousehold({ id: h.id, keyDates: (h.keyDates || []).filter(x => x.id !== k.id) });
+    mount().innerHTML = '';
+    RWG.app.renderMain();
+    U().toast('“' + (k.label || 'Key date') + '” is now ' + (H().contactName(c) || 'theirs') + "'s", true);
+  }
+
+  function movePickerModal(h, k, people) {
+    const opts = people.slice().sort((a, b) => H().contactName(a).localeCompare(H().contactName(b)))
+      .map(c => `<option value="${esc(c.id)}">${esc(H().contactName(c) || '(no name)')}</option>`).join('');
+    mount().innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card modal-sm">
+        <div class="modal-head"><h2>Whose date is this?</h2>
+          <p>“${esc(k.label || 'Key date')}” is filed against ${esc(h.name)}. Key dates belong to a person now.</p></div>
+        <div class="modal-body">
+          <div class="field-group"><label class="lbl">Person</label>
+            <select id="kd-move-who">${opts}</select></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+          <button class="btn btn-gold" data-action="kd-move-save" data-hh="${esc(h.id)}" data-kd="${esc(k.id)}">Move it</button>
+        </div>
+      </div>`;
+  }
+
+  function kdModal(presetContact) {
+    const opts = personOptions(presetContact || null);
+    if (!opts) { U().toast('Add a person to the book first — a key date belongs to someone'); return; }
     mount().innerHTML = `
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card">
         <div class="modal-head"><h2>New key date</h2>
           <p>A DROP window, a retirement date, an RMD deadline — anything the book should never forget.</p></div>
         <div class="modal-body">
-          <div class="field-group"><label class="lbl">Household</label><select id="kd-hh">${opts}</select></div>
+          <div class="field-group"><label class="lbl">Whose date is it</label><select id="kd-who">${opts}</select>
+            <div class="hint">Dates belong to a person — a DROP window is theirs, not the family's.</div></div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">What is it</label>
               <input id="kd-label" placeholder="e.g. DROP window ends"></div>
@@ -207,7 +269,11 @@ window.RWG = window.RWG || {};
           ${e.sub ? `<span class="cell-sub" style="font-size:11.5px">${esc(e.sub)}</span>` : ''}
           ${e.advisor ? `<span class="pill-soft" style="font-size:11px">${esc(e.advisor.split(' ')[0])}</span>` : ''}
           ${e.milestone ? `<span class="chip tier-gold" style="font-size:10.5px">✦ ${esc(e.milestone)}</span>` : ''}
-          ${e.kind === 'custom' ? `<button class="btn btn-quiet btn-sm" style="padding:1px 7px;font-size:10.5px" title="Remove this date" data-action="kd-del" data-hh="${esc(e.hhId)}" data-kd="${esc(e.kdId)}">✕</button>` : ''}
+          ${e.kind === 'custom' && e.legacy ? `<button class="chip tier-medium" style="font-size:10.5px;cursor:pointer"
+              title="This date is filed against the household. Key dates belong to a person now — click to say whose."
+              data-action="kd-move" data-hh="${esc(e.hhId)}" data-kd="${esc(e.kdId)}">on the household · assign →</button>` : ''}
+          ${e.kind === 'custom' ? `<button class="btn btn-quiet btn-sm" style="padding:1px 7px;font-size:10.5px" title="Remove this date" data-action="kd-del"
+              ${e.contactId ? `data-contact="${esc(e.contactId)}"` : `data-hh="${esc(e.hhId)}"`} data-kd="${esc(e.kdId)}">✕</button>` : ''}
         </div>
       </div>
       <div class="end">
@@ -315,24 +381,56 @@ window.RWG = window.RWG || {};
       'kd-tab': (el) => { st.tab = el.dataset.tab; RWG.app.renderMain(); },
       'kd-kind': (el) => { st.kind = el.dataset.kind; RWG.app.renderMain(); },
       'kd-remind': (el) => { const e = st.entries[el.dataset.key]; if (e) remind(e); },
-      'kd-add': (el) => kdModal(el.dataset.hh || null),
+      // data-contact preselects a person; data-hh (from a household screen)
+      // preselects that household's primary client.
+      'kd-add': (el) => {
+        let cid = el.dataset.contact || null;
+        if (!cid && el.dataset.hh) {
+          const p = H().primaryContact(el.dataset.hh);
+          if (p) cid = p.id;
+        }
+        kdModal(cid);
+      },
       'kd-add-save': () => {
-        const hhId = g('kd-hh'), label = g('kd-label').trim(), date = g('kd-date');
-        if (!hhId || !label || !date) { U().toast('Household, name and date — all three'); return; }
-        const h = H().household(hhId); if (!h) return;
-        const kds = (h.keyDates || []).concat([{
+        const cid = g('kd-who'), label = g('kd-label').trim(), date = g('kd-date');
+        if (!cid || !label || !date) { U().toast('Person, name and date — all three'); return; }
+        const c = H().contact(cid); if (!c) return;
+        const kds = (c.keyDates || []).concat([{
           id: 'kd' + Date.now(), label: label, date: date,
           repeat: g('kd-repeat') || 'yearly', note: g('kd-note').trim()
         }]);
-        H().saveHousehold({ id: hhId, keyDates: kds });
+        H().saveContact({ id: cid, keyDates: kds });
         mount().innerHTML = '';
         RWG.app.renderMain();
-        U().toast('On the book — it will surface as it approaches', true);
+        U().toast('On ' + (H().contactName(c) || 'their') + "'s record — it will surface as it approaches", true);
       },
       'kd-del': (el) => {
-        const h = H().household(el.dataset.hh); if (!h) return;
-        H().saveHousehold({ id: h.id, keyDates: (h.keyDates || []).filter(k => k.id !== el.dataset.kd) });
+        if (el.dataset.contact) {
+          const c = H().contact(el.dataset.contact); if (!c) return;
+          H().saveContact({ id: c.id, keyDates: (c.keyDates || []).filter(k => k.id !== el.dataset.kd) });
+        } else {
+          const h = H().household(el.dataset.hh); if (!h) return;
+          H().saveHousehold({ id: h.id, keyDates: (h.keyDates || []).filter(k => k.id !== el.dataset.kd) });
+        }
         RWG.app.renderMain();
+      },
+
+      /* Move a date that predates this change onto the person it was
+         always about. One household with one person needs no question. */
+      'kd-move': (el) => {
+        const h = H().household(el.dataset.hh); if (!h) return;
+        const k = (h.keyDates || []).find(x => x.id === el.dataset.kd); if (!k) return;
+        const people = H().contactsFor(h.id);
+        if (!people.length) { U().toast('Add a person to ' + h.name + ' first'); return; }
+        if (people.length === 1) { moveKeyDate(h, k, people[0]); return; }
+        movePickerModal(h, k, people);
+      },
+      'kd-move-save': (el) => {
+        const h = H().household(el.dataset.hh);
+        const k = h && (h.keyDates || []).find(x => x.id === el.dataset.kd);
+        const c = H().contact(g('kd-move-who'));
+        if (!h || !k || !c) return;
+        moveKeyDate(h, k, c);
       },
       'as-done': (el) => {
         H().setAdvisorstream(el.dataset.id, true);
