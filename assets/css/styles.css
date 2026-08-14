@@ -1198,3 +1198,7 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
 @media (max-width:720px){
   .list-toolbar.tb-inline{flex-wrap:wrap;overflow-x:visible;}
 }
+
+/* A clickable row still lets its own links and buttons act first */
+.cs-row a,.cs-row .tag-chip,.cs-row .btn{position:relative;z-index:1;}
+.cs-row:hover .cell-name{color:var(--gold);}

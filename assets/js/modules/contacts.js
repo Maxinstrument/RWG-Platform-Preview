@@ -86,17 +86,20 @@ window.RWG = window.RWG || {};
       more > 0 ? `<span class="cell-sub">+${more}</span>` : ''}</div>`;
   }
 
+  // The whole row is the target. Anything inside it that does its own
+  // thing — the Edit button, a tag chip, a phone or email link — carries
+  // its own action (or is a link), and the kernel dispatches to the
+  // innermost match, so those keep working.
   function row(c) {
     const h = hhOf(c);
     const nm = H().contactName(c) || '(no name)';
     const adv = advisorOf(c);
-    return `<tr>
+    return `<tr class="cs-row" data-action="ct-open" data-id="${esc(c.id)}">
       <td>
         <div class="ct-name">
           ${U().avatar({ name: nm })}
           <span style="min-width:0">
-            <span class="cell-name" data-action="hh-goto" data-id="${esc(c.householdId || '')}"
-                  style="cursor:pointer;display:block">${esc(nm)}</span>
+            <span class="cell-name" style="display:block">${esc(nm)}</span>
             <span class="cell-sub">${esc(c.title || c.employer || (h ? h.name : '') || '')}</span>
           </span>
         </div>
@@ -105,7 +108,7 @@ window.RWG = window.RWG || {};
             <div class="cell-sub">${esc(c.relationship || '')}</div>` : dash}</td>
       <td>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : dash}</td>
       <td>${tagCells(c)}</td>
-      <td>${h ? `<span class="cell-sub" data-action="hh-goto" data-id="${esc(h.id)}" style="cursor:pointer">${esc(h.name)}</span>` : dash}
+      <td>${h ? `<span class="cell-sub">${esc(h.name)}</span>` : dash}
           ${adv ? `<div class="cell-sub" style="opacity:.75">${esc(adv)}</div>` : ''}</td>
       <td class="end"><button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">Edit</button></td>
     </tr>`;
@@ -138,17 +141,17 @@ window.RWG = window.RWG || {};
     const sd = RWG.scorecardData;
     const opps = (sd && sd.isStarted()) ? sd.cases().filter(c => c.householdId === h.id).length : 0;
     const adv = h.advisorName || (h.advisorUid ? (D().user(h.advisorUid) || {}).name : '') || '';
-    return `<tr>
+    return `<tr class="cs-row" data-action="hh-open" data-id="${esc(h.id)}">
       <td>
         <div class="ct-name">
           <span class="hh-badge">🏠</span>
           <span style="min-width:0">
-            <span class="cell-name" data-action="hh-open" data-id="${esc(h.id)}" style="cursor:pointer;display:block">${esc(h.name)}</span>
+            <span class="cell-name" style="display:block">${esc(h.name)}</span>
             <span class="cell-sub">${esc(h.source || '')}</span>
           </span>
         </div>
       </td>
-      <td>${prim ? `<span data-action="hh-open" data-id="${esc(h.id)}" style="cursor:pointer">${esc(H().contactName(prim))}</span>` : dash}</td>
+      <td>${prim ? esc(H().contactName(prim)) : dash}</td>
       <td class="num">${people.length}</td>
       <td class="num">${opps || dash}</td>
       <td>${adv ? esc(adv) : dash}</td>
@@ -297,6 +300,22 @@ window.RWG = window.RWG || {};
     },
 
     actions: {
+      // Open a person: their household is where their cases, tasks and
+      // dates already live, so that is the record. A phone or email link
+      // inside the row is a real link and must win over the row.
+      'ct-open': (el, e) => {
+        if (e && e.target && e.target.closest && e.target.closest('a[href]')) return;
+        const c = H().contact(el.dataset.id);
+        if (!c) return;
+        if (!c.householdId) {
+          // Shouldn't happen — every person is created into a household —
+          // but say so rather than doing nothing if it ever does.
+          U().toast('That person is not attached to a household yet');
+          return;
+        }
+        const hhm = RWG.modules.get('households');
+        if (hhm) hhm.actions['hh-open']({ dataset: { id: c.householdId } }, e);
+      },
       'ct-sort': (el) => { st.sort = el.dataset.sort; RWG.app.renderMain(); },
       'ct-tag': (el) => {
         const t = el.dataset.tag || '';
