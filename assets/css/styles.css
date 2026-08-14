@@ -1057,3 +1057,21 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
   background:var(--field);border:1px solid var(--line);border-radius:var(--radius-sm);
   font-size:12.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;
 }
+
+/* ── Report builder ───────────────────────────────────────
+   Three labelled bands: what, narrowed how, showing what. The
+   label sits in a fixed gutter so the three rows line up. */
+.rp-block{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3) 0;border-top:1px solid var(--line);}
+.rp-block:first-of-type{border-top:none;padding-top:var(--s2);}
+.rp-lab{
+  flex:none;width:96px;padding-top:8px;
+  font-size:12.5px;font-weight:600;color:var(--muted);
+}
+.rp-filter{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;margin-bottom:var(--s2);}
+.rp-filter select,.rp-filter input{width:auto;min-width:130px;min-height:var(--ctl-h-sm);padding:7px 11px;font-size:13px;}
+.rp-filter select{padding-right:30px;background-position:right 9px center;}
+.rp-filter input[type=date]{min-width:150px;}
+@media (max-width:720px){
+  .rp-block{flex-direction:column;gap:var(--s2);}
+  .rp-lab{width:auto;padding-top:0;}
+}
