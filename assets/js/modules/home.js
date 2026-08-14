@@ -33,7 +33,7 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const dayMs = 86400000;
 
-  const st = { track: 'insurance', period: 'q', customize: false, on: null };
+  const st = { track: 'insurance', period: 'q', customize: false, on: null, compose: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -282,11 +282,12 @@ window.RWG = window.RWG || {};
       `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="dates">All dates →</button>`);
   }
 
-  // 6 · Team activity — synthesised from the stamps already on the data.
+  // 6 · Team activity — synthesised from the stamps already on the data,
+  //     plus the one kind of entry somebody actually chose to write.
   function wActivity(ctx) {
     const ev = [];
     const cutoff = Date.now() - 30 * dayMs;
-    const push = (ts, who, txt, sub) => { if (ts && ts >= cutoff) ev.push({ ts, who, txt, sub }); };
+    const push = (ts, who, txt, sub, extra) => { if (ts && ts >= cutoff) ev.push(Object.assign({ ts, who, txt, sub }, extra || {})); };
     const userName = (uid) => { const u = uid && D().user(uid); return (u && u.name) || ''; };
     SD().cases().forEach(c => {
       const label = (c.clientName || '(no name)') + ' · ' + SC().productName(c.product);
@@ -300,13 +301,21 @@ window.RWG = window.RWG || {};
         `completed <b>${esc(t.title)}</b>`, t.relatedLabel || (t.workflowName ? t.workflowName + ' workflow' : ''));
     });
     if (H().isStarted()) H().households().forEach(h => push(toMs(h.createdAt), h.advisorName, `added <b>${esc(h.name)}</b> to the book`, h.source || ''));
+    // Posted updates. These are the only entries a person wrote on purpose,
+    // so they carry the words themselves rather than a generated sentence.
+    const me = RWG.auth.currentUser();
+    if (RWG.notes && RWG.notes.isStarted()) RWG.notes.all().forEach(n => push(
+      n.createdAt, n.authorName, 'said', n.relatedLabel || '',
+      { body: n.body, noteId: n.id, mine: !!(me && n.authorUid === me.id) || ctx.isAdmin }));
     ev.sort((a, b) => b.ts - a.ts);
     const top = ev.slice(0, 9);
     if (!top.length) return card('Team activity', 'last 30 days', emptyRow('Quiet so far — moves, closes and completed steps land here as they happen.'));
     const rows = top.map(e => `<div class="list-row" style="gap:9px">
       ${avatar(e.who)}
       <span style="min-width:0;flex:1"><span style="font-size:12.5px;color:var(--ink)">${esc(firstName(e.who))} ${e.txt}</span>
+      ${e.body ? `<span class="hm-note-body">${esc(e.body)}</span>` : ''}
       ${e.sub ? `<span class="cell-sub" style="display:block;font-size:11px">${esc(e.sub)}</span>` : ''}</span>
+      ${e.noteId && e.mine ? `<button class="btn btn-quiet btn-sm" style="flex:none;padding:1px 7px" data-action="hm-note-del" data-id="${esc(e.noteId)}" title="Delete this update">✕</button>` : ''}
       <span class="cell-sub" style="flex:none;font-size:11px">${timeAgo(e.ts)}</span>
     </div>`).join('');
     return card('Team activity', 'live', rows);
@@ -592,6 +601,46 @@ window.RWG = window.RWG || {};
       </div></div>`;
   }
 
+  /* ── The composer ─────────────────────────────────────────
+     Four things you can start from Home. Only "Update" has a form
+     here; Contact, Task and Opportunity open the real forms those
+     records already have, because a second copy of the person form
+     is a second thing to keep in step with the first. */
+  function composerHtml(user) {
+    const N = RWG.notes;
+    const tab = (id, icon, label) =>
+      `<button class="btn btn-sm ${st.compose === id ? 'btn-navy' : 'btn-ghost'}"
+         data-action="hm-compose" data-tab="${id}">${icon} ${label}</button>`;
+
+    const posting = st.compose === 'update';
+    const disabled = !N || !N.isStarted();
+
+    return `<div class="card hm-composer">
+      <div class="flex" style="gap:6px;flex-wrap:wrap;align-items:center">
+        ${tab('update', '📝', 'Update')}
+        ${tab('contact', '👤', 'Contact')}
+        ${tab('task', '✓', 'Task')}
+        ${tab('opp', '＄', 'Opportunity')}
+      </div>
+      ${posting ? `
+        <div class="hm-compose-row">
+          ${U().avatar(user, 34)}
+          <div style="flex:1;min-width:0">
+            <textarea id="hm-note" rows="2" placeholder="What happened? Type @ and a client's name to file it against their household."
+              ${disabled ? 'disabled' : ''}></textarea>
+            <div class="flex" style="gap:8px;align-items:center;margin-top:8px">
+              <span class="hint" style="margin:0">${disabled
+                ? 'Connecting…'
+                : 'Everyone sees this. It lands on the household if you mention one client.'}</span>
+              <span class="topbar-spacer"></span>
+              <button class="btn btn-ghost btn-sm" data-action="hm-compose" data-tab="">Cancel</button>
+              <button class="btn btn-gold btn-sm" data-action="hm-note-post" ${disabled ? 'disabled' : ''}>Post</button>
+            </div>
+          </div>
+        </div>` : ''}
+    </div>`;
+  }
+
   function screenHtml(user, ctx) {
     const eff = ctx.eff;
     const h = new Date().getHours();
@@ -634,6 +683,7 @@ window.RWG = window.RWG || {};
       </div>
       <div class="hm-shell${st.customize ? ' cz-open' : ''}">
         <div style="min-width:0">
+          ${composerHtml(user)}
           ${body || '<div class="empty" style="padding:44px"><div class="ec">🧭</div><h3>Nothing switched on</h3><p>Open Customize and pick your widgets.</p></div>'}
         </div>
         ${st.customize ? customizeHtml(ctx) : ''}
@@ -686,6 +736,7 @@ window.RWG = window.RWG || {};
       if (!SD().isStarted()) SD().init(me, RWG.app.renderMain);
       if (!H().isStarted()) H().init(me, RWG.app.renderMain);
       if (!T().isStarted()) T().init(me, RWG.app.renderMain);
+      if (RWG.notes && !RWG.notes.isStarted()) RWG.notes.init(me, RWG.app.renderMain);
       P().init();
       if (RWG.wf) RWG.wf.init();
     },
@@ -698,6 +749,39 @@ window.RWG = window.RWG || {};
     actions: {
       'home-open': (el) => RWG.app.nav(el.dataset.view),
       'hm-customize': () => { st.customize = !st.customize; RWG.app.renderMain(); },
+
+      // The composer. Update writes here; the other three hand off to the
+      // form that record already owns, so there is one of each in the app.
+      'hm-compose': (el) => {
+        const tab = el.dataset.tab || '';
+        const handoff = { contact: 'hh-person-add', task: 'tk-new', opp: 'cs-new' }[tab];
+        if (handoff) {
+          st.compose = ''; RWG.app.renderMain();
+          const owner = RWG.modules.actionOwner(handoff);
+          if (owner) owner.actions[handoff]({ dataset: {} });
+          else U().toast('That screen has not loaded yet — try again in a moment');
+          return;
+        }
+        st.compose = st.compose === tab ? '' : tab;
+        RWG.app.renderMain();
+        if (st.compose === 'update') { const b = document.getElementById('hm-note'); if (b) b.focus(); }
+      },
+      'hm-note-post': () => {
+        const box = document.getElementById('hm-note');
+        const body = box ? box.value : '';
+        if (!body.trim()) { U().toast('Say something first'); return; }
+        const n = RWG.notes && RWG.notes.addNote({ body: body });
+        if (!n) { U().toast('Could not post that'); return; }
+        st.compose = '';
+        RWG.app.renderMain();
+        U().toast(n.relatedLabel ? 'Posted to ' + n.relatedLabel : 'Posted', true);
+      },
+      'hm-note-del': (el) => {
+        if (!RWG.notes) return;
+        if (!confirm('Delete this update? A partner can restore it from the Trash.')) return;
+        RWG.notes.removeNote(el.dataset.id);
+        RWG.app.renderMain();
+      },
       'hm-w': (el) => {
         const id = el.dataset.id;
         const i = st.on.indexOf(id);

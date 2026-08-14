@@ -210,8 +210,10 @@ RWG.tasks = (function () {
   }
 
   function removeTask(id) {   // admin only (rules)
-    cache.tasks = cache.tasks.filter(t => t.id !== id);
+    const t = task(id);
+    cache.tasks = cache.tasks.filter(x => x.id !== id);
     onChange();
+    if (t && RWG.trash) return RWG.trash.send('tasks', id, t, t.title || '(untitled task)');
     return db().collection('tasks').doc(id).delete()
       .catch(e => { console.error('delete task:', e && e.message); throw e; });
   }

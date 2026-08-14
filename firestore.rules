@@ -111,6 +111,37 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Notes: the team's own words ─────────────────────────────
+    // Anyone signed in can post and read. Nobody edits somebody else's
+    // words — an update is a statement of what happened, and a record
+    // that can be quietly rewritten is worth less than no record.
+    // Removing one goes through the Trash, so the author or a partner
+    // may delete, and a partner can always put it back.
+    match /notes/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if signedIn() && (isAdmin() || resource.data.authorUid == request.auth.uid);
+    }
+
+    // ── Trash: deleted records, waiting on a partner ────────────
+    // Anyone who is allowed to delete a record must also be allowed to
+    // file its copy here, or the delete would succeed with nothing kept.
+    // Reading, restoring and purging are partners only: this bin holds
+    // whole households and closed cases, so it is the most sensitive
+    // collection in the database.
+    //
+    // The delete-half of a restore is an admin action, and the create
+    // is guarded to a snapshot of a real record.
+    match /trash/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.coll is string
+        && request.resource.data.originalId is string
+        && request.resource.data.deletedBy == request.auth.uid;
+      allow update: if isAdmin();
+    }
+
     // ── Scorecard: weekly submissions ───────────────────────────
     // Aggregate production, team-readable. Doc id is agentUid_weekEnding, so an
     // agent may only write a doc whose agentUid is their own account.

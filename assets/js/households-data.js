@@ -170,8 +170,10 @@ RWG.hh = (function () {
   }
 
   function deleteHousehold(id) {   // admin only (rules) — UI guards that it holds no people
-    cache.households = cache.households.filter(h => h.id !== id);
+    const h = household(id);
+    cache.households = cache.households.filter(x => x.id !== id);
     onChange();
+    if (h && RWG.trash) return RWG.trash.send('households', id, h, h.name);
     return db().collection('households').doc(id).delete()
       .catch(e => { console.error('delete household:', e && e.message); throw e; });
   }
@@ -211,8 +213,10 @@ RWG.hh = (function () {
   }
 
   function removeContact(id) {     // admin only (rules)
-    cache.contacts = cache.contacts.filter(c => c.id !== id);
+    const c = contact(id);
+    cache.contacts = cache.contacts.filter(x => x.id !== id);
     onChange();
+    if (c && RWG.trash) return RWG.trash.send('contacts', id, c, contactName(c) || '(no name)');
     return db().collection('contacts').doc(id).delete()
       .catch(e => { console.error('delete contact:', e && e.message); throw e; });
   }

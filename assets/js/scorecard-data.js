@@ -297,8 +297,12 @@ RWG.scorecardData = (function () {
   }
 
   function deleteCase(recordId) {
-    cache.cases = cache.cases.filter(c => c.recordId !== recordId);
+    const c = caseById(recordId);
+    cache.cases = cache.cases.filter(x => x.recordId !== recordId);
     onChange();
+    if (c && RWG.trash) {
+      return RWG.trash.send('cases', recordId, c, c.title || c.clientName || '(unnamed case)');
+    }
     return db().collection('cases').doc(recordId).delete()
       .catch(e => { console.error('delete case:', e && e.message); throw e; });
   }
