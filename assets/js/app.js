@@ -383,6 +383,9 @@ RWG.app = (function () {
   }
 
   function nav(view) {
+    // A panel belongs to the screen that raised it. Leaving without this
+    // left it floating over the next page with no way back to its context.
+    closeDrawer();
     state.view = view;
     if (view === 'archive') state.archiveRows = null;   // pull a fresh copy of the archive on entry
     if (view === 'reports') state.reportWeekStart = RWG.analytics.weekStartOf(Date.now());   // open on the current week
@@ -438,6 +441,13 @@ RWG.app = (function () {
   function closeDrawer() {
     state.leadId = null; state.editing = false;          // state first, always
     dismiss('#drawer-mount', 200);
+  }
+  /* A module can raise its own read-only side panel in the slot the lead
+     drawer uses: same entrance, same scrim, same Escape, same ✕. Looking
+     something up should not cost you the page you were reading. */
+  function openPanel(html) {
+    state.leadId = null; state.editing = false;
+    const m = $('#drawer-mount'); if (m) m.innerHTML = html;
   }
   function refreshDrawer() { if (state.leadId) openLead(state.leadId, state.editing); }
 
@@ -1283,7 +1293,8 @@ RWG.app = (function () {
 
   // The kernel's public surface. Modules use nav() to move around and icons for their tiles.
   // effectiveUser/effectiveRole + viewAs let a module honour admin "view as" for its own reads/writes.
-  return { boot, bind, state, nav, renderMain, icons: ICONS, effectiveUser, effectiveRole, viewAs: setViewAs };
+  return { boot, bind, state, nav, renderMain, openPanel, closeDrawer,
+    icons: ICONS, effectiveUser, effectiveRole, viewAs: setViewAs };
 })();
 
 document.addEventListener('DOMContentLoaded', () => { RWG.app.bind(); RWG.app.boot(); });

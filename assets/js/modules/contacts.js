@@ -306,7 +306,7 @@ window.RWG = window.RWG || {};
     return `<div class="card flush">
       <div class="list-head"><span class="t">Household</span>
         <span class="topbar-spacer"></span>
-        <button class="btn btn-quiet btn-sm" data-action="hh-open" data-id="${esc(h.id)}">Open ${esc(h.name)} →</button></div>
+        <button class="btn btn-quiet btn-sm" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)} →</button></div>
       ${others.length ? others.map(o => `<div class="list-row mid">
           <span class="grow"><span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600;cursor:pointer"
               data-action="ct-open" data-id="${esc(o.id)}">${esc(fullName(o))}</span>
@@ -402,7 +402,7 @@ window.RWG = window.RWG || {};
       <div class="list-head"><span class="t">Details</span></div>
       ${rowLine('Relationship', esc(c.relationship || '—'))}
       ${rowLine('Advisor', esc(adv || '—'))}
-      ${rowLine('Household', h ? `<button class="btn-link" data-action="hh-open" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')}
+      ${rowLine('Household', h ? `<button class="btn-link" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')}
       ${rowLine('Source', esc((h && h.source) || '—'))}
       ${rowLine('Employer', esc(c.employer || '—'), c.title || '')}
       ${rowLine('Plan type', esc(c.planType || '—'),
@@ -561,7 +561,8 @@ window.RWG = window.RWG || {};
             <h3 style="font-size:var(--fs-title)">${esc(fullName(c))}</h3>
             <div class="cell-sub">${esc([c.title, c.employer].filter(Boolean).join(' at ') || c.relationship || '')}</div>
             <div class="tag-row" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
-              ${h ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-open" data-id="${esc(h.id)}">${U().icon('household', 'ic-inline')} ${esc(h.name)}</button>` : ''}
+              ${h ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-panel" data-id="${esc(h.id)}"
+                title="See the household beside this record">${U().icon('household', 'ic-inline')} ${esc(h.name)}</button>` : ''}
               ${c.relationship ? `<span class="pill-soft">${esc(c.relationship)}</span>` : ''}
               ${c.leadId ? `<button class="pill-soft" style="cursor:pointer" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record they came from — full call history">Came from a lead</button>` : ''}
             </div>

@@ -339,6 +339,86 @@ window.RWG = window.RWG || {};
     </div>`;
   }
 
+  /* ── The household, as a side panel ────────────────────────
+     Read-only, on purpose. From a contact record the family is context,
+     not the thing you came to work on — you want to see who else is in
+     it and what is running, then carry on reading the person. Every row
+     is a way further in; nothing here edits, so nothing here can go
+     stale under you while it sits open. */
+  function panelHtml(h, ctx) {
+    const people = H().contactsFor(h.id).slice().sort((a, b) =>
+      (a.relationship === 'Primary client' ? 0 : 1) - (b.relationship === 'Primary client' ? 0 : 1)
+      || H().contactName(a).localeCompare(H().contactName(b)));
+    const sd = RWG.scorecardData, sc = RWG.scorecard;
+    const cases = (sd && sd.isStarted())
+      ? sd.cases().filter(x => x.householdId === h.id)
+          .sort((a, b) => String(b.openedWeek || '').localeCompare(String(a.openedWeek || '')))
+      : [];
+    const adv = h.advisorName || (h.advisorUid ? userName(h.advisorUid) : '');
+    const ids = {}; people.forEach(p => { ids[p.id] = 1; });
+    const bdays = H().upcomingBirthdays(60).filter(b => ids[b.contact.id]);
+
+    const line = (label, value) => `<div class="list-row mid"><span class="grow">
+        <span class="cell-sub" style="display:block">${esc(label)}</span>
+        <span style="font-size:var(--fs-dense);color:var(--ink)">${value}</span></span></div>`;
+    const block = (title, count, body) => `<div class="section-title">${esc(title)}${
+      count != null ? ` <span class="muted" style="font-weight:400">${count}</span>` : ''}</div>${body}`;
+
+    const peopleRows = people.length ? people.map(c => `<div class="list-row mid">
+        ${U().avatar({ name: H().contactName(c) }, 30)}
+        <span class="grow" style="min-width:0">
+          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600;cursor:pointer"
+            data-action="ct-open" data-id="${esc(c.id)}">${esc(H().contactName(c) || '(no name)')}</span>
+          <span class="cell-sub" style="display:block">${esc([c.relationship, c.employer].filter(Boolean).join(' · ') || '—')}</span>
+        </span></div>`).join('')
+      : '<p class="list-empty">Nobody on this household yet.</p>';
+
+    const caseRows = cases.length ? cases.map(x => `<div class="list-row mid"
+        style="cursor:pointer" data-action="cs-open" data-id="${esc(x.recordId)}">
+        <span class="grow" style="min-width:0">
+          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(x.title || (sc ? sc.productName(x.product) : ''))}</span>
+          <span class="cell-sub" style="display:block">${esc(sc ? sc.productName(x.product) : '')}${x.closedAt ? ' · closed' : (x.state ? ' · ' + esc(x.state) : '')}</span>
+        </span></div>`).join('')
+      : '<p class="list-empty">Nothing open for this family.</p>';
+
+    const dateRows = bdays.length ? bdays.map(b => `<div class="list-row mid">
+        <span class="grow"><span style="font-size:var(--fs-dense);color:var(--ink)">${esc(H().contactName(b.contact))} turns ${b.turning}</span>
+        <span class="cell-sub" style="display:block">${esc(b.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }))}</span></span>
+        <span class="end cell-sub">${b.inDays === 0 ? 'today' : 'in ' + b.inDays + 'd'}</span></div>`).join('') : '';
+
+    return `
+      <div class="scrim" data-action="close-drawer"></div>
+      <aside class="drawer" role="dialog" aria-label="${esc(h.name)}">
+        <div class="drawer-head">
+          <div class="dh-top">
+            <div style="min-width:0">
+              <div class="tag-row mb-8"><span class="chip tier-low">${U().icon('household', 'ic-inline')} Household</span></div>
+              <h2>${esc(h.name)}</h2>
+              <div class="dh-sub">${esc([adv ? 'Advised by ' + adv : '', h.source || ''].filter(Boolean).join(' · ') || 'No advisor set')}</div>
+            </div>
+            <div class="flex" style="gap:8px;flex:none">
+              <button class="drawer-edit" data-action="hh-goto" data-id="${esc(h.id)}"
+                title="Open the full household page">Open →</button>
+              <button class="drawer-close" data-action="close-drawer" aria-label="Close">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-body">
+          ${block('People', people.length, peopleRows)}
+          ${block('Opportunities', cases.length, caseRows)}
+          ${dateRows ? block('Key dates', null, dateRows) : ''}
+          ${block('Details', null,
+            line('Advisor', esc(adv || '—'))
+            + line('Source', esc(h.source || '—'))
+            + line('A360', h.a360Complete
+              ? '<span class="chip tier-high">Complete ✓</span>'
+              : '<span class="pill-soft">Pending</span>')
+            + line('In the book since', h.createdAt ? U().fmtDate(h.createdAt) : '—'))}
+          ${h.notes ? block('Notes', null, `<div class="hm-note-body" style="padding:var(--pad-cell)">${U().noteHtml(h.notes)}</div>`) : ''}
+        </div>
+      </aside>`;
+  }
+
   function detailHtml(h, user, ctx) {
     const people = H().contactsFor(h.id).slice().sort((a, b) =>
       (a.relationship === 'Primary client' ? 0 : 1) - (b.relationship === 'Primary client' ? 0 : 1)
@@ -705,6 +785,14 @@ window.RWG = window.RWG || {};
           if (!toHouseholdList()) { st.currentId = null; RWG.app.nav('households'); }
           U().toast('Household deleted');
         });
+      },
+
+      // The family as context rather than a destination: raise it beside
+      // what you are reading instead of navigating away from it.
+      'hh-panel': (el) => {
+        const h = H().household(el.dataset.id); if (!h) return;
+        if (!RWG.app.openPanel) { RWG.app.nav('household'); return; }
+        RWG.app.openPanel(panelHtml(h, { isAdmin: RWG.auth.isAdmin && RWG.auth.isAdmin() }));
       },
 
       // people
