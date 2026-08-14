@@ -1019,3 +1019,11 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
   .ct-rail{flex-direction:row;flex-wrap:wrap;}
   .ct-rail > *{flex:1 1 260px;}
 }
+
+/* ── Tasks screen ─────────────────────────────────────────
+   Same list + rail shape as Contacts; the rail is narrower
+   because its rows are short. */
+.mw-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:var(--s4);align-items:start;}
+@media (max-width:1080px){
+  .mw-grid{grid-template-columns:minmax(0,1fr);}
+}

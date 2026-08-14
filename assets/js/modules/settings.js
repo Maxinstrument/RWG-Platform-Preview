@@ -35,7 +35,7 @@ window.RWG = window.RWG || {};
   const U  = () => RWG.ui;
   const esc = (s) => U().esc(s);
 
-  const st = { tab: 'pipelines', pl: 'insurance', tplId: null, dP: null, dW: null, dR: null, dirty: {} };
+  const st = { tab: 'pipelines', pl: 'insurance', tplId: null, dP: null, dW: null, dR: null, dC: null, dirty: {} };
 
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const mount = () => document.getElementById('modal-mount');
@@ -52,6 +52,10 @@ window.RWG = window.RWG || {};
   function draftR() {
     if (!st.dR) st.dR = clone(SC().rateOverrides() || {});
     return st.dR;
+  }
+  function draftC() {
+    if (!st.dC) st.dC = clone(RWG.tasks.categories());
+    return st.dC;
   }
   function markDirty(which) {
     st.dirty[which] = true;
@@ -308,6 +312,43 @@ window.RWG = window.RWG || {};
       ${saveBar('p', 'set-save-pl', 'Save lost reasons')}`;
   }
 
+  /* ══ Task categories tab ═══════════════════════════════════
+     The same config-as-data shape as everything else here: code
+     defaults ship in tasks-data.js, this doc overrides them. A
+     category is a plain string, so renaming one leaves old tasks
+     wearing the old word — the filter simply stops offering it. */
+
+  function categoriesTab() {
+    const d = draftC();
+    const used = {};
+    if (RWG.tasks.isStarted()) RWG.tasks.all().forEach(t => { if (t.category) used[t.category] = (used[t.category] || 0) + 1; });
+    const rows = d.map((c, i) => `
+      <div class="flex set-row" style="gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid rgba(14,36,64,.06)">
+        <input value="${esc(c)}" data-set="cat" data-i="${i}" style="flex:1;min-width:0;font-size:13px;padding:5px 9px">
+        <span class="cell-sub" style="flex:none;min-width:64px;text-align:right">${used[c] ? used[c] + ' in use' : ''}</span>
+        <button class="btn btn-quiet btn-sm" style="padding:2px 8px;flex:none" data-action="set-cat-del" data-i="${i}">✕</button>
+      </div>`).join('');
+    const orphans = Object.keys(used).filter(k => d.indexOf(k) < 0);
+    return `
+      <div class="card flush" style="max-width:520px">
+        <div class="list-head">
+          <span class="t">Task categories</span>
+          <span class="cell-sub" style="margin-left:8px">the choices on a task, and the filter on the Tasks page</span>
+          <span class="topbar-spacer"></span>
+          <button class="btn btn-ghost btn-sm" data-action="set-cat-add">＋ Add</button>
+        </div>
+        ${rows || '<p class="list-hint">No categories — tasks will simply have none.</p>'}
+      </div>
+      ${orphans.length ? `<p class="muted" style="font-size:12px;margin:10px 2px 0;max-width:520px;color:var(--warn)">
+        Still worn by existing tasks but no longer on the list: ${orphans.map(esc).join(', ')}.
+        Those tasks keep the word; add it back above to make it selectable again.</p>` : ''}
+      <p class="muted" style="font-size:12px;margin:10px 2px 0;max-width:520px">
+        Keep these few enough that people actually pick one. Removing a category never
+        edits a task — history keeps the word it was filed under.
+      </p>
+      ${saveBar('c', 'set-save-cat', 'Save categories')}`;
+  }
+
   /* ══ Lead scoring tab (phase 7) ════════════════════════════
      The same rules that lived under "Scoring & Settings" in the
      Leads nav, moved home. The fields keep their cfg-* ids and the
@@ -350,11 +391,13 @@ window.RWG = window.RWG || {};
   }
 
   function screenHtml() {
-    const tabs = [['pipelines', 'Pipelines'], ['workflows', 'Workflows'], ['rates', 'Rates'], ['reasons', 'Lost reasons'], ['scoring', 'Lead scoring']]
+    const tabs = [['pipelines', 'Pipelines'], ['workflows', 'Workflows'], ['rates', 'Rates'],
+      ['reasons', 'Lost reasons'], ['categories', 'Task categories'], ['scoring', 'Lead scoring']]
       .map(t => `<button class="btn btn-sm ${st.tab === t[0] ? 'btn-navy' : 'btn-ghost'}" data-action="set-tab" data-tab="${t[0]}">${t[1]}</button>`).join('');
     const body = st.tab === 'workflows' ? workflowsTab()
       : st.tab === 'rates' ? ratesTab()
       : st.tab === 'reasons' ? reasonsTab()
+      : st.tab === 'categories' ? categoriesTab()
       : st.tab === 'scoring' ? scoringTab()
       : pipelinesTab();
     return `<div class="flex" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">${tabs}</div>${body}`;
@@ -375,6 +418,9 @@ window.RWG = window.RWG || {};
     } else if (kind === 'reason') {
       draftP().lostReasons[Number(el.dataset.i)] = el.value;
       markDirty('p');
+    } else if (kind === 'cat') {
+      draftC()[Number(el.dataset.i)] = el.value;
+      markDirty('c');
     } else if (kind === 'rate') {
       const v = Number(el.value);
       if (v > 0) draftR()[el.dataset.prod] = v / 100;
@@ -481,6 +527,9 @@ window.RWG = window.RWG || {};
     onEnter() {
       const me = RWG.auth.currentUser();
       if (!SD().isStarted()) SD().init(me, RWG.app.renderMain);
+      // The categories tab counts how many tasks wear each one, and the
+      // published list arrives on the tasks listener.
+      if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(me, RWG.app.renderMain);
       P().init();
       if (W()) W().init();
     },
@@ -496,8 +545,29 @@ window.RWG = window.RWG || {};
         if (w === 'p') st.dP = null;
         if (w === 'w') st.dW = null;
         if (w === 'r') st.dR = null;
+        if (w === 'c') st.dC = null;
         st.dirty[w] = false;
         RWG.app.renderMain();
+      },
+
+      // task categories
+      'set-cat-add': () => { draftC().push('New category'); markDirty('c'); RWG.app.renderMain(); },
+      'set-cat-del': (el) => {
+        draftC().splice(Number(el.dataset.i), 1);
+        markDirty('c'); RWG.app.renderMain();
+      },
+      'set-save-cat': () => {
+        // Trim, drop blanks, de-duplicate case-insensitively — the same rules
+        // tags follow, so neither list can grow near-identical twins.
+        const seen = {}, out = [];
+        draftC().forEach(c => {
+          const v = String(c || '').trim().replace(/\s+/g, ' ');
+          const k = v.toLowerCase();
+          if (v && !seen[k]) { seen[k] = 1; out.push(v); }
+        });
+        saveDoc('taskcategories', out)
+          .then(() => { st.dirty.c = false; st.dC = null; RWG.app.renderMain(); U().toast('Published — the whole team sees these categories now', true); })
+          .catch(e => U().toast('Save failed: ' + (e && e.message)));
       },
 
       // pipelines

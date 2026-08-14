@@ -309,7 +309,7 @@ window.RWG = window.RWG || {};
       </div>`).join('')
       : emptyRow('Clear. Nothing due today.');
     return card('My tasks today', due.length ? String(due.length) : '',
-      body, `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="mywork">My Work →</button>`);
+      body, `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="mywork">All tasks →</button>`);
   }
 
   // 8 · Pipeline forecast — what the open book is worth if it lands.
