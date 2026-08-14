@@ -1486,6 +1486,14 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
   letter-spacing:var(--track-caps);text-transform:uppercase;color:var(--ink-ghost);
   border-top:1px solid var(--line);background:rgba(14,36,64,.015);}
 .rec-sub .btn-link{font-size:var(--fs-micro);letter-spacing:0;text-transform:none;}
+
+/* ── Funnel rows are live: every number opens its cases ───
+   The hover is what tells you so before you click. */
+.fn-row:hover,.fn-drop:hover{background:var(--hover-row);border-radius:4px;}
+.fn-here{display:block;font-size:var(--fs-micro);font-weight:700;color:var(--navy);
+  cursor:pointer;white-space:nowrap;}
+.fn-here:hover{text-decoration:underline;}
+.dn-row:hover{background:var(--hover-row);border-radius:4px;}
 @media (max-width:1080px){
   .rec-shell{grid-template-columns:minmax(0,1fr);}
   .rec-rail{flex-direction:row;flex-wrap:wrap;}

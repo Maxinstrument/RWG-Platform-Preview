@@ -118,6 +118,58 @@ window.RWG = window.RWG || {};
     return `<span style="flex:none;width:22px;height:22px;border-radius:6px;background:${AV_COLORS[hash % AV_COLORS.length]};color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center">${esc(ini.toUpperCase())}</span>`;
   }
 
+  /* ── Drill-down: every number on this page names its cases ──
+     A dashboard figure you cannot open is a figure you have to take on
+     trust. Clicking one raises the same side panel the household uses and
+     lists exactly the opportunities behind it — each one openable, the
+     whole set exportable. The panel never recomputes anything: it is
+     handed the very rows the chart counted. */
+  let lastDrill = null;   // kept so Export writes what you are looking at
+
+  function drillRow(c) {
+    const stage = c.closedAt ? 'Closed ✓'
+      : c.state === 'Lost' ? ('Lost' + (c.lostReason ? ' · ' + String(c.lostReason).split(' — ')[0] : ''))
+      : P().stageLabel(c.product, P().stageForCase(c));
+    return `<div class="list-row mid" style="cursor:pointer" data-action="cs-open" data-id="${esc(c.recordId)}">
+      <span class="grow" style="min-width:0">
+        <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(c.title || c.clientName || '(unnamed)')}</span>
+        <span class="cell-sub" style="display:block">${esc(c.clientName || '')}${c.clientName ? ' · ' : ''}${esc(SC().productName(c.product) || '')}</span>
+        <span class="cell-sub" style="display:block">${esc(stage)}${c.agentName ? ' · ' + esc(firstName(c.agentName)) : ''}</span>
+      </span>
+      <span class="end num" style="font-size:var(--fs-dense)">${headlineMoney(c) ? U().moneyK(headlineMoney(c)) : ''}</span>
+    </div>`;
+  }
+
+  function openDrill(title, sub, list, note) {
+    lastDrill = { title: title, list: list.slice() };
+    const total = list.reduce((n, c) => n + headlineMoney(c), 0);
+    const body = list.length ? list.map(drillRow).join('')
+      : '<p class="list-empty">No cases in this slice.</p>';
+    if (!RWG.app.openPanel) { U().toast('Panels are not available on this screen'); return; }
+    RWG.app.openPanel(`
+      <div class="scrim" data-action="close-drawer"></div>
+      <aside class="drawer" role="dialog" aria-label="${esc(title)}">
+        <div class="drawer-head">
+          <div class="dh-top">
+            <div style="min-width:0">
+              <div class="tag-row mb-8"><span class="chip tier-low">Where this number comes from</span></div>
+              <h2>${esc(title)}</h2>
+              <div class="dh-sub">${esc(sub)}${total ? ' · ' + U().moneyK(total) : ''}</div>
+            </div>
+            <div class="flex" style="gap:8px;flex:none">
+              ${list.length ? '<button class="drawer-edit" data-action="hm-drill-export" title="Download these rows">⤓ Export</button>' : ''}
+              <button class="drawer-close" data-action="close-drawer" aria-label="Close">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-body">
+          ${note ? `<p class="hint" style="margin-top:2px">${note}</p>` : ''}
+          <div class="section-title">${list.length} ${list.length === 1 ? 'opportunity' : 'opportunities'}</div>
+          ${body}
+        </div>
+      </aside>`);
+  }
+
   // ── card + row scaffolding (matches My Work's cards) ──────
   function card(title, sub, body, headExtra) {
     return `<div class="card flush">
@@ -174,16 +226,29 @@ window.RWG = window.RWG || {};
     const i = iOf(P().stageForCase(c));
     return i >= 0 ? Math.min(i, cols.length - 2) : 0;
   }
-  function wFunnel(ctx) {
+  /* The pool the funnel is drawn from, factored out so the chart and the
+     drill-down can never disagree: both read the same model. */
+  function funnelModel() {
     const pl = P().pipeline(st.track) || P().pipelines()[0];
     const cols = P().boardStages(pl);
     const start = periodStartKey();
     const pool = SD().cases().filter(c =>
       P().pipelineForProduct(c.product).id === pl.id && (!start || (c.openedWeek || '') >= start));
-    if (!pool.length) return card('Conversion funnel', esc(pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
     const reach = pool.map(c => ({ c, i: funnelReach(c, cols) }));
-    const counts = cols.map((s, i) => reach.filter(r => r.i >= i).length);
+    // reached[i]: got at least this far — that is what a funnel measures, and
+    // it is why one case appears on several bars.
+    // here[i]:    is sitting there NOW. A case rests in exactly one stage, so
+    //             these add up to the live pipeline and never double-count.
+    const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);
+    const here = cols.map((s, i) => reach.filter(r => r.i === i && r.c.state !== 'Lost').length);
     const money = cols.map((s, i) => reach.filter(r => r.i >= i).reduce((n, r) => n + headlineMoney(r.c), 0));
+    return { pl, cols, pool, reach, reached, here, money };
+  }
+
+  function wFunnel(ctx) {
+    const m = funnelModel();
+    const cols = m.cols, counts = m.reached;
+    if (!m.pool.length) return card('Conversion funnel', esc(m.pl.name), emptyRow('Nothing opened ' + PERIOD_LABEL[st.period] + ' on this track yet.'));
     let biggest = -1, biggestDrop = 0;
     for (let i = 1; i < cols.length; i++) {
       const d = counts[i - 1] - counts[i];
@@ -193,21 +258,34 @@ window.RWG = window.RWG || {};
       const w = counts[0] ? Math.max(Math.round(100 * counts[i] / counts[0]), counts[i] ? 7 : 0) : 0;
       const color = BUCKET_DOT[s.bucket] || BUCKET_DOT.Opened;
       const drop = i > 0 ? counts[i - 1] - counts[i] : 0;
-      return (drop > 0 ? `<div class="flex" style="gap:10px;align-items:center;margin:1px 0 3px">
+      // "did not reach", not "dropped": some of these are lost, and some are
+      // simply still earlier in the pipeline. The drill-down says which.
+      return (drop > 0 ? `<div class="flex fn-drop" style="gap:10px;align-items:center;margin:1px 0 3px;cursor:pointer"
+          data-action="hm-drill" data-kind="fn-miss" data-i="${i}"
+          title="See the ${drop} that have not reached ${esc(s.label)}">
           <span class="fn-lab" style="color:var(--bad);font-weight:700;font-size:10px">−${drop}</span>
-          <span style="flex:1;text-align:center;font-size:10px;color:var(--bad)">dropped before ${esc(s.label)}${i === biggest ? ' · biggest leak' : ''}</span>
-          <span style="width:52px;flex:none"></span></div>` : '') +
-        `<div class="flex" style="gap:10px;align-items:center;margin-bottom:3px">
+          <span style="flex:1;text-align:center;font-size:10px;color:var(--bad)">did not reach ${esc(s.label)}${i === biggest ? ' · biggest leak' : ''}</span>
+          <span style="width:64px;flex:none"></span></div>` : '') +
+        `<div class="flex fn-row" style="gap:10px;align-items:center;margin-bottom:3px;cursor:pointer"
+          data-action="hm-drill" data-kind="fn-reach" data-i="${i}"
+          title="See the ${counts[i]} that reached ${esc(s.label)}">
           <span class="fn-lab">${esc(s.label)}</span>
           <span style="flex:1;display:flex;justify-content:center;min-width:0">
             <span style="width:${w}%;height:19px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;border-radius:3px">${counts[i]}</span></span>
-          <span style="width:52px;flex:none;text-align:right;font-size:10.5px;color:var(--muted)">${money[i] ? U().moneyK(money[i]) : ''}</span>
+          <span style="width:64px;flex:none;text-align:right;line-height:1.25">
+            <span style="font-size:10.5px;color:var(--muted);display:block">${m.money[i] ? U().moneyK(m.money[i]) : ''}</span>
+            ${m.here[i] ? `<span class="fn-here" data-action="hm-drill" data-kind="fn-here" data-i="${i}"
+              title="Sitting in ${esc(s.label)} right now">${m.here[i]} here now</span>` : ''}
+          </span>
         </div>`;
     }).join('');
     const wonPct = counts[0] ? Math.round(100 * counts[counts.length - 1] / counts[0]) : 0;
     return card('Conversion funnel', counts[0] + ' opened ' + esc(sinceLabel()),
       `<div style="padding:12px var(--pad-panel) 4px">${rows}</div>` +
-      hint('Of everything opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(pl.name) + ', how far it got. ' + wonPct + '% reached a confirmed close.'));
+      hint('Each bar is how many got <b>at least</b> this far, so one case counts on every bar it passed — '
+        + 'that is what makes the leaks visible. <b>here now</b> is where it is actually sitting today. '
+        + 'Click any number to see the cases behind it. '
+        + wonPct + '% of what opened ' + PERIOD_LABEL[st.period] + ' on ' + esc(m.pl.name) + ' reached a confirmed close.'));
   }
 
   // 3 · Needs help moving — the Monday list.
@@ -438,7 +516,8 @@ window.RWG = window.RWG || {};
       const gap = 2;   // a hair of paper between slices
       const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${stroke}"
         stroke-dasharray="${Math.max(0, len - gap)} ${circ - Math.max(0, len - gap)}"
-        stroke-dashoffset="${-at}" transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.name)}: ${U().money(Math.round(s.value))}</title></circle>`;
+        stroke-dashoffset="${-at}" transform="rotate(-90 ${cx} ${cy})" style="cursor:pointer"
+        data-action="hm-drill" data-kind="mix" data-id="${esc(s.id)}"><title>${esc(s.name)}: ${U().money(Math.round(s.value))} — click for the cases</title></circle>`;
       at += len;
       return seg;
     }).join('');
@@ -470,7 +549,9 @@ window.RWG = window.RWG || {};
         emptyRow('No confirmed closes ' + PERIOD_LABEL[st.period] + ' yet. Slices appear as partners confirm business.'));
     }
 
-    const legend = slices.map(s => `<div class="dn-row">
+    const legend = slices.map(s => `<div class="dn-row" style="cursor:pointer"
+        data-action="hm-drill" data-kind="mix" data-id="${esc(s.id)}"
+        title="See the ${s.n} ${esc(s.name)} case${s.n === 1 ? '' : 's'} behind this">
         <span class="dn-dot" style="background:${s.color}"></span>
         <span class="dn-name">${esc(s.name)}</span>
         <span class="dn-val num">${U().moneyK(Math.round(s.value))}</span>
@@ -488,9 +569,9 @@ window.RWG = window.RWG || {};
         </div>
         <div class="dn-legend">${legend}</div>
       </div>`
-      + hint(ctx.isAdmin
+      + hint((ctx.isAdmin
         ? 'Confirmed closes only — a case pushed to Won but not yet stamped by a partner is not in here.'
-        : 'Your closes. Confirmed ones only.'));
+        : 'Your closes. Confirmed ones only.') + ' Click a slice to see the cases behind it.'));
   }
 
   // 13 · Team leaderboard — per-person revenue, partners only.
@@ -749,6 +830,62 @@ window.RWG = window.RWG || {};
     actions: {
       'home-open': (el) => RWG.app.nav(el.dataset.view),
       'hm-customize': () => { st.customize = !st.customize; RWG.app.renderMain(); },
+
+      /* Open the cases behind a number. Each branch re-reads the same model
+         the chart drew from, so the panel and the bar can never disagree —
+         and a case appears here for exactly the reason it was counted. */
+      'hm-drill': (el) => {
+        const kind = el.dataset.kind;
+        const i = Number(el.dataset.i);
+
+        if (kind === 'mix') {
+          const ctx = { isAdmin: RWG.app.effectiveRole() === 'admin', eff: RWG.app.effectiveUser() };
+          const start = periodStartKey();
+          const list = scoped(SD().cases(), ctx)
+            .filter(c => c.closedAt && (!start || SC().weekEndingFor(c.closedAt) >= start)
+              && (c.product || 'other') === el.dataset.id && SC().deriveCase(c).revenue > 0)
+            .sort((a, b) => SC().deriveCase(b).revenue - SC().deriveCase(a).revenue);
+          openDrill(SC().productName(el.dataset.id) || el.dataset.id,
+            'confirmed closes · ' + PERIOD_LABEL[st.period], list,
+            'Confirmed closes only — a case pushed to Won and not yet stamped by a partner is not counted.');
+          return;
+        }
+
+        const m = funnelModel();
+        const s = m.cols[i];
+        if (!s) return;
+        if (kind === 'fn-reach') {
+          openDrill('Reached ' + s.label, m.reached[i] + ' of ' + m.reached[0] + ' opened ' + sinceLabel(),
+            m.reach.filter(r => r.i >= i).map(r => r.c),
+            'Everything that got <b>at least</b> this far, wherever it sits today — which is why the same case appears on several bars.');
+          return;
+        }
+        if (kind === 'fn-here') {
+          openDrill('Sitting in ' + s.label, 'right now',
+            m.reach.filter(r => r.i === i && r.c.state !== 'Lost').map(r => r.c),
+            'Where these cases actually are today. A case rests in one stage only, so these never double-count.');
+          return;
+        }
+        if (kind === 'fn-miss') {
+          const prev = m.cols[i - 1];
+          const list = m.reach.filter(r => r.i === i - 1).map(r => r.c);
+          openDrill('Did not reach ' + s.label,
+            list.length + ' stopped at ' + (prev ? prev.label : 'the start'), list,
+            'Some of these are lost and some are simply still earlier in the pipeline — the stage on each row says which.');
+        }
+      },
+      'hm-drill-export': () => {
+        if (!lastDrill || !lastDrill.list.length) { U().toast('Nothing to export'); return; }
+        const head = ['Opportunity', 'Client', 'Product', 'Stage', 'Owner', 'Amount', 'Opened week', 'Closed'];
+        const rows = lastDrill.list.map(c => [
+          c.title || '', c.clientName || '', SC().productName(c.product) || c.product || '',
+          c.closedAt ? 'Closed' : (c.state === 'Lost' ? 'Lost' : P().stageLabel(c.product, P().stageForCase(c))),
+          c.agentName || '', headlineMoney(c), c.openedWeek || '', c.closedAt || ''
+        ]);
+        U().downloadCSV(`RWG_${lastDrill.title.replace(/[^\w]+/g, '_')}_${U().stampName()}.csv`,
+          U().toCSV([head].concat(rows)));
+        U().toast(`Exported ${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`, true);
+      },
 
       // The composer. Update writes here; the other three hand off to the
       // form that record already owns, so there is one of each in the app.
