@@ -43,21 +43,38 @@ window.RWG = window.RWG || {};
 
   // ── the layout, per person, per browser ───────────────────
   const DEFAULT_ON = {
-    admin: ['pace', 'funnel', 'stale', 'occupancy', 'dates', 'activity'],
-    agent: ['mytasks', 'pace', 'stale', 'dates', 'activity']
+    admin: ['pace', 'closedmix', 'funnel', 'stale', 'occupancy', 'dates', 'activity'],
+    agent: ['mytasks', 'pace', 'closedmix', 'stale', 'dates', 'activity']
   };
   const lsKey = (uid) => 'rwg.home.v1.' + uid;
+
+  // A saved layout is a person's own arrangement and we never overwrite it.
+  // But a widget built after they last saved has no opinion recorded either
+  // way — so if the role's defaults want it, it turns itself on once, and
+  // from then on obeys whatever they do with it. `seen` is what makes "once"
+  // possible: without it, switching a new widget off would just turn it back
+  // on at the next load.
   function layout(user, role) {
     if (st.on) return st.on;
+    let saved = null, seen = null;
     try {
       const raw = localStorage.getItem(lsKey(user.id));
-      if (raw) { st.on = JSON.parse(raw).on || null; }
+      if (raw) { const o = JSON.parse(raw) || {}; saved = o.on || null; seen = o.seen || null; }
     } catch (e) {}
-    if (!st.on) st.on = (DEFAULT_ON[role] || DEFAULT_ON.agent).slice();
+    const def = (DEFAULT_ON[role] || DEFAULT_ON.agent).slice();
+    if (!saved) { st.on = def; st.seen = allWidgetIds(); return st.on; }
+
+    const known = seen || [];
+    const fresh = def.filter(id => known.indexOf(id) < 0 && saved.indexOf(id) < 0);
+    st.on = saved.concat(fresh);
+    st.seen = allWidgetIds();
+    if (fresh.length || !seen) saveLayout(user);
     return st.on;
   }
   function saveLayout(user) {
-    try { localStorage.setItem(lsKey(user.id), JSON.stringify({ on: st.on })); } catch (e) {}
+    try {
+      localStorage.setItem(lsKey(user.id), JSON.stringify({ on: st.on, seen: st.seen || allWidgetIds() }));
+    } catch (e) {}
   }
 
   // ── shared derivations ────────────────────────────────────
@@ -380,6 +397,93 @@ window.RWG = window.RWG || {};
       + hint('Every prospect goes on the weekly newsletter. Toggle it on the household’s people table.'));
   }
 
+  /* 16 · Closed mix — revenue by product type, as a doughnut.
+     Revenue, not FYC: fyc() is zero for annuities and investments by
+     design, so a per-product chart drawn on it would show two empty
+     slices. This is the same number the leaderboard ranks people by,
+     so the two cards always agree.
+
+     Drawn by hand in SVG. No chart library to load, nothing to keep
+     in sync with the stylesheet, and it inherits the page's colours. */
+
+  // Stable per product, so a slice never changes colour between renders.
+  const PRODUCT_COLOR = {
+    wl: '#C2A14D', annuity: '#3E5C82', inv: '#2E7D5B', term: '#8a6d2f',
+    ltc: '#6B4E71', di: '#B0691F', plan: '#5C6B7E'
+  };
+
+  function donutSvg(slices, total) {
+    const size = 168, r = 66, cx = size / 2, cy = size / 2, stroke = 26;
+    const circ = 2 * Math.PI * r;
+    // One slice is a full ring — an arc can't express 360° without closing
+    // on itself, and a hairline gap there reads as a rendering fault.
+    if (slices.length === 1) {
+      return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img"
+        aria-label="${esc(slices[0].name)} is all of the ${U().money(Math.round(total))} closed">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${slices[0].color}" stroke-width="${stroke}"/>
+      </svg>`;
+    }
+    let at = 0;
+    const arcs = slices.map(s => {
+      const len = circ * (s.value / total);
+      const gap = 2;   // a hair of paper between slices
+      const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${stroke}"
+        stroke-dasharray="${Math.max(0, len - gap)} ${circ - Math.max(0, len - gap)}"
+        stroke-dashoffset="${-at}" transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.name)}: ${U().money(Math.round(s.value))}</title></circle>`;
+      at += len;
+      return seg;
+    }).join('');
+    const label = slices.map(s => `${s.name} ${Math.round(100 * s.value / total)}%`).join(', ');
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img"
+      aria-label="Closed revenue by product: ${esc(label)}">${arcs}</svg>`;
+  }
+
+  function wClosedMix(ctx) {
+    const start = periodStartKey();
+    const closed = scoped(SD().cases(), ctx)
+      .filter(c => c.closedAt && (!start || SC().weekEndingFor(c.closedAt) >= start));
+
+    const by = {};
+    closed.forEach(c => {
+      const rev = SC().deriveCase(c).revenue;
+      if (!(rev > 0)) return;
+      const k = c.product || 'other';
+      (by[k] = by[k] || { n: 0, rev: 0 });
+      by[k].n++; by[k].rev += rev;
+    });
+    const slices = Object.keys(by)
+      .map(k => ({ id: k, name: SC().productName(k) || k, value: by[k].rev, n: by[k].n, color: PRODUCT_COLOR[k] || '#5C6B7E' }))
+      .sort((a, b) => b.value - a.value);
+    const total = slices.reduce((n, s) => n + s.value, 0);
+
+    if (!total) {
+      return card('Closed by product', PERIOD_LABEL[st.period],
+        emptyRow('No confirmed closes ' + PERIOD_LABEL[st.period] + ' yet. Slices appear as partners confirm business.'));
+    }
+
+    const legend = slices.map(s => `<div class="dn-row">
+        <span class="dn-dot" style="background:${s.color}"></span>
+        <span class="dn-name">${esc(s.name)}</span>
+        <span class="dn-val num">${U().moneyK(Math.round(s.value))}</span>
+        <span class="dn-pct num">${Math.round(100 * s.value / total)}%</span>
+      </div>`).join('');
+
+    return card('Closed by product', 'revenue · ' + PERIOD_LABEL[st.period], `
+      <div class="dn-wrap">
+        <div class="dn-chart">
+          ${donutSvg(slices, total)}
+          <div class="dn-center">
+            <span class="dn-total serif">${U().moneyK(Math.round(total))}</span>
+            <span class="dn-sub">${closed.length} case${closed.length === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+        <div class="dn-legend">${legend}</div>
+      </div>`
+      + hint(ctx.isAdmin
+        ? 'Confirmed closes only — a case pushed to Won but not yet stamped by a partner is not in here.'
+        : 'Your closes. Confirmed ones only.'));
+  }
+
   // 13 · Team leaderboard — per-person revenue, partners only.
   function wLeaderboard(ctx) {
     if (!ctx.isAdmin) return '';
@@ -458,9 +562,13 @@ window.RWG = window.RWG || {};
     { id: 'asqueue',     title: 'AdvisorStream queue',  render: wAsQueue },
     { id: 'leaderboard', title: 'Team leaderboard',     render: wLeaderboard, admin: true },
     { id: 'club',        title: 'Chairman’s Club pace', render: wClub },
-    { id: 'service',     title: 'Service desk',         render: wService }
+    { id: 'service',     title: 'Service desk',         render: wService },
+    { id: 'closedmix',   title: 'Closed by product',    render: wClosedMix }
   ];
   const widget = (id) => WIDGETS.find(w => w.id === id) || null;
+  // Declared after WIDGETS on purpose: layout() only ever runs from render(),
+  // long after the module body has finished evaluating.
+  function allWidgetIds() { return WIDGETS.map(w => w.id); }
 
   function customizeHtml(ctx) {
     const on = st.on;
