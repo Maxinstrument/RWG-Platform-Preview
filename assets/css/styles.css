@@ -297,17 +297,19 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .sidebar{
   grid-area:sidebar;
   background:linear-gradient(180deg,var(--navy) 0%,var(--navy-deep) 100%);
-  color:#fff;padding:22px 16px;display:flex;flex-direction:column;gap:6px;
+  color:#fff;padding:18px 14px;display:flex;flex-direction:column;gap:2px;
   position:sticky;top:0;height:100vh;overflow-y:auto;
 }
 .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);}
-.side-brand{display:flex;align-items:center;gap:12px;padding:4px 8px 18px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1);}
+.side-brand{display:flex;align-items:center;gap:12px;padding:2px 8px 13px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,.1);}
 .side-brand img{height:42px;width:auto;object-fit:contain;}
 .side-brand .t{font-family:'Fraunces',serif;font-size:13px;letter-spacing:.06em;line-height:1.2;}
 .side-brand .t small{display:block;font-family:'Hanken Grotesk',sans-serif;font-size:var(--fs-micro);color:var(--gold-soft);font-style:italic;letter-spacing:.04em;margin-top:2px;}
-.nav-label{padding:14px 12px 6px;}
+.nav-label{padding:9px 12px 4px;}
+/* Tight on a desktop pointer; the mobile breakpoint below puts the touch
+   target back to 46px, where thumbs need it. */
 .nav-item{
-  display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;
+  display:flex;align-items:center;gap:11px;padding:7px 12px;border-radius:9px;
   color:rgba(255,255,255,.74);font-size:14px;font-weight:500;
   border:1px solid transparent;text-align:left;background:transparent;width:100%;
 }
@@ -315,8 +317,12 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .nav-item.active{background:rgba(194,161,77,.16);color:#fff;border-color:rgba(194,161,77,.3);}
 .nav-item .ic{width:18px;height:18px;flex-shrink:0;opacity:.9;}
 .nav-item .badge{margin-left:auto;background:var(--gold);color:var(--navy-deep);font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;}
-.sidebar .spacer{flex:1;}
-.side-foot{padding:12px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:rgba(255,255,255,.4);}
+/* Sign out stays pinned to the bottom: the spacer eats whatever height is
+   left. On a short window the spacer collapses to nothing, so the item
+   after it carries its own gap and never looks glued to the last nav row. */
+.sidebar .spacer{flex:1;min-height:10px;}
+.sidebar .spacer + .nav-item{margin-top:6px;}
+.side-foot{padding:9px 12px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:rgba(255,255,255,.4);}
 
 .main{grid-area:main;padding:var(--s5) var(--gutter) 72px;overflow-x:hidden;}
 
@@ -855,6 +861,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   .btn{min-height:44px;}
   .btn-sm{min-height:40px;padding:9px 14px;}
   .nav-item{min-height:46px;}
+  .sidebar{gap:4px;}                          /* thumbs need the separation the pointer does not */
   .th-filter{font-size:13px;padding:6px 9px;}
   .drawer-close,.drawer-edit{height:40px;}
   table.data td.sel-cell input,table.data th.sel-th input,.pop-row input,.remember-lbl input{width:20px;height:20px;}
