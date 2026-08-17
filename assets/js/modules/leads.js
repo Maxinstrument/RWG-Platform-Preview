@@ -22,15 +22,27 @@ window.RWG = window.RWG || {};
 // in the same place whichever one you are on. Same shape as the Pipeline's
 // tracks + "☰ All cases", and published like RWG.reportTabs so there is one
 // copy of it rather than one per screen.
+const leadTab = (active) => (view, label, title) =>
+  `<button class="btn btn-sm ${view === active ? 'btn-navy' : 'btn-ghost'}"
+     data-action="nav" data-view="${view}" title="${title}">${label}</button>`;
+const leadStrip = (inner) =>
+  `<div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">${inner}</div>`;
+
 RWG.leadTabs = function (active) {
-  const tab = (view, label, title) =>
-    `<button class="btn btn-sm ${view === active ? 'btn-navy' : 'btn-ghost'}"
-       data-action="nav" data-view="${view}" title="${title}">${label}</button>`;
-  return `<div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-    ${tab('dashboard', 'Command Center', 'Where the team stands this week')}
+  const tab = leadTab(active);
+  return leadStrip(`${tab('dashboard', 'Command Center', 'Where the team stands this week')}
     <span class="pl-divider"></span>
-    ${tab('leads', '☰ All leads', 'Every lead across the team, filterable and exportable')}
-  </div>`;
+    ${tab('leads', '☰ All leads', 'Every lead across the team, filterable and exportable')}`);
+};
+
+// The agent's two views of the same leads: the list and the board. One
+// sidebar entry, one strip, drawn by both pages so the way across sits in
+// the same place whichever one you are on.
+RWG.myLeadTabs = function (active) {
+  const tab = leadTab(active);
+  return leadStrip(`${tab('mylist', '☰ My Leads', 'Your assigned leads, best first')}
+    <span class="pl-divider"></span>
+    ${tab('board', '▦ My Board', 'Work your pipeline stage by stage')}`);
 };
 
 RWG.modules.register({
@@ -56,8 +68,9 @@ RWG.modules.register({
       // stays registered so a stale deep-link still renders.
     ],
     agent: [
-      { view: 'board',  label: 'My Board',       icon: 'board' },
-      { view: 'mylist', label: 'My Leads',       icon: 'leads' },
+      // The board is a second view of these same leads, not a second place
+      // to remember to look — it lives on a tab inside My Leads.
+      { view: 'mylist', label: 'My Leads',       icon: 'leads', also: ['board'] },
       { view: 'today',  label: "Today's Queue",  icon: 'today' },
       { view: 'stats',  label: 'My Stats',       icon: 'stats' }
     ]
@@ -67,7 +80,7 @@ RWG.modules.register({
   // second page of the Leads area, 'reports' is the Leads tab inside the
   // Reports hub, 'archive' folded into the Trash, 'settings' moved to CRM
   // Settings. All still render if you land on them.
-  views: ['leads', 'reports', 'archive', 'settings'],
+  views: ['leads', 'reports', 'archive', 'settings', 'board'],
 
   meta: {
     dashboard: { t: 'Command Center', s: 'Team performance, live' },
@@ -94,7 +107,7 @@ RWG.modules.register({
       desc: ctx.role === 'admin'
         ? 'Every lead across the team, scoring, uploads and weekly reports.'
         : 'Your pipeline, your queue for today, and your stats.',
-      view: ctx.role === 'admin' ? 'dashboard' : 'board'
+      view: ctx.role === 'admin' ? 'dashboard' : 'mylist'
     })
   },
 
@@ -105,6 +118,7 @@ RWG.modules.register({
     // The lead report is a tab of the Reports hub, so it wears the strip.
     if (view === 'reports' && RWG.reportTabs) return RWG.reportTabs('reports', ctx) + body;
     if (ctx.role === 'admin' && (view === 'dashboard' || view === 'leads')) return RWG.leadTabs(view) + body;
+    if (ctx.role !== 'admin' && (view === 'mylist' || view === 'board')) return RWG.myLeadTabs(view) + body;
     return body;
   }
 });

@@ -329,18 +329,23 @@ window.RWG = window.RWG || {};
 
       const notConnected = !D().isStarted() || (D().cases().length === 0 && !D().agentConfig(user.id));
 
-      // Admin-only agent picker (real role, not the impersonated one).
-      const realAdmin = RWG.auth.isAdmin();
+      /* The agent picker is a partner's tool and has never been drawn for
+         an agent — their scorecard has only ever been their own numbers.
+         It is also hidden while an admin is viewing AS someone, because
+         the promise of that mode is "exactly what they see", and a roster
+         of their colleagues is not something they can see. Exit agent view
+         (the banner is on every page) to switch to somebody else. */
       const realUser = RWG.auth.currentUser();
       const viewingId = (RWG.app.state && RWG.app.state.viewAs) || '';
-      const others = realAdmin
+      const canPick = RWG.auth.isAdmin() && !viewingId;
+      const others = canPick
         ? RWG.data.users().filter(u => u.status === 'active' && u.id !== realUser.id)
           .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         : [];
-      const agentPicker = realAdmin
+      const agentPicker = canPick
         ? `<select id="sc-agent-pick" class="fbar-select" title="View another agent's scorecard">
              <option value="">Me — ${esc((realUser.name || '').split(' ')[0])}</option>
-             ${others.map(u => `<option value="${u.id}" ${u.id === viewingId ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+             ${others.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
            </select>`
         : '';
 
