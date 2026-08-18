@@ -198,11 +198,11 @@ window.RWG = window.RWG || {};
     const ctc = ctcId && bookLive ? HH.contact(ctcId) : null;
     const hhId = (ctc && ctc.householdId) || (c && c.householdId) || opts.householdId || null;
     const hh = hhId && bookLive ? HH.household(hhId) : null;
-    const contactOpts = bookLive && HH.contacts().length
-      ? ['<option value="">— not a contact record —</option>'].concat(
-          HH.contacts().slice().sort((a, b) => HH.contactName(a).localeCompare(HH.contactName(b)))
-            .map(p => `<option value="${esc(p.id)}" ${p.id === ctcId ? 'selected' : ''}>${esc(HH.contactName(p) || '(no name)')}</option>`)).join('')
-      : '';
+    // Regarding: the person, or — when an opportunity is genuinely the
+    // family's rather than one member's — the household. One search box over
+    // both, and the name that is not in the book yet can be made from it.
+    const relType = ctcId ? 'contact' : (hhId ? 'household' : null);
+    const relId = ctcId || hhId || null;
     const product = c ? c.product : 'wl';
     form = moneyInit(c, product);
 
@@ -255,13 +255,14 @@ window.RWG = window.RWG || {};
 
           <div class="field-row">
             <div class="field-group"><label class="lbl">Regarding — the client</label>
-              ${contactOpts ? `<select id="op2-contact" ${dis} title="The person this opportunity is for">${contactOpts}</select>` : ''}
-              <div class="flex" style="gap:8px;align-items:center;${contactOpts ? 'margin-top:8px' : ''}">
+              ${bookLive ? U().pickerHtml({ id: 'op2-rel', type: relType, recordId: relId, disabled: !editable,
+                placeholder: 'Search a contact or household…' }) : ''}
+              <div class="flex" style="gap:8px;align-items:center;${bookLive ? 'margin-top:8px' : ''}">
                 <input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || (ctc ? HH.contactName(ctc) : (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : '')))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
                 ${hh ? `<button class="btn btn-quiet btn-sm" style="flex:none" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button>` : ''}
               </div>
-              <div class="hint">${contactOpts
-                ? 'Naming the contact is what puts this opportunity — and its tasks — on their record.'
+              <div class="hint">${bookLive
+                ? 'Naming the contact is what puts this opportunity — and its tasks — on their record. Not in the book yet? Type the name and make it here.'
                 : (hh ? esc(hh.name) : 'Not linked to a contact yet.')}</div></div>
             <div class="field-group"><label class="lbl">Agents involved</label>
               <select id="op2-agent" ${dis}>${ownerOpts}</select>
@@ -350,17 +351,26 @@ window.RWG = window.RWG || {};
       const fi = byId('op2-fyc'); if (fi) fi.value = form.fyc || '';
       paintStatic();
     });
-    // Naming the contact names the client — the board still shows a plain
-    // string, and you can still override it by typing.
-    const ctcSel = byId('op2-contact');
-    if (ctcSel) {
-      let auto = ctc ? RWG.hh.contactName(ctc) : '';
-      ctcSel.addEventListener('change', () => {
-        const p = ctcSel.value && RWG.hh && RWG.hh.isStarted() ? RWG.hh.contact(ctcSel.value) : null;
-        const nameIn = byId('op2-client');
-        if (!nameIn) return;
-        const typed = nameIn.value.trim();
-        if (p && (!typed || typed === auto)) { nameIn.value = RWG.hh.contactName(p); auto = nameIn.value; }
+    // Naming the person names the client — the board still shows a plain
+    // string, and you can still override it by typing. A household stands in
+    // for its primary client, which is whose name goes on the board.
+    if (bookLive) {
+      let auto = ctc ? RWG.hh.contactName(ctc)
+        : (hh ? (RWG.hh.primaryContact(hhId) ? RWG.hh.contactName(RWG.hh.primaryContact(hhId)) : hh.name) : '');
+      U().pickerInit({
+        id: 'op2-rel', types: ['contact', 'household'], create: ['contact', 'household'],
+        type: relType, recordId: relId,
+        onPick: (rec) => {
+          const nameIn = byId('op2-client'); if (!nameIn) return;
+          let name = '';
+          if (rec && rec.type === 'contact') name = rec.label;
+          else if (rec && rec.type === 'household') {
+            const pc = RWG.hh.primaryContact(rec.id);
+            name = pc ? RWG.hh.contactName(pc) : rec.label;
+          }
+          const typed = nameIn.value.trim();
+          if (name && (!typed || typed === auto)) { nameIn.value = name; auto = name; }
+        }
       });
     }
     const stSel2 = byId('op2-stage');
@@ -390,12 +400,13 @@ window.RWG = window.RWG || {};
     if (!title) { U().toast('Give the opportunity a name'); return; }
     const clientName = g('op2-client').trim();
     if (!clientName) { U().toast('Who is the client?'); return; }
-    // Read-only windows render no contact select at all, so its absence must
-    // not be read as "nobody" and quietly unlink a saved opportunity.
-    const hasContactSel = !!document.getElementById('op2-contact');
-    const HHs = RWG.hh;
-    const pickedContact = (hasContactSel && g('op2-contact') && HHs && HHs.isStarted())
-      ? HHs.contact(g('op2-contact')) : null;
+    if (!U().pickerSettle('op2-rel')) return;   // a typed-but-unchosen name is not an answer
+    // A window opened before the book finished loading renders no picker at
+    // all, so its absence must not be read as "nobody" and quietly unlink a
+    // saved opportunity.
+    const hasRel = U().pickerMounted('op2-rel');
+    const rel = hasRel ? U().pickerRec('op2-rel') : null;
+    const pickedContact = (rel && rel.type === 'contact') ? RWG.hh.contact(rel.id) : null;
     const product = c ? c.product : (g('op2-prod') || 'wl');
     const fam = FAM(product);
     const ownerUid = g('op2-agent') || (c ? c.agentUid : user.id);
@@ -426,11 +437,13 @@ window.RWG = window.RWG || {};
       coCreditUids: coUids, coCreditNames: coNames,
       title: title, sourceNote: g('op2-srcnote').trim() || null,
       details: hasDetails ? U().noteRead('op2-details') : (c ? c.details : null),
-      contactId: pickedContact ? pickedContact.id : (hasContactSel ? null : (c ? c.contactId || null : el.dataset.contact || null)),
-      // The family follows the person. Only when nobody is named does it
+      contactId: pickedContact ? pickedContact.id : (hasRel ? null : (c ? c.contactId || null : el.dataset.contact || null)),
+      // The family follows the person. Pointing the box at a household
+      // instead names the family directly — an opportunity that is genuinely
+      // theirs rather than one member's. Only when the box is absent does it
       // fall back to whatever the window was opened from.
-      householdId: (pickedContact && pickedContact.householdId)
-        || (c && c.householdId) || el.dataset.hh || null,
+      householdId: (rel && rel.householdId)
+        || (hasRel ? null : ((c && c.householdId) || el.dataset.hh || null)),
       stageId: c ? c.stageId : 'uncovered'
     };
     D().saveCase(patch).then(row => {

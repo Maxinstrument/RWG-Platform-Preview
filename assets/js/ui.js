@@ -149,6 +149,376 @@ RWG.ui = (function () {
   const relAction = (type) => REL_ACTION[type] || '';
   const relIcon = (type, cls) => (REL_ICON[type] ? icon(REL_ICON[type], cls) : '');
 
+  /* ── The record picker: type to find it, or make it ────────
+     "Related to" used to be a select holding every contact, every
+     opportunity and every household in the book. That is a list you
+     scroll, not a question you answer, and it only gets worse as the
+     book grows. This is one box: type a few letters, see what matches
+     across the kinds this particular field accepts, and — when the
+     person or the opportunity is not in the book yet — make it from
+     the same box instead of abandoning the form to go create it
+     first and come back.
+
+     The hidden input is the answer. Typed text is only a query and
+     never becomes a selection on its own, which is what stops a
+     half-typed name being saved as a pointer to nothing. Leave the
+     box with words still in it and it snaps back to whatever you
+     actually chose; empty it and the pointer clears. */
+
+  const PICK = {};                        // id → live config, one per mounted picker
+  const PICK_GROUP = { contact: 'Contacts', case: 'Opportunities', household: 'Households' };
+  const PICK_ONE   = { contact: 'contact',  case: 'opportunity',   household: 'household' };
+  const PICK_CAP = 6;                     // per kind, before "keep typing"
+
+  const pkHH = () => (RWG.hh && RWG.hh.isStarted()) ? RWG.hh : null;
+  const pkSD = () => (RWG.scorecardData && RWG.scorecardData.isStarted()) ? RWG.scorecardData : null;
+  const pkCaseLabel = (x) => x.title
+    || [x.clientName, RWG.scorecard ? RWG.scorecard.productName(x.product) : ''].filter(Boolean).join(' · ')
+    || 'Opportunity';
+
+  /* What a pointer means for the two carry-along ids, and what it reads as
+     on screen. The contact is the one that matters; the household is
+     derived from the person, never asked for twice. */
+  function pickResolve(type, id) {
+    const none = { type: null, id: null, label: '', sub: '', contactId: null, householdId: null };
+    if (!type || !id) return none;
+    const H = pkHH();
+    if (type === 'contact') {
+      const c = H && H.contact(id); if (!c) return none;
+      const hh = c.householdId ? H.household(c.householdId) : null;
+      return { type: 'contact', id: c.id, label: H.contactName(c) || '(no name)',
+        sub: hh ? hh.name : (c.email || c.phone || ''),
+        contactId: c.id, householdId: c.householdId || null };
+    }
+    if (type === 'case') {
+      const SD = pkSD(); const x = SD && SD.caseById(id); if (!x) return none;
+      return { type: 'case', id: x.recordId, label: pkCaseLabel(x),
+        sub: [x.clientName, x.closedAt ? 'closed' : ''].filter(Boolean).join(' · '),
+        contactId: x.contactId || null, householdId: x.householdId || null };
+    }
+    if (type === 'household') {
+      const h = H && H.household(id); if (!h) return none;
+      const n = H.contactsFor(h.id).length;
+      return { type: 'household', id: h.id, label: h.name,
+        sub: n ? n + (n === 1 ? ' person' : ' people') : 'no people yet',
+        contactId: null, householdId: h.id };
+    }
+    return none;
+  }
+
+  /* A word starting with what you typed beats the same letters buried in
+     the middle — typing "ma" should find Maria before Guzman. */
+  function pkRank(hay, q) {
+    const s = String(hay || '').toLowerCase();
+    if (!q) return 2;
+    if (s.indexOf(q) === 0) return 0;
+    if (new RegExp('\\b' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(s)) return 1;
+    return s.indexOf(q) >= 0 ? 2 : -1;
+  }
+  function pickSearch(type, q, cap) {
+    q = String(q || '').trim().toLowerCase();
+    const H = pkHH(), SD = pkSD(), out = [];
+    const push = (rec, hay) => {
+      const r = pkRank(hay, q); if (r < 0) return;
+      out.push({ rec: rec, r: r });
+    };
+    if (type === 'contact' && H) {
+      H.contacts().forEach(c => {
+        const rec = pickResolve('contact', c.id); if (!rec.type) return;
+        push(rec, [rec.label, c.email, c.phone, rec.sub].filter(Boolean).join(' '));
+      });
+    } else if (type === 'household' && H) {
+      H.households().forEach(h => push(pickResolve('household', h.id), h.name));
+    } else if (type === 'case' && SD) {
+      SD.cases().filter(x => !x.deletedAt).forEach(x => {
+        const rec = pickResolve('case', x.recordId); if (!rec.type) return;
+        push(rec, [rec.label, x.clientName].filter(Boolean).join(' '));
+      });
+    }
+    out.sort((a, b) => a.r - b.r || a.rec.label.localeCompare(b.rec.label));
+    const rows = out.map(o => o.rec);
+    return { rows: rows.slice(0, cap == null ? PICK_CAP : cap), total: rows.length };
+  }
+
+  /* Creating from the box. A contact is never left without a family — the
+     same rule the person window follows — so a brand-new name with nowhere
+     to go gets a household of its own and stands as its primary client. An
+     opportunity has to guess a product, and the toast says which. */
+  function pickMake(type, name, ctx) {
+    const H = pkHH(), me = RWG.auth.currentUser();
+    ctx = ctx || {};
+    if (!name) return Promise.resolve(null);
+    if (type === 'contact') {
+      if (!H) return Promise.resolve(null);
+      const parts = name.split(/\s+/);
+      const firstName = parts.shift() || name;
+      const lastName = parts.join(' ');
+      let hhId = ctx.householdId || null, rel = 'Other';
+      if (!hhId) {
+        const h = H.addHousehold({ name: (lastName || firstName) + ' Household',
+          advisorUid: me.id, advisorName: me.name || '' });
+        hhId = h.id; rel = 'Primary client';
+      }
+      const c = H.addContact({ householdId: hhId, firstName: firstName, lastName: lastName, relationship: rel });
+      return Promise.resolve(pickResolve('contact', c.id));
+    }
+    if (type === 'household') {
+      if (!H) return Promise.resolve(null);
+      const h = H.addHousehold({ name: name, advisorUid: me.id, advisorName: me.name || '' });
+      return Promise.resolve(pickResolve('household', h.id));
+    }
+    if (type === 'case') {
+      const SD = pkSD(); if (!SD) return Promise.resolve(null);
+      const ctc = ctx.contactId && H ? H.contact(ctx.contactId) : null;
+      return SD.saveCase({
+        agentUid: me.id, agentName: me.name || '',
+        clientName: ctc ? H.contactName(ctc) : name,
+        product: 'wl', state: 'Opened', title: name, stageId: 'uncovered',
+        contactId: (ctc && ctc.id) || null,
+        householdId: (ctc && ctc.householdId) || ctx.householdId || null
+      }).then(row => pickResolve('case', row.recordId));
+    }
+    return Promise.resolve(null);
+  }
+
+  // ── the menu ──
+  function pickMenu(cfg) {
+    const box = document.getElementById(cfg.id + '-in');
+    const typed = String((box && box.value) || '').trim();
+    cfg.rows = [];
+    let html = '';
+    cfg.types.forEach(t => {
+      const found = pickSearch(t, typed, PICK_CAP);
+      if (!found.rows.length) return;
+      html += '<div class="pick-head">' + esc(PICK_GROUP[t] || t) + '</div>';
+      found.rows.forEach(rec => {
+        const i = cfg.rows.push(rec) - 1;
+        html += '<button type="button" class="pick-row" data-i="' + i + '" role="option">'
+          + '<span class="t">' + relIcon(rec.type, 'ic-inline') + ' ' + esc(rec.label) + '</span>'
+          + (rec.sub ? '<span class="s">' + esc(rec.sub) + '</span>' : '') + '</button>';
+      });
+      if (found.total > found.rows.length)
+        html += '<div class="pick-more">' + (found.total - found.rows.length) + ' more — keep typing</div>';
+    });
+    (typed ? cfg.create : []).forEach(t => {
+      const i = cfg.rows.push({ make: t, label: typed }) - 1;
+      html += '<button type="button" class="pick-row pick-new" data-i="' + i + '" role="option">'
+        + '<span class="t">＋ New ' + esc(PICK_ONE[t] || t) + ' <b>' + esc(typed) + '</b></span></button>';
+    });
+    if (!html) html = '<div class="pick-empty">'
+      + (typed ? 'Nothing matches “' + esc(typed) + '”' : 'Start typing a name') + '</div>';
+    const menu = document.getElementById(cfg.id + '-menu');
+    if (!menu) return;
+    menu.innerHTML = html;
+    cfg.at = cfg.rows.length ? 0 : -1;
+    pickMark(cfg);
+  }
+  function pickMark(cfg) {
+    const menu = document.getElementById(cfg.id + '-menu'); if (!menu) return;
+    const rows = menu.querySelectorAll('.pick-row');
+    for (let i = 0; i < rows.length; i++) rows[i].classList.toggle('is-on', i === cfg.at);
+    const on = rows[cfg.at];
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+  }
+  /* The modal body scrolls, so a menu flowed inside it would be clipped at
+     the fold. Fixed, placed against the box each time it opens, and flipped
+     above when there is more room up there than down. */
+  function pickPlace(cfg) {
+    const wrap = document.getElementById(cfg.id + '-wrap');
+    const menu = document.getElementById(cfg.id + '-menu');
+    if (!wrap || !menu || menu.hidden || !wrap.getBoundingClientRect) return;
+    const r = wrap.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+    const up = below < 200 && above > below;
+    menu.style.left = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    menu.style.maxHeight = Math.max(140, Math.min(340, up ? above : below)) + 'px';
+    if (up) { menu.style.bottom = (window.innerHeight - r.top + 6) + 'px'; menu.style.top = 'auto'; }
+    else { menu.style.top = (r.bottom + 6) + 'px'; menu.style.bottom = 'auto'; }
+  }
+  function pickOpen(cfg) {
+    const menu = document.getElementById(cfg.id + '-menu');
+    const inp = document.getElementById(cfg.id + '-in');
+    if (!menu) return;
+    menu.hidden = false;
+    if (inp) inp.setAttribute('aria-expanded', 'true');
+    pickMenu(cfg); pickPlace(cfg);
+  }
+  function pickClose(cfg) {
+    const menu = document.getElementById(cfg.id + '-menu');
+    const inp = document.getElementById(cfg.id + '-in');
+    if (menu) menu.hidden = true;
+    if (inp) inp.setAttribute('aria-expanded', 'false');
+    cfg.at = -1;
+  }
+  function pickCommit(cfg, rec) {
+    const hid = document.getElementById(cfg.id);
+    const inp = document.getElementById(cfg.id + '-in');
+    cfg.rec = (rec && rec.type) ? rec : null;
+    if (hid) hid.value = cfg.rec ? cfg.rec.type + ':' + cfg.rec.id : '';
+    if (inp) inp.value = cfg.rec ? cfg.rec.label : '';
+    pickClose(cfg);
+    if (cfg.onPick) cfg.onPick(cfg.rec);
+  }
+  function pickChoose(cfg, i) {
+    const row = cfg.rows[i]; if (!row) return;
+    if (!row.make) { pickCommit(cfg, row); return; }
+    const ctx = (typeof cfg.context === 'function' ? cfg.context() : cfg.context) || {};
+    const inp = document.getElementById(cfg.id + '-in');
+    if (inp) inp.disabled = true;
+    Promise.resolve(pickMake(row.make, row.label, ctx)).then(rec => {
+      if (inp) { inp.disabled = false; inp.focus(); }
+      if (!rec || !rec.type) { toast('Could not create that — the book is still loading'); return; }
+      pickCommit(cfg, rec);
+      toast(row.make === 'case'
+        ? 'Opportunity opened on Whole Life — set the product and the numbers when you have them'
+        : 'New ' + (PICK_ONE[row.make] || row.make) + ' created', true);
+    }).catch(e => {
+      if (inp) inp.disabled = false;
+      console.error('picker create:', e && e.message);
+      toast('Could not create that');
+    });
+  }
+
+  /* Markup half. The hidden input keeps the same id the old select had, so
+     every caller still reads its answer with document.getElementById. */
+  function pickerHtml(o) {
+    const rec = pickResolve(o.type || null, o.recordId || null);
+    const dis = o.disabled ? ' disabled' : '';
+    return '<div class="pick" id="' + esc(o.id) + '-wrap">'
+      + '<input class="pick-in" id="' + esc(o.id) + '-in" type="text" autocomplete="off" spellcheck="false"'
+      + ' role="combobox" aria-autocomplete="list" aria-expanded="false"'
+      + ' aria-controls="' + esc(o.id) + '-menu" value="' + esc(rec.label) + '"'
+      + ' placeholder="' + esc(o.placeholder || 'Type a name to search…') + '"' + dis + '>'
+      + (o.disabled ? '' : '<button type="button" class="pick-clear" data-pick-clear="' + esc(o.id)
+          + '" title="Clear" aria-label="Clear">✕</button>')
+      + '<input type="hidden" id="' + esc(o.id) + '" value="'
+      + (rec.type ? esc(rec.type + ':' + rec.id) : '') + '">'
+      + '<div class="pick-menu" id="' + esc(o.id) + '-menu" role="listbox" hidden></div>'
+      + '</div>';
+  }
+
+  /* Wiring half, called once the markup is on screen. Listeners hang off
+     the picker's own nodes, so they die with the modal — and Escape is
+     caught here, before it can bubble to the handler that would close the
+     whole window out from under a half-finished search. */
+  function pickerInit(o) {
+    const cfg = PICK[o.id] = {
+      id: o.id,
+      types: o.types || ['contact'],
+      create: o.create === false ? [] : (o.create || o.types || ['contact']),
+      context: o.context || {},
+      onPick: o.onPick || null,
+      rec: null, rows: [], at: -1
+    };
+    const start = pickResolve(o.type || null, o.recordId || null);
+    if (start.type) cfg.rec = start;
+    const inp = document.getElementById(cfg.id + '-in');
+    const menu = document.getElementById(cfg.id + '-menu');
+    if (!inp || !menu) return cfg;
+    if (inp.disabled) return cfg;
+    pickWatch();
+    const isOpen = () => !menu.hidden;
+
+    inp.addEventListener('focus', () => pickOpen(cfg));
+    inp.addEventListener('input', () => { if (!isOpen()) pickOpen(cfg); else { pickMenu(cfg); pickPlace(cfg); } });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (isOpen()) { e.preventDefault(); e.stopPropagation(); pickClose(cfg); }
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen()) { pickOpen(cfg); return; }
+        if (!cfg.rows.length) return;
+        cfg.at = (cfg.at + (e.key === 'ArrowDown' ? 1 : -1) + cfg.rows.length) % cfg.rows.length;
+        pickMark(cfg); return;
+      }
+      if (e.key === 'Enter') {
+        if (isOpen() && cfg.at >= 0) { e.preventDefault(); e.stopPropagation(); pickChoose(cfg, cfg.at); }
+        return;
+      }
+      if (e.key === 'Tab' && isOpen()) pickClose(cfg);
+    });
+    // Typed words are a query, not an answer: leaving with words still in
+    // the box snaps back to what was actually chosen, and leaving it empty
+    // clears the pointer.
+    inp.addEventListener('blur', () => setTimeout(() => {
+      const now = document.getElementById(cfg.id + '-in');
+      if (!now || document.activeElement === now) return;
+      pickClose(cfg);
+      if (!now.value.trim()) { if (cfg.rec) pickCommit(cfg, null); }
+      else now.value = cfg.rec ? cfg.rec.label : '';
+    }, 140));
+    // mousedown, not click: the blur above must not beat the choice to it
+    menu.addEventListener('mousedown', (e) => {
+      const row = e.target.closest ? e.target.closest('.pick-row') : null;
+      if (!row) return;
+      e.preventDefault(); pickChoose(cfg, Number(row.dataset.i));
+    });
+    return cfg;
+  }
+  function pickerValue(id) {
+    const el = document.getElementById(id);
+    const v = el ? String(el.value || '') : '';
+    const i = v.indexOf(':');
+    return i < 0 ? { type: null, id: null } : { type: v.slice(0, i), id: v.slice(i + 1) };
+  }
+  // What the field points at right now, fully resolved.
+  const pickerRec = (id) => { const p = pickerValue(id); return pickResolve(p.type, p.id); };
+  const pickerMounted = (id) => !!document.getElementById(id + '-wrap');
+
+  /* Call this before saving a form that holds a picker. The classic combobox
+     trap is typing a name, never choosing it, and pressing Save — the words
+     look like an answer but the pointer is still whatever it was before, so
+     the work quietly attaches to the wrong record. Blur snaps the box back,
+     but a Save closes the window before anyone sees it happen. So: an empty
+     box means "clear it", a box that reads as the chosen record is settled,
+     and anything else stops the save and says why. */
+  function pickerSettle(id) {
+    const inp = document.getElementById(id + '-in');
+    if (!inp || inp.disabled) return true;
+    const typed = String(inp.value || '').trim();
+    const rec = pickerRec(id);
+    if (typed === (rec.label || '')) return true;
+    if (!typed) {
+      const cfg = PICK[id];
+      if (cfg) pickCommit(cfg, null);
+      else { const h = document.getElementById(id); if (h) h.value = ''; }
+      return true;
+    }
+    toast('Pick “' + typed + '” from the list, or make it — or clear the box');
+    inp.focus();
+    return false;
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    if (!e.target || !e.target.closest) return;
+    const clr = e.target.closest('[data-pick-clear]');
+    if (clr) {
+      e.preventDefault();
+      const cfg = PICK[clr.dataset.pickClear];
+      if (cfg) { pickCommit(cfg, null); const i = document.getElementById(cfg.id + '-in'); if (i) i.focus(); }
+      return;
+    }
+    if (e.target.closest('.pick')) return;
+    Object.keys(PICK).forEach(k => {
+      const m = document.getElementById(k + '-menu');
+      if (m && !m.hidden) pickClose(PICK[k]);
+    });
+  });
+  // A fixed menu cannot follow a scroll on its own. Wired the first time a
+  // picker is actually mounted rather than at load, so a page with no
+  // picker on it carries no scroll listener.
+  let pickWatching = false;
+  function pickWatch() {
+    if (pickWatching) return;
+    pickWatching = true;
+    const place = () => Object.keys(PICK).forEach(k => pickPlace(PICK[k]));
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+  }
+
   /* ── Notes: one editor, everywhere ─────────────────────────
      Every place in the CRM where you write something about a
      person, a family or a case is the same control: a small
@@ -283,5 +653,6 @@ RWG.ui = (function () {
   }
 
   return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName, icon, ICON_PATHS,
-    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, relAction, relIcon };
+    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, relAction, relIcon,
+    pickerHtml, pickerInit, pickerValue, pickerRec, pickerMounted, pickerSettle, pickResolve, pickSearch };
 })();

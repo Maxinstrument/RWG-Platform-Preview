@@ -51,70 +51,16 @@ window.RWG = window.RWG || {};
   const mount = () => document.getElementById('modal-mount');
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
-  /* ── "Related to": one control, three kinds of record ──────
+  /* ── "Related to": one box, three kinds of record ─────────
      A task is about a person, an opportunity, or (rarely) a whole family.
      Three dependent dropdowns would be three chances to leave it half-set,
-     so this is one select whose value carries the type: "contact:c1".
+     and one dropdown holding the entire book is a list you scroll rather
+     than a question you answer — so it is the shared record picker: type
+     a few letters, or make the record you meant right there.
+
      The pointer survives the task being closed, which is what lets a
      contact's history show work that finished months ago. */
-  const relKey = (type, id) => (type && id) ? type + ':' + id : '';
-  function relParse(val) {
-    const i = String(val || '').indexOf(':');
-    if (i < 0) return { type: null, id: null };
-    return { type: String(val).slice(0, i), id: String(val).slice(i + 1) };
-  }
-  // What a pointer means for the two carry-along ids. The contact is the
-  // one that matters; the household is derived, never asked for.
-  function relResolve(type, id) {
-    const out = { type: null, id: null, label: '', contactId: null, householdId: null };
-    if (!type || !id) return out;
-    if (type === 'contact') {
-      const c = H().isStarted() ? H().contact(id) : null;
-      if (!c) return out;
-      return { type: 'contact', id: c.id, label: H().contactName(c),
-        contactId: c.id, householdId: c.householdId || null };
-    }
-    if (type === 'case') {
-      const x = SD() && SD().isStarted() ? SD().caseById(id) : null;
-      if (!x) return out;
-      return { type: 'case', id: x.recordId, label: caseLabel(x),
-        contactId: x.contactId || null, householdId: x.householdId || null };
-    }
-    if (type === 'household') {
-      const h = H().isStarted() ? H().household(id) : null;
-      if (!h) return out;
-      return { type: 'household', id: h.id, label: h.name, contactId: null, householdId: h.id };
-    }
-    return out;
-  }
-  const caseLabel = (x) =>
-    x.title || [x.clientName, SC() ? SC().productName(x.product) : ''].filter(Boolean).join(' · ') || 'Opportunity';
-
-  function relOptions(sel) {
-    const opt = (val, label, disabled) =>
-      `<option value="${esc(val)}" ${val === sel ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${esc(label)}</option>`;
-    let out = opt('', '— nothing yet —');
-    if (H().isStarted()) {
-      const people = H().contacts().slice()
-        .sort((a, b) => H().contactName(a).localeCompare(H().contactName(b)));
-      if (people.length) out += `<optgroup label="Contacts">`
-        + people.map(c => opt(relKey('contact', c.id), H().contactName(c) || '(no name)')).join('') + '</optgroup>';
-    }
-    if (SD() && SD().isStarted()) {
-      const cases = SD().cases().slice()
-        .filter(x => !x.deletedAt)
-        .sort((a, b) => String(b.openedWeek || '').localeCompare(String(a.openedWeek || '')));
-      if (cases.length) out += `<optgroup label="Opportunities">`
-        + cases.map(x => opt(relKey('case', x.recordId),
-            caseLabel(x) + (x.closedAt ? ' · closed' : ''))).join('') + '</optgroup>';
-    }
-    if (H().isStarted()) {
-      const hhs = H().households().slice().sort((a, b) => a.name.localeCompare(b.name));
-      if (hhs.length) out += `<optgroup label="Households">`
-        + hhs.map(h => opt(relKey('household', h.id), h.name)).join('') + '</optgroup>';
-    }
-    return out;
-  }
+  const REL_TYPES = ['contact', 'case', 'household'];
 
   function taskModal(t, preset) {
     preset = preset || {};
@@ -124,8 +70,7 @@ window.RWG = window.RWG || {};
     const list = users.length ? users : [me];
     const selUid = v('assigneeUid', me.id);
     const assigneeOpts = list.map(u => `<option value="${esc(u.id)}" ${u.id === selUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
-    const relSel = relKey(v('relatedType', null), v('relatedId', null));
-    const relOpts = relOptions(relSel);
+    const relType = v('relatedType', null), relId = v('relatedId', null);
     const selCat = v('category', '');
     const catOpts = ['<option value="">— none —</option>'].concat(
       T().categories().map(c => `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
@@ -160,10 +105,12 @@ window.RWG = window.RWG || {};
             <select id="tk-rep">${repOpts}</select>
             <div class="hint">A repeating task opens its next copy when you tick this one off.</div></div>
           <div class="field-group"><label class="lbl">Related to</label>
-            <select id="tk-rel">${relOpts}</select>
+            ${U().pickerHtml({ id: 'tk-rel', type: relType, recordId: relId,
+              placeholder: 'Search a contact, opportunity or household…' })}
             <input type="hidden" id="tk-relcontact" value="${esc(v('contactId', '') || '')}">
-            <div class="hint">Who or what this is for — a contact, an opportunity, or a household.
-              It stays attached after the task is done, so it shows in that record's history.</div></div>
+            <div class="hint">Who or what this is for. Not in the book yet? Type the name and
+              make it from the same box. It stays attached after the task is done, so it shows
+              in that record's history.</div></div>
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
             ${U().noteEditor({ id: 'tk-note', value: v('note', ''), minHeight: '84px',
               placeholder: 'Anything worth remembering about this task…' })}</div>
@@ -173,6 +120,16 @@ window.RWG = window.RWG || {};
           <button class="btn btn-gold" data-action="tk-save" ${t ? `data-id="${esc(t.id)}"` : ''}>${t ? 'Save' : 'Add task'}</button>
         </div>
       </div>`;
+    // Creating an opportunity from this box makes it for whoever the task is
+    // already about — that is what the hidden contact is holding.
+    U().pickerInit({
+      id: 'tk-rel', types: REL_TYPES, create: REL_TYPES, type: relType, recordId: relId,
+      context: () => ({ contactId: g('tk-relcontact') || null, householdId: v('householdId', '') || null }),
+      onPick: (rec) => {
+        const h = document.getElementById('tk-relcontact');
+        if (h) h.value = (rec && rec.contactId) || '';
+      }
+    });
     const inp = document.getElementById('tk-title'); if (inp && !t) inp.focus();
   }
 
@@ -475,9 +432,9 @@ window.RWG = window.RWG || {};
       // person, then the family — never the family when a person was named.
       'tk-new': (el) => {
         const d = (el && el.dataset) || {};
-        const r = d.case ? relResolve('case', d.case)
-          : d.contact ? relResolve('contact', d.contact)
-          : d.hh ? relResolve('household', d.hh) : null;
+        const r = d.case ? U().pickResolve('case', d.case)
+          : d.contact ? U().pickResolve('contact', d.contact)
+          : d.hh ? U().pickResolve('household', d.hh) : null;
         const preset = {};
         if (r && r.type) {
           preset.relatedType = r.type; preset.relatedId = r.id; preset.relatedLabel = r.label;
@@ -492,18 +449,19 @@ window.RWG = window.RWG || {};
       'tk-save': (el) => {
         const title = g('tk-title').trim();
         if (!title) { U().toast('What needs doing?'); return; }
+        if (!U().pickerSettle('tk-rel')) return;   // a typed-but-unchosen name is not an answer
         const uid = g('tk-assignee');
         const u = D().user(uid) || RWG.auth.currentUser();
         // The select says what this is about; everything else is derived.
         // A lead pointer has no entry in the list (leads are worked in their
         // own screen), so an untouched select must not silently detach one.
         const t0 = el.dataset.id ? T().task(el.dataset.id) : null;
-        const picked = relParse(g('tk-rel'));
+        const picked = U().pickerValue('tk-rel');
         const keepLead = t0 && t0.relatedType === 'lead' && !picked.type;
         const r = keepLead
           ? { type: 'lead', id: t0.relatedId, label: t0.relatedLabel || '',
               contactId: t0.contactId || null, householdId: t0.householdId || null }
-          : relResolve(picked.type, picked.id);
+          : U().pickResolve(picked.type, picked.id);
         const fields = {
           title: title, note: U().noteRead('tk-note'),
           assigneeUid: uid || u.id, assigneeName: u.name || '',
