@@ -254,16 +254,14 @@ window.RWG = window.RWG || {};
             <input id="op2-title" value="${esc((c && c.title) || '')}" placeholder="e.g. Vargas — whole life + DI package" ${dis}></div>
 
           <div class="field-row">
-            <div class="field-group"><label class="lbl">Regarding — the client</label>
+            <div class="field-group"><label class="lbl">Regarding ${bookLive ? '<span style="color:var(--bad)">*</span>' : ''}</label>
               ${bookLive ? U().pickerHtml({ id: 'op2-rel', type: relType, recordId: relId, disabled: !editable,
-                placeholder: 'Search a contact or household…' }) : ''}
-              <div class="flex" style="gap:8px;align-items:center;${bookLive ? 'margin-top:8px' : ''}">
-                <input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || (ctc ? HH.contactName(ctc) : (hh ? (HH.primaryContact(hhId) ? HH.contactName(HH.primaryContact(hhId)) : hh.name) : '')))}" placeholder="Client name" ${dis} style="flex:1;min-width:0">
-                ${hh ? `<button class="btn btn-quiet btn-sm" style="flex:none" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button>` : ''}
-              </div>
+                placeholder: 'Search a contact or household…' })
+                : `<input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
+              ${hh ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button></div>` : ''}
               <div class="hint">${bookLive
-                ? 'Naming the contact is what puts this opportunity — and its tasks — on their record. Not in the book yet? Type the name and make it here.'
-                : (hh ? esc(hh.name) : 'Not linked to a contact yet.')}</div></div>
+                ? 'Who this is for. Naming the contact is what puts the opportunity — and its tasks — on their record; name the household when it is the family’s rather than one member’s. Not in the book yet? Type the name and make it here.'
+                : 'The book is still loading — type the client name for now.'}</div></div>
             <div class="field-group"><label class="lbl">Agents involved</label>
               <select id="op2-agent" ${dis}>${ownerOpts}</select>
               <div class="checkrow">
@@ -351,26 +349,13 @@ window.RWG = window.RWG || {};
       const fi = byId('op2-fyc'); if (fi) fi.value = form.fyc || '';
       paintStatic();
     });
-    // Naming the person names the client — the board still shows a plain
-    // string, and you can still override it by typing. A household stands in
-    // for its primary client, which is whose name goes on the board.
+    // Regarding IS the client now — there is no second box asking for the
+    // same name in words. The board still shows a plain string; it is
+    // derived from whoever this points at when the window saves.
     if (bookLive) {
-      let auto = ctc ? RWG.hh.contactName(ctc)
-        : (hh ? (RWG.hh.primaryContact(hhId) ? RWG.hh.contactName(RWG.hh.primaryContact(hhId)) : hh.name) : '');
       U().pickerInit({
         id: 'op2-rel', types: ['contact', 'household'], create: ['contact', 'household'],
-        type: relType, recordId: relId,
-        onPick: (rec) => {
-          const nameIn = byId('op2-client'); if (!nameIn) return;
-          let name = '';
-          if (rec && rec.type === 'contact') name = rec.label;
-          else if (rec && rec.type === 'household') {
-            const pc = RWG.hh.primaryContact(rec.id);
-            name = pc ? RWG.hh.contactName(pc) : rec.label;
-          }
-          const typed = nameIn.value.trim();
-          if (name && (!typed || typed === auto)) { nameIn.value = name; auto = name; }
-        }
+        type: relType, recordId: relId
       });
     }
     const stSel2 = byId('op2-stage');
@@ -398,8 +383,6 @@ window.RWG = window.RWG || {};
     const g = (i) => { const x = document.getElementById(i); return x ? x.value : ''; };
     const title = g('op2-title').trim();
     if (!title) { U().toast('Give the opportunity a name'); return; }
-    const clientName = g('op2-client').trim();
-    if (!clientName) { U().toast('Who is the client?'); return; }
     if (!U().pickerSettle('op2-rel')) return;   // a typed-but-unchosen name is not an answer
     // A window opened before the book finished loading renders no picker at
     // all, so its absence must not be read as "nobody" and quietly unlink a
@@ -407,6 +390,24 @@ window.RWG = window.RWG || {};
     const hasRel = U().pickerMounted('op2-rel');
     const rel = hasRel ? U().pickerRec('op2-rel') : null;
     const pickedContact = (rel && rel.type === 'contact') ? RWG.hh.contact(rel.id) : null;
+    /* The client name is not asked for any more — Regarding answers it. It is
+       still stored, because the board, the reports and the exports all read a
+       plain string. Recomputed only when the pointer actually MOVED: a record
+       imported with a good name and only a household attached should not have
+       that name rewritten just because someone opened the window. */
+    const relWas = c ? (c.contactId ? 'contact:' + c.contactId
+      : (c.householdId ? 'household:' + c.householdId : '')) : '';
+    const relNow = (rel && rel.type) ? rel.type + ':' + rel.id : '';
+    let derived = '';
+    if (pickedContact) derived = RWG.hh.contactName(pickedContact);
+    else if (rel && rel.type === 'household') {
+      const pc = RWG.hh.primaryContact(rel.id);
+      derived = pc ? RWG.hh.contactName(pc) : rel.label;
+    }
+    const typedName = document.getElementById('op2-client') ? g('op2-client').trim() : '';
+    const clientName = (relNow && relNow !== relWas) ? derived
+      : (typedName || (c && c.clientName) || derived || '');
+    if (!clientName) { U().toast('Who is this opportunity for? Pick a contact or a household'); return; }
     const product = c ? c.product : (g('op2-prod') || 'wl');
     const fam = FAM(product);
     const ownerUid = g('op2-agent') || (c ? c.agentUid : user.id);

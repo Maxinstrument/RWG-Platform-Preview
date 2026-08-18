@@ -629,9 +629,15 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    a hard `width:560px` here used to beat any inline max-width, which
    is why the widest window in the app (the opportunity) rendered
    squeezed into four wrapping columns. */
+/* Centred with auto margins, NOT translateX(-50%). A transform on an
+   ancestor makes it the containing block for position:fixed descendants, so
+   a fixed dropdown inside a modal resolved its coordinates against the card
+   and landed off to the right of the screen. Auto margins centre a fixed
+   element just as well and leave the viewport as the reference — which also
+   frees the keyframes from restating the centring in every step. */
 .modal-card{
   --modal-w:560px;
-  position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:130;
+  position:fixed;top:24px;left:0;right:0;margin:0 auto;z-index:130;
   width:min(var(--modal-w),94vw);max-height:calc(100vh - 48px);
   display:flex;flex-direction:column;                 /* head/foot pinned, body scrolls */
   background:var(--paper);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);
@@ -640,11 +646,9 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 }
 .modal-card.modal-lg{--modal-w:760px;}
 .modal-card.modal-sm{--modal-w:460px;}
-/* translateX(-50%) is LAYOUT here, not motion — it has to be restated in
-   every keyframe and in the exit, or the card snaps hard to the right. */
-@keyframes modal-in{from{opacity:0;transform:translateX(-50%) translateY(-10px) scale(.985);}}
+@keyframes modal-in{from{opacity:0;transform:translateY(-10px) scale(.985);}}
 .modal-card.leaving{
-  opacity:0;transform:translateX(-50%) translateY(-6px);
+  opacity:0;transform:translateY(-6px);
   transition:opacity .15s cubic-bezier(.5,0,.85,.5),transform .15s cubic-bezier(.5,0,.85,.5);
 }
 /* Grid, not flex, so it fits both shapes: a bare <h2>+<p>, and a

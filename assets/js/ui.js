@@ -321,8 +321,18 @@ RWG.ui = (function () {
     if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
   }
   /* The modal body scrolls, so a menu flowed inside it would be clipped at
-     the fold. Fixed, placed against the box each time it opens, and flipped
-     above when there is more room up there than down. */
+     the fold. So: fixed, placed against the box each time it opens, flipped
+     above when there is more room up there than down.
+
+     "Fixed" is a promise CSS does not always keep. Any ancestor carrying a
+     transform, a filter or will-change becomes the containing block for its
+     fixed descendants, and then viewport coordinates land somewhere else
+     entirely — which is how this menu first appeared halfway across the
+     screen, inside a modal that centred itself with translateX(-50%). That
+     modal now centres with auto margins, but the drawer still declares
+     will-change:transform and the next component might too. Rather than
+     depend on every ancestor forever, place it, measure where it actually
+     went, and correct by the difference. */
   function pickPlace(cfg) {
     const wrap = document.getElementById(cfg.id + '-wrap');
     const menu = document.getElementById(cfg.id + '-menu');
@@ -330,11 +340,16 @@ RWG.ui = (function () {
     const r = wrap.getBoundingClientRect();
     const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
     const up = below < 200 && above > below;
-    menu.style.left = r.left + 'px';
+    menu.style.bottom = 'auto';
     menu.style.width = r.width + 'px';
     menu.style.maxHeight = Math.max(140, Math.min(340, up ? above : below)) + 'px';
-    if (up) { menu.style.bottom = (window.innerHeight - r.top + 6) + 'px'; menu.style.top = 'auto'; }
-    else { menu.style.top = (r.bottom + 6) + 'px'; menu.style.bottom = 'auto'; }
+    if (!menu.getBoundingClientRect) return;
+    menu.style.left = r.left + 'px';
+    menu.style.top = '0px';
+    const m = menu.getBoundingClientRect();          // where that actually put it
+    const want = up ? (r.top - 6 - m.height) : (r.bottom + 6);
+    menu.style.left = (r.left - (m.left - r.left)) + 'px';
+    menu.style.top = (want - m.top) + 'px';
   }
   function pickOpen(cfg) {
     const menu = document.getElementById(cfg.id + '-menu');
