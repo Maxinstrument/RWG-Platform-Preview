@@ -244,6 +244,14 @@ window.RWG = window.RWG || {};
   }
 
   // 2 · Conversion funnel — of everything opened in the period, how far it got.
+  // The last column an OPEN case may occupy — everything past it is the
+  // Closed bucket (Delivery Requirements, then Won), reachable only through
+  // the close review.
+  const lastWorking = (cols) => {
+    let k = 0;
+    cols.forEach((s, i) => { if (s.bucket !== 'Closed') k = i; });
+    return k;
+  };
   function funnelReach(c, cols) {
     const iOf = (sid) => cols.findIndex(s => s.id === sid);
     if (c.closedAt) return cols.length - 1;                       // confirmed — the only real Won
@@ -253,9 +261,20 @@ window.RWG = window.RWG || {};
       if (c.submittedAt) return cols.findIndex(s => s.bucket === 'Submitted');
       return 0;
     }
-    if (c.pendingClose) return cols.length - 2;                   // at the door, not through it
+    if (c.pendingClose) return lastWorking(cols);                 // at the door, not through it
     const i = iOf(P().stageForCase(c));
-    return i >= 0 ? Math.min(i, cols.length - 2) : 0;
+    return i >= 0 ? Math.min(i, lastWorking(cols)) : 0;
+  }
+  // Where the bar shows it TODAY. Same as reach except for closed business,
+  // which rests in its own closed stage — a confirmed close still chasing
+  // its delivery receipt sits in Delivery Requirements, visibly, while the
+  // close rate above already banked it.
+  function funnelSpot(c, cols) {
+    if (c.closedAt) {
+      const i = cols.findIndex(s => s.id === P().stageForCase(c));
+      return (i >= 0 && cols[i].bucket === 'Closed') ? i : cols.length - 1;
+    }
+    return funnelReach(c, cols);
   }
   /* The pool the funnel is drawn from, factored out so the chart and the
      drill-down can never disagree: both read the same model. */
@@ -265,14 +284,14 @@ window.RWG = window.RWG || {};
     const start = periodStartKey();
     const pool = SD().cases().filter(c =>
       P().pipelineForProduct(c.product).id === pl.id && (!start || (c.openedWeek || '') >= start));
-    const reach = pool.map(c => ({ c, i: funnelReach(c, cols) }));
+    const reach = pool.map(c => ({ c, i: funnelReach(c, cols), p: funnelSpot(c, cols) }));
     // reached[i]: got at least this far — that is what a funnel measures, and
     // it is why one case appears on several bars.
     // here[i]:    is sitting there NOW. A case rests in exactly one stage, so
     //             these add up to the live pipeline and never double-count.
     const live = (r) => r.c.state !== 'Lost';
     const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);   // close rate only
-    const at = cols.map((s, i) => reach.filter(r => r.i === i && live(r)).map(r => r.c));
+    const at = cols.map((s, i) => reach.filter(r => r.p === i && live(r)).map(r => r.c));
     const here = at.map(list => list.length);
     const hereMoney = at.map(list => list.reduce((n, c) => n + headlineMoney(c), 0));
     const oldest = at.map(list => list.reduce((n, c) => Math.max(n, stuckDays(c)), 0));
@@ -321,7 +340,7 @@ window.RWG = window.RWG || {};
       // Days only when they mean something. "1d oldest" on every row is
       // noise; a stage that has not moved in three weeks is the point.
       const d = m.oldest[i];
-      const showDays = d >= 7 && s.bucket !== 'Closed';
+      const showDays = d >= 7 && i < cols.length - 1;
       return `<div class="fn-row ${cls}"
           data-action="hm-drill" data-kind="fn-here" data-i="${i}" data-pl="${esc(m.pl.id)}"
           title="See the ${n} sitting in ${esc(s.label)}${d ? ' · oldest ' + d + 'd' : ''}">

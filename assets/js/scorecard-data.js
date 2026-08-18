@@ -188,7 +188,15 @@ RWG.scorecardData = (function () {
     const P = RWG.pipelines;
     const bucket = P.bucketOf(existing.product, stageId);
     if (!bucket) return Promise.reject(new Error('no such stage on this track: ' + stageId));
-    if (bucket === 'Closed') return Promise.reject(new Error('closing goes through the close review'));
+    // The Closed bucket has stages of its own now (Delivery Requirements →
+    // Close/Won). A case that is already through the close review — or at
+    // its door — may park between them; that is bookkeeping, not closing,
+    // and touches no stamp. An open case still cannot close itself here.
+    const through = !!(existing.closedAt || existing.pendingClose);
+    if (bucket === 'Closed' && !through)
+      return Promise.reject(new Error('closing goes through the close review'));
+    if (through && bucket !== 'Closed')
+      return Promise.reject(new Error('closed business moves only between its closed stages'));
 
     // stageAt: when this case landed in the stage it is in now. updatedAt
     // moves for any edit, so it cannot answer "how long has this been
@@ -235,8 +243,13 @@ RWG.scorecardData = (function () {
     const existing = caseById(recordId);
     if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
     if (existing.closedAt) return Promise.reject(new Error('already closed'));
+    // Land at the track's first Closed stage: Delivery Requirements where
+    // the track has it, Won where it does not. The receipt chase starts the
+    // moment the business is pushed, not after someone remembers to move it.
+    const pl = RWG.pipelines.pipelineForProduct(existing.product);
+    const firstClosed = pl.stages.find(s => s.bucket === 'Closed');
     const row = Object.assign({}, existing, {
-      stageId: 'won', pendingClose: true,
+      stageId: firstClosed ? firstClosed.id : 'won', pendingClose: true,
       pendingCloseAt: existing.pendingCloseAt || nowISO(),
       updatedAt: nowISO()
     });
@@ -272,7 +285,10 @@ RWG.scorecardData = (function () {
     row.closedAt = existing.closedAt ||
       (fin.closedWeek ? fin.closedWeek + 'T12:00:00.000-05:00' : nowISO());
     if (!row.submittedAt) row.submittedAt = row.closedAt;
-    row.state = 'Closed'; row.stageId = 'won'; row.pendingClose = false;
+    row.state = 'Closed'; row.pendingClose = false;
+    // Keep its closed stage: a confirmed close still waiting on the delivery
+    // receipt stays in Delivery Requirements rather than teleporting to Won.
+    if (RWG.pipelines.bucketOf(existing.product, existing.stageId) !== 'Closed') row.stageId = 'won';
     row.closeNote = fin.note || row.closeNote || null;
     if (fin.a360) row.a360Recorded = { by: (me && me.id) || null, at: nowISO() };
     row.updatedAt = nowISO();

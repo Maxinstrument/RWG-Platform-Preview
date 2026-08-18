@@ -223,7 +223,19 @@ window.RWG = window.RWG || {};
       return P.boardStages(pl).filter(s => s.bucket !== 'Closed').map(s =>
         `<option value="${esc(s.id)}" ${s.id === cur ? 'selected' : ''}>${esc(s.label)}${s.bucket === 'Submitted' ? ' ●' : ''}</option>`).join('');
     }
-    const stageChip = closed ? '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>'
+    // A closed case can still owe its delivery receipt: closed for the
+    // scorecard, unfinished as a file. The chip says which, and the signed
+    // receipt is one click from right here — the wall Carlos hit was this
+    // window refusing to acknowledge post-close work existed.
+    const doneCols = c ? RWG.pipelines.pipelineForProduct(c.product).stages.filter(x => x.bucket === 'Closed') : [];
+    const doneAt = c && closed ? doneCols.findIndex(x => x.id === RWG.pipelines.stageForCase(c)) : -1;
+    const nextDone = doneAt >= 0 ? doneCols[doneAt + 1] : null;
+    const stageChip = closed ? (nextDone
+        ? `<span class="chip tier-high">Closed ✓ — counted; delivery receipt outstanding</span>
+           <button class="btn btn-gold btn-sm" style="margin-left:8px" data-action="cs-signed"
+             data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}"
+             title="The client signed the delivery receipt — nothing else owed">Receipt signed ✓</button>`
+        : '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>')
       : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>'
       : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(c.lostReason.split(' — ')[0]) : ''}</span>` : '';
 
@@ -516,6 +528,14 @@ window.RWG = window.RWG || {};
         a.download = 'RWG_cases_' + S().currentWeekEnding() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
       },
       'cs-open': (el) => oppWindow({ id: el.dataset.id }),
+      // Post-close bookkeeping, not a close: stamps are untouched by design.
+      'cs-signed': (el) => {
+        D().setPipelineStage(el.dataset.id, el.dataset.stage).then(() => {
+          U().toast('Fully done — receipt on file', true);
+          oppWindow({ id: el.dataset.id });
+          RWG.app.renderMain();
+        }).catch(e => U().toast(e.message || 'Could not move it'));
+      },
       // From a contact record the client name rides along, so the person you
       // clicked is the client — not whoever happens to be primary on the family.
       'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null,

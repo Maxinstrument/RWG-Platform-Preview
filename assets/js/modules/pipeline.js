@@ -57,6 +57,13 @@ window.RWG = window.RWG || {};
     const canMove = stage.bucket !== 'Closed';
     const prev = canMove ? P().neighborStage(c, -1) : null;
     const next = canMove ? P().neighborStage(c, +1) : null;
+    // A confirmed close still walks the closed stages: Delivery Requirements
+    // until the receipt is signed, Close/Won once nothing else is owed.
+    const doneCols = stage.bucket === 'Closed'
+      ? P().pipelineForProduct(c.product).stages.filter(x => x.bucket === 'Closed') : [];
+    const di = doneCols.findIndex(x => x.id === stage.id);
+    const nextDone = di >= 0 ? doneCols[di + 1] : null;
+    const prevDone = di > 0 ? doneCols[di - 1] : null;
     // At the last working stage, the arrow's place is taken by the push to Won.
     const lastStop = canMove && !next && stage.bucket === 'Submitted';
     return `<div class="card tight pl-card${canMove ? '' : ' pl-done'}" ${canMove ? 'draggable="true"' : ''} data-case="${esc(c.recordId)}"
@@ -71,7 +78,9 @@ window.RWG = window.RWG || {};
       <div class="serif" style="font-size:16px;color:var(--navy);margin-top:6px" data-action="cs-open" data-id="${esc(c.recordId)}">${U().money(money)}</div>
       <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
-        ${closed ? '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>'
+        ${closed ? (stage.bucket === 'Closed' && stage.id !== 'won'
+              ? '<span class="chip tier-high" style="font-size:10.5px" title="Closed and counted — the delivery receipt is still out">Closed ✓ · receipt out</span>'
+              : '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>')
           : (stage.bucket === 'Closed'
               ? (isAdmin
                   ? `<button class="chip tier-medium" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Verify the money and confirm the close">Pending — Review ✓</button>`
@@ -82,7 +91,11 @@ window.RWG = window.RWG || {};
           ${prev ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Back to ${esc(prev.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(prev.id)}">‹</button>` : ''}
           ${next ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Advance to ${esc(next.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(next.id)}">›</button>` : ''}
           ${lastStop ? `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Push to Won — a partner verifies before it counts" data-action="pl-won" data-id="${esc(c.recordId)}">Won ✓</button>` : ''}
-          <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Mark lost…" data-action="pl-lost" data-id="${esc(c.recordId)}">✕</button>` : ''}
+          <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Mark lost…" data-action="pl-lost" data-id="${esc(c.recordId)}">✕</button>`
+        : closed && nextDone ? `
+          <button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Delivery receipt signed — nothing else owed on this one" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}">Signed ✓</button>`
+        : closed && prevDone ? `
+          <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Back to ${esc(prevDone.label)} — the receipt is still outstanding" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(prevDone.id)}">‹</button>` : ''}
         <span class="cell-sub" style="font-size:11px;${stale ? 'color:var(--bad);font-weight:700' : ''}">${days}d</span>
       </div>
     </div>`;

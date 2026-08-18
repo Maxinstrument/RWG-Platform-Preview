@@ -47,7 +47,11 @@ RWG.pipelines = (function () {
           { id: 'approval',        label: 'Approval',                      bucket: 'Submitted' },
           { id: 'closing-pres',    label: 'Closing Presentation Scheduled', bucket: 'Submitted' },
           { id: 'funding',         label: 'Funding',                       bucket: 'Submitted' },
-          { id: 'delivery-signed', label: 'Delivery Requirements Signed',  bucket: 'Submitted' }
+          // Post-close paperwork: the business is paid and counted, the
+          // client still owes a delivery-receipt signature. Closed bucket,
+          // so a case here IS closed on the scorecard — the stage only says
+          // the file is not finished.
+          { id: 'delivery-signed', label: 'Delivery Requirements',         bucket: 'Closed' }
         ], TAIL)
       },
       {
@@ -58,7 +62,7 @@ RWG.pipelines = (function () {
           { id: 'financial-uw',    label: 'Financial Underwriting',       bucket: 'Submitted' },
           { id: 'approval',        label: 'Approval',                     bucket: 'Submitted' },
           { id: 'funding',         label: 'Funding',                      bucket: 'Submitted' },
-          { id: 'delivery-signed', label: 'Delivery Requirements Signed', bucket: 'Submitted' }
+          { id: 'delivery-signed', label: 'Delivery Requirements',        bucket: 'Closed' }
         ], TAIL)
       },
       {
@@ -77,7 +81,20 @@ RWG.pipelines = (function () {
     ]
   };
 
-  let cfg = DEFAULTS;
+  /* Schema repair for configs saved before this change: delivery-signed
+     used to be a Submitted stage named for its exit ("…Signed"). It is
+     post-close work, so the bucket is forced; the label is only updated
+     when it still carries the old default, so a deliberate rename holds. */
+  function repair(c) {
+    (c.pipelines || []).forEach(pl => (pl.stages || []).forEach(st => {
+      if (st.id !== 'delivery-signed') return;
+      st.bucket = 'Closed';
+      if (st.label === 'Delivery Requirements Signed') st.label = 'Delivery Requirements';
+    }));
+    return c;
+  }
+
+  let cfg = repair(DEFAULTS);
   let unsub = null;
 
   // Reads config/pipelines when it exists (the future editor writes it);
@@ -86,7 +103,7 @@ RWG.pipelines = (function () {
     if (unsub || !RWG.fb) return;
     unsub = RWG.fb.db.collection('config').doc('pipelines').onSnapshot(
       d => {
-        cfg = (d.exists && d.data() && d.data().value) ? d.data().value : DEFAULTS;
+        cfg = repair((d.exists && d.data() && d.data().value) ? d.data().value : DEFAULTS);
         if (RWG.app && RWG.app.renderMain) RWG.app.renderMain();
       },
       e => console.error('pipelines config listener:', e && e.message));
