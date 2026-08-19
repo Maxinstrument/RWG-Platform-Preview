@@ -25,6 +25,10 @@ RWG.pipelines = (function () {
   // The shared front end every opportunity walks first.
   const FRONT = [
     { id: 'uncovered',  label: 'Uncovered',              bucket: 'Opened' },
+    // The needs we have committed to work. Uncovering a need and deciding
+    // to chase it are two different moments, and the second one is the
+    // week's real to-do list.
+    { id: 'hit-list',   label: 'Hit List',               bucket: 'Opened' },
     { id: 'pres-sched', label: 'Presentation Scheduled', bucket: 'Opened' },
     { id: 'pres-ran',   label: 'Presentation Ran',       bucket: 'Opened' }
   ];
@@ -42,7 +46,6 @@ RWG.pipelines = (function () {
         stages: FRONT.concat([
           { id: 'application',     label: 'Application',                   bucket: 'Submitted' },
           { id: 'waiting-sig',     label: 'Waiting on Signature',          bucket: 'Submitted' },
-          { id: 'sched-medical',   label: 'Schedule Medical Visit',        bucket: 'Submitted' },
           { id: 'medical-uw',      label: 'Medical Underwriting',          bucket: 'Submitted' },
           { id: 'approval',        label: 'Approval',                      bucket: 'Submitted' },
           { id: 'closing-pres',    label: 'Closing Presentation Scheduled', bucket: 'Submitted' },
@@ -81,16 +84,39 @@ RWG.pipelines = (function () {
     ]
   };
 
-  /* Schema repair for configs saved before this change: delivery-signed
-     used to be a Submitted stage named for its exit ("…Signed"). It is
-     post-close work, so the bucket is forced; the label is only updated
-     when it still carries the old default, so a deliberate rename holds. */
+  /* A stage that has been retired still has cases stamped with it. They
+     read through to the stage that replaced it — at read time, so nothing
+     is written and nothing is orphaned into the wrong column. */
+  const RETIRED = { 'sched-medical': 'medical-uw' };
+  const aliasStage = (id) => (id && RETIRED[id]) || id;
+
+  /* Schema repair for configs saved before a change. Runs on the defaults
+     AND on whatever an owner has saved to config/pipelines, so a stored
+     copy from before these edits still lands on the current board:
+
+     · delivery-signed used to be a Submitted stage named for its exit
+       ("…Signed"). It is post-close work, so the bucket is forced; the
+       label is only updated when it still carries the old default, so a
+       deliberate rename holds.
+     · Schedule Medical Visit is retired — the case manager owns that as a
+       workflow task, and it did not earn a column.
+     · Hit List is inserted straight after Uncovered on every track. */
   function repair(c) {
-    (c.pipelines || []).forEach(pl => (pl.stages || []).forEach(st => {
-      if (st.id !== 'delivery-signed') return;
-      st.bucket = 'Closed';
-      if (st.label === 'Delivery Requirements Signed') st.label = 'Delivery Requirements';
-    }));
+    (c.pipelines || []).forEach(pl => {
+      const stages = pl.stages || [];
+      stages.forEach(st => {
+        if (st.id !== 'delivery-signed') return;
+        st.bucket = 'Closed';
+        if (st.label === 'Delivery Requirements Signed') st.label = 'Delivery Requirements';
+      });
+      const gone = stages.findIndex(st => st.id === 'sched-medical');
+      if (gone >= 0) stages.splice(gone, 1);
+      if (!stages.some(st => st.id === 'hit-list')) {
+        const u = stages.findIndex(st => st.id === 'uncovered');
+        stages.splice(u >= 0 ? u + 1 : 0, 0, { id: 'hit-list', label: 'Hit List', bucket: 'Opened' });
+      }
+      pl.stages = stages;
+    });
     return c;
   }
 
@@ -135,7 +161,8 @@ RWG.pipelines = (function () {
   // to the first stage of that bucket — read-time only, nothing written.
   function stageForCase(c) {
     const pl = pipelineForProduct(c.product);
-    if (c.stageId && stageOf(pl, c.stageId)) return c.stageId;
+    const sid = aliasStage(c.stageId);
+    if (sid && stageOf(pl, sid)) return sid;
     if (c.state === 'Closed') return 'won';
     if (c.state === 'Lost') return 'lost';
     const bucket = c.state === 'Submitted' ? 'Submitted' : 'Opened';
@@ -171,7 +198,8 @@ RWG.pipelines = (function () {
   }
 
   return {
-    DEFAULTS, init, receiptClock,
+    DEFAULTS, init, receiptClock, aliasStage,
+    repairForTest: repair,   // the schema migration, exposed so it can be pinned
     pipelines, pipeline, pipelineForProduct, lostReasons,
     stageOf, bucketOf, stageLabel, boardStages, stageForCase, neighborStage,
     current: () => cfg   // the whole live config, for the settings editor's draft

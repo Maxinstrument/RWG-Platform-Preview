@@ -259,7 +259,7 @@ window.RWG = window.RWG || {};
     const iOf = (sid) => cols.findIndex(s => s.id === sid);
     if (c.closedAt) return cols.length - 1;                       // confirmed — the only real Won
     if (c.state === 'Lost') {
-      const i = c.lostFromStage ? iOf(c.lostFromStage) : -1;
+      const i = c.lostFromStage ? iOf(P().aliasStage(c.lostFromStage)) : -1;
       if (i >= 0) return i;
       if (c.submittedAt) return cols.findIndex(s => s.bucket === 'Submitted');
       return 0;

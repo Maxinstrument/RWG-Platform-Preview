@@ -60,7 +60,7 @@ RWG.wf = (function () {
           // application ticked today, medical due tomorrow — whether the
           // signature took two days or two weeks.
           { id: 'carrier',   title: 'Enter the application in the carrier portal — confirm in good order', owner: 'casemanager', dueDays: 1,  stage: 'application' },
-          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 1,  after: 'carrier', stage: 'sched-medical' },
+          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 1,  after: 'carrier', stage: 'waiting-sig' },
           { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10, stage: 'medical-uw' },
           { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21, stage: 'approval' },
           { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 3,  after: 'chase-uw', stage: 'closing-pres' },
