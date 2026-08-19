@@ -67,12 +67,12 @@ RWG.scorecardData = (function () {
 
     // Cases: the whole team (client names visible to all, per the current model).
     unsubs.push(db().collection('cases').onSnapshot(
-      s => { cache.cases = s.docs.map(d => Object.assign({ recordId: d.id }, d.data())); onChange(); },
+      s => { cache.cases = s.docs.map(d => Object.assign({ recordId: d.id }, d.data())); onChange(); healNames(); },
       e => console.error('cases listener:', e && e.message)));
 
     // Weekly submissions: aggregate production, team-readable.
     unsubs.push(db().collection('weeks').onSnapshot(
-      s => { cache.weeks = s.docs.map(d => Object.assign({ id: d.id }, d.data())); onChange(); },
+      s => { cache.weeks = s.docs.map(d => Object.assign({ id: d.id }, d.data())); onChange(); healNames(); },
       e => console.error('weeks listener:', e && e.message)));
 
     // Legacy-name -> account map + per-agent goals.
@@ -408,6 +408,50 @@ RWG.scorecardData = (function () {
       .catch(e => { console.error('import week:', e && e.message); throw e; });
   }
 
+  /* ── name healing (admin, once per session) ─────────────────
+     The account is the identity; the stored agentName is only a label.
+     Migration kept the old Sheet's spellings ("Nelson Mompierre Jr."),
+     so name-keyed filters and reports split one person in two. When an
+     admin session holds both the roster and the records, any label that
+     disagrees with its account is rewritten to match — uid untouched,
+     stamps untouched, co-credit labels rebuilt from their uids the same
+     way. Runs once, says what it did, and future renames heal the same
+     way the next time a partner signs in. ── */
+  let healed = false;
+  function healNames() {
+    if (healed || !me || me.role !== 'admin') return;
+    if (!cache.cases.length && !cache.weeks.length) return;
+    const users = (RWG.data && RWG.data.users) ? RWG.data.users() : [];
+    if (!users.length || users.length === 1) return;   // roster not live yet
+    healed = true;
+    const nameOf = {}; users.forEach(u => { nameOf[u.id] = u.name || ''; });
+    let n = 0;
+    cache.cases.forEach(c => {
+      const fix = {};
+      if (c.agentUid && nameOf[c.agentUid] && c.agentName !== nameOf[c.agentUid])
+        fix.agentName = nameOf[c.agentUid];
+      if ((c.coCreditUids || []).length && c.coCreditUids.every(u => nameOf[u])) {
+        const names = c.coCreditUids.map(u => nameOf[u]);
+        if (names.join('|') !== (c.coCreditNames || []).join('|')) fix.coCreditNames = names;
+      }
+      if (!Object.keys(fix).length) return;
+      Object.assign(c, fix); n++;
+      db().collection('cases').doc(c.recordId).set(fix, { merge: true })
+        .catch(e => console.error('heal case name:', e && e.message));
+    });
+    cache.weeks.forEach(w => {
+      if (!w.agentUid || !nameOf[w.agentUid] || w.agentName === nameOf[w.agentUid]) return;
+      w.agentName = nameOf[w.agentUid]; n++;
+      db().collection('weeks').doc(w.id).set({ agentName: nameOf[w.agentUid] }, { merge: true })
+        .catch(e => console.error('heal week name:', e && e.message));
+    });
+    if (n) {
+      onChange();
+      if (RWG.ui && RWG.ui.toast) RWG.ui.toast(n + ' historical record' + (n === 1 ? '' : 's')
+        + ' updated to account names — one name per person now', true);
+    }
+  }
+
   // ── config/agents (admin: migration + settings) ──
   function saveAgentsConfig(map) {
     cache.agents = Object.assign({}, map);
@@ -423,7 +467,7 @@ RWG.scorecardData = (function () {
     agentsConfig, agentConfig,
     buildCase, saveCase, setCaseState, setPipelineStage, markLost,
     pushWon, confirmClose, sendBack, deleteCase, adminSetStamps,
-    saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek,
+    saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek, healNames,
     CASE_FIELDS, _cache: cache
   };
 })();
