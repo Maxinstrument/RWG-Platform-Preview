@@ -625,9 +625,11 @@ window.RWG = window.RWG || {};
 
       ${opportunitiesCard(h)}
 
-      ${isAdmin && !people.length ? `
+      ${isAdmin ? `
       <div style="margin-top:18px">
-        <button class="btn btn-danger btn-sm" data-action="hh-delete" data-id="${esc(h.id)}">🗑 Delete this empty household</button>
+        <button class="btn btn-danger btn-sm" data-action="hh-delete" data-id="${esc(h.id)}">🗑 Delete this household</button>
+        ${people.length ? `<span class="cell-sub" style="margin-left:9px">${people.length === 1
+          ? 'its 1 person stays in the book' : `its ${people.length} people stay in the book`}</span>` : ''}
       </div>` : ''}`;
   }
 
@@ -849,14 +851,38 @@ window.RWG = window.RWG || {};
         H().saveHousehold({ id: el.dataset.id, notes: U().noteRead('hh-notes') });
         U().toast('Notes saved', true);
       },
+      /* Deleting the grouping, not the people. The dialog says exactly what
+         survives, because "delete household" reads like it takes the family
+         with it and it does not. */
       'hh-delete': (el) => {
         const h = H().household(el.dataset.id); if (!h) return;
-        if (H().contactsFor(h.id).length) { U().toast('Move its people out first'); return; }
-        if (!confirm(`Delete "${h.name}"? Admins only, and it cannot be undone.`)) return;
+        const people = H().contactsFor(h.id);
+        const sd = RWG.scorecardData;
+        const opps = (sd && sd.isStarted()) ? sd.cases().filter(x => x.householdId === h.id) : [];
+        const NL = String.fromCharCode(10);
+        const lines = ['Delete the household "' + h.name + '"?', ''];
+        if (people.length) {
+          lines.push(people.length === 1
+            ? '1 person stays in the system, no longer in a household:'
+            : people.length + ' people stay in the system, no longer in a household:');
+          lines.push('  ' + people.map(c => H().contactName(c) || '(no name)').join(', '));
+          lines.push('Their notes, tasks and history are untouched.');
+          lines.push('');
+        }
+        if (opps.length) {
+          lines.push(opps.length === 1
+            ? '1 opportunity keeps its own record and its numbers.'
+            : opps.length + ' opportunities keep their own records and their numbers.');
+          lines.push('');
+        }
+        lines.push('The household goes to the Trash — restoring it gathers its people back.');
+        if (!confirm(lines.join(NL))) return;
         H().deleteHousehold(h.id).then(() => {
           if (!toHouseholdList()) { st.currentId = null; RWG.app.nav('households'); }
-          U().toast('Household deleted');
-        });
+          U().toast(people.length
+            ? h.name + ' deleted — ' + people.length + (people.length === 1 ? ' person stays' : ' people stay') + ' in the book'
+            : h.name + ' deleted', true);
+        }).catch(e => U().toast('Could not delete: ' + (e && e.message)));
       },
 
       // The family as context rather than a destination: raise it beside

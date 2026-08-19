@@ -183,6 +183,15 @@ window.RWG = window.RWG || {};
           ? RWG.data.restoreLead(row.originalId).then(() => row)
           : TR().restore(id);
         job
+          // A household comes back to the family it had: everyone detached
+          // when it went is re-attached, unless they have been given a new
+          // household since.
+          .then(r => (r && r.coll === 'households' && RWG.hh && RWG.hh.reattachHousehold)
+            ? RWG.hh.reattachHousehold(r.originalId).then(n => {
+                if (n) U().toast(n + (n === 1 ? ' person is' : ' people are') + ' back in ' + (r.label || 'the household'), true);
+                return r;
+              }).catch(() => r)
+            : r)
           .then(r => {
             st.rows = (st.rows || []).filter(x => x.id !== id);
             delete st.busy[id];

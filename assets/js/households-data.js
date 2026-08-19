@@ -206,13 +206,51 @@ RWG.hh = (function () {
     return persistHousehold(h);
   }
 
-  function deleteHousehold(id) {   // admin only (rules) — UI guards that it holds no people
+  /* Deleting a household lets its people go rather than taking them with
+     it: a household is a grouping, and the person is the record that
+     carries the notes, the tasks and the history. Everyone is detached
+     and keeps a breadcrumb (formerHouseholdId) saying where they were —
+     which is what lets a restore from the Trash put the family back
+     together instead of leaving a named shell with nobody in it. */
+  function deleteHousehold(id) {   // admin only (rules)
     const h = household(id);
+    const people = contactsFor(id);
+    const batch = db().batch();
+    people.forEach(c => {
+      c.householdId = null;
+      c.formerHouseholdId = id;
+      c.updatedAt = now();
+      batch.set(db().collection('contacts').doc(c.id), stripId(c));
+    });
     cache.households = cache.households.filter(x => x.id !== id);
     onChange();
-    if (h && RWG.trash) return RWG.trash.send('households', id, h, h.name);
-    return db().collection('households').doc(id).delete()
-      .catch(e => { console.error('delete household:', e && e.message); throw e; });
+    const detach = people.length
+      ? batch.commit().catch(e => { console.error('detach people:', e && e.message); throw e; })
+      : Promise.resolve();
+    return detach.then(() => {
+      if (h && RWG.trash) return RWG.trash.send('households', id, h, h.name);
+      return db().collection('households').doc(id).delete()
+        .catch(e => { console.error('delete household:', e && e.message); throw e; });
+    });
+  }
+
+  /* The other half of the above: a household restored from the Trash
+     gathers back everyone who was detached when it went — but only those
+     still without a household, so a person deliberately moved somewhere
+     else in the meantime is left where they were put. */
+  function reattachHousehold(id) {
+    const back = cache.contacts.filter(c => c.formerHouseholdId === id && !c.householdId);
+    if (!back.length) return Promise.resolve(0);
+    const batch = db().batch();
+    back.forEach(c => {
+      c.householdId = id;
+      c.formerHouseholdId = null;
+      c.updatedAt = now();
+      batch.set(db().collection('contacts').doc(c.id), stripId(c));
+    });
+    onChange();
+    return batch.commit().then(() => back.length)
+      .catch(e => { console.error('reattach people:', e && e.message); throw e; });
   }
 
   // ── contact writes ──
@@ -482,7 +520,7 @@ RWG.hh = (function () {
     callName, spokenName,
     findDupContact, upcomingBirthdays,
     parseTags, allTags, hasTag,
-    addHousehold, saveHousehold, setA360, deleteHousehold,
+    addHousehold, saveHousehold, setA360, deleteHousehold, reattachHousehold,
     addContact, saveContact, setAdvisorstream, removeContact,
     linkHouseholds, unlinkHouseholds,
     convertLead, createFromGrouping,
