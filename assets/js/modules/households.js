@@ -418,8 +418,9 @@ window.RWG = window.RWG || {};
       (a.relationship === 'Primary client' ? 0 : 1) - (b.relationship === 'Primary client' ? 0 : 1)
       || H().contactName(a).localeCompare(H().contactName(b)));
     const sd = RWG.scorecardData, sc = RWG.scorecard;
+    const panelMine = {}; H().contactsFor(h.id).forEach(p2 => { panelMine[p2.id] = 1; });
     const cases = (sd && sd.isStarted())
-      ? sd.cases().filter(x => x.householdId === h.id)
+      ? sd.cases().filter(x => x.householdId === h.id || (x.contactId && panelMine[x.contactId]))
           .sort((a, b) => String(b.openedWeek || '').localeCompare(String(a.openedWeek || '')))
       : [];
     const adv = h.advisorName || (h.advisorUid ? userName(h.advisorUid) : '');
@@ -714,7 +715,13 @@ window.RWG = window.RWG || {};
   function opportunitiesCard(h) {
     const SD = RWG.scorecardData, SC = RWG.scorecard;
     if (!SD || !SC || !SD.isStarted()) return '';
-    const opps = SD.cases().filter(c => c.householdId === h.id)
+    /* Everything the FAMILY has, however it was written. An opportunity
+       reaches this list two ways: pointed at the household itself, or
+       pointed at one of its people. Matching only the household missed
+       anything written against a person before they were attached to a
+       family, or moved between families since. */
+    const mine = {}; H().contactsFor(h.id).forEach(p2 => { mine[p2.id] = p2; });
+    const opps = SD.cases().filter(c => c.householdId === h.id || (c.contactId && mine[c.contactId]))
       .sort((a, b) => String(b.openedWeek).localeCompare(String(a.openedWeek)));
     const open = opps.filter(c => c.state === 'Opened' || c.state === 'Submitted').length;
     const rows = opps.map(c => {
@@ -722,6 +729,9 @@ window.RWG = window.RWG || {};
       return `<tr class="cs-row" data-action="cs-open" data-id="${esc(c.recordId)}">
         <td><div class="cell-name">${esc(c.title || SC.productName(c.product) || c.product)}</div>
             <div class="cell-sub">${c.title ? esc(SC.productName(c.product)) + ' · ' : ''}${esc(SC.sourceLabel(c.source) || '')}</div></td>
+        <td><span class="cell-sub" style="color:var(--ink)">${esc(
+          (c.contactId && mine[c.contactId] ? H().contactName(mine[c.contactId]) : '')
+          || c.clientName || h.name)}</span></td>
         <td>${stageChip2(c)}</td>
         <td class="num">${U().money(money)}</td>
         <td class="num">${U().money(Math.round(SC.deriveCase(c).revenue))}</td>
@@ -735,7 +745,7 @@ window.RWG = window.RWG || {};
         <button class="btn btn-gold btn-sm" data-action="cs-new" data-hh="${esc(h.id)}">＋ Opportunity</button></div>
       ${opps.length
         ? `<div class="table-wrap"><table class="data">
-            <thead><tr><th>Product</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Revenue</th><th>Agent</th><th>Opened</th></tr></thead>
+            <thead><tr><th>Product</th><th>For</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Revenue</th><th>Agent</th><th>Opened</th></tr></thead>
             <tbody>${rows}</tbody></table></div>`
         : `<p class="muted" style="font-size:13.5px;padding:6px 2px">Nothing yet — open the first opportunity for this family.</p>`}
     </div>`;
