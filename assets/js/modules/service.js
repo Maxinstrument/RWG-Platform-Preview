@@ -81,12 +81,12 @@ window.RWG = window.RWG || {};
     const today = T().todayKey();
     const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
     const age = Math.max(0, Math.floor((Date.now() - (t.createdAt || Date.now())) / dayMs));
-    return `<div class="list-row">
+    return `<div class="list-row list-row-click" data-action="tk-edit" data-id="${esc(t.id)}">
       <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
         style="margin-top:3px">
       <div class="grow">
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
-          <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
+          <span>${esc(t.title)}</span></div>
         <div class="flex" style="gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center">
           <span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>
           ${t.relatedId && U().relAction(t.relatedType) ? `<button class="chip" style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600"

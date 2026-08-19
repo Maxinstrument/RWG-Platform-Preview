@@ -354,12 +354,11 @@ window.RWG = window.RWG || {};
     };
     const taskRows = open.length ? open.map(t => {
       const x = caseOf(t);
-      return `<div class="list-row mid">
+      return `<div class="list-row mid list-row-click" data-action="tk-edit" data-id="${esc(t.id)}">
         <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}"
           style="margin-top:3px" title="Mark done" aria-label="Mark ${esc(t.title)} done">
         <span class="grow" style="min-width:0">
-          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600;cursor:pointer"
-            data-action="tk-edit" data-id="${esc(t.id)}">${esc(t.title)}</span>
+          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(t.title)}</span>
           <span class="cell-sub" style="display:block">${when(t.dueDate)}
             ${t.assigneeName ? ' · ' + esc(t.assigneeName.split(' ')[0]) : ''}
             ${x ? ' · <button class="btn-link" data-action="cs-open" data-id="' + esc(x.recordId) + '">'

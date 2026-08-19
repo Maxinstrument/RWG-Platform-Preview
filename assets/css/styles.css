@@ -704,6 +704,12 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   display:flex;align-items:flex-start;gap:11px;
   padding:var(--s2) var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);
 }
+/* A row that IS a button: the whole surface opens the record, and the
+   hover says so before the click. Controls inside keep their own jobs —
+   the dispatcher's innermost-wins rule sees them first. */
+.list-row-click{cursor:pointer;transition:background-color .12s;}
+.list-row-click:hover{background:var(--hover-row);}
+
 .list-row:last-child{border-bottom:none;}
 .list-row.mid{align-items:center;}
 .list-row .grow{min-width:0;flex:1;}

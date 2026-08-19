@@ -198,7 +198,12 @@ window.RWG = window.RWG || {};
   }
   function taskRow(t, today, showAssignee) {
     const picking = !!st.sel;
-    return `<div class="list-row${picking && st.sel[t.id] ? '" style="background:rgba(194,161,77,.07)' : ''}">
+    /* The whole row is the door: it carries the action, and the dispatcher's
+       innermost-wins rule keeps every control inside it (the done box, a
+       contact chip, a category) doing its own job. In select mode the row
+       picks instead of opens, so a batch is click-click-click anywhere. */
+    return `<div class="list-row list-row-click" data-action="${picking ? 'tk-sel' : 'tk-edit'}" data-id="${esc(t.id)}"
+        ${picking && st.sel[t.id] ? 'style="background:rgba(194,161,77,.07)"' : ''}>
       ${picking
         ? `<input type="checkbox" data-action="tk-sel" data-id="${esc(t.id)}" ${st.sel[t.id] ? 'checked' : ''}
             style="margin-top:3px;accent-color:var(--gold)" title="Select for deletion">`
