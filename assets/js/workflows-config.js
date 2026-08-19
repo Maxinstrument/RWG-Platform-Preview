@@ -314,15 +314,22 @@ RWG.wf = (function () {
      Checks every triggered template against where the case NOW sits.
      Refuses to run before the tasks cache is live — firing blind would
      defeat the dedupe and double-launch. Returns the names started. */
-  function autoLaunch(c) {
+  // The templates whose trigger matches where this case sits NOW and that
+  // have not already run for it — what an auto-launch would start, or what
+  // the Submitted-entry prompt offers as a choice.
+  function candidates(c) {
     if (!c || !T() || !T().isStarted()) return [];
     const bucket = P().bucketOf(c.product, P().stageForCase(c));
+    return cfg.templates.filter(tpl => {
+      const trg = tpl.trigger; if (!trg) return false;
+      if (trg.bucket !== bucket) return false;
+      if (trg.products && trg.products.indexOf(c.product) < 0) return false;
+      return !hasRun(tpl.id, keyFor(tpl, c, c.householdId));
+    });
+  }
+  function autoLaunch(c) {
     const started = [];
-    cfg.templates.forEach(tpl => {
-      const trg = tpl.trigger; if (!trg) return;
-      if (trg.bucket !== bucket) return;
-      if (trg.products && trg.products.indexOf(c.product) < 0) return;
-      if (hasRun(tpl.id, keyFor(tpl, c, c.householdId))) return;
+    candidates(c).forEach(tpl => {
       if (launch(tpl.id, { caseRecord: c })) started.push(tpl.name);
     });
     return started;
@@ -389,7 +396,7 @@ RWG.wf = (function () {
   return {
     DEFAULTS, init,
     templates, template, resolveOwner,
-    launch, autoLaunch, hasRun, blockers, waitingOn, rebaseChains, instancesFor,
+    launch, autoLaunch, candidates, hasRun, blockers, waitingOn, rebaseChains, instancesFor,
     current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();

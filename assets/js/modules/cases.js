@@ -499,9 +499,10 @@ window.RWG = window.RWG || {};
       document.getElementById('modal-mount').innerHTML = '';
       form = null;
       RWG.app.renderMain();
-      const started = RWG.wf ? RWG.wf.autoLaunch(D().caseById(row.recordId)) : [];
-      U().toast((c ? 'Saved' : 'Opportunity opened — it is on the board')
-        + (started.length ? ' · ' + started.join(' + ') + ' workflow started' : ''), true);
+      U().toast(c ? 'Saved' : 'Opportunity opened — it is on the board', true);
+      // Entering Submitted asks about the workflow (and verifies the main
+      // agent) instead of starting one by itself — same prompt as the board.
+      if (RWG.wfPrompt) RWG.wfPrompt(row.recordId);
     }).catch(err => U().toast('Could not save: ' + err.message));
   }
 

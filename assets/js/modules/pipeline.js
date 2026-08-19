@@ -273,14 +273,10 @@ window.RWG = window.RWG || {};
       .catch(err => U().toast('Could not move: ' + err.message));
   });
 
-  // A move can start a workflow (phase 4): entering Submitted is what
-  // triggers the product's checklist. Fire-and-tell, never blocking.
-  function fireWorkflows(id) {
-    const c = SD().caseById(id); if (!c || !RWG.wf) return;
-    const started = RWG.wf.autoLaunch(c);
+  // Say who has the work. Most workflow steps land on the case manager,
+  // and a toast that says 'on My Work' sends you to look in the wrong list.
+  function announce(id, started) {
     if (!started.length) return;
-    // Say who has the work. Most workflow steps land on the case manager,
-    // and a toast that says 'on My Work' sends you to look in the wrong list.
     const T = RWG.tasks, who = {};
     if (T && T.isStarted()) {
       T.all().filter(t => t.relatedType === 'case' && t.relatedId === id && t.status !== 'done')
@@ -289,6 +285,50 @@ window.RWG = window.RWG || {};
     const names = Object.keys(who);
     U().toast(started.join(' + ') + ' started — ' +
       (names.length ? names.join(' and ') + ' now ' + (names.length > 1 ? 'have' : 'has') + ' the steps' : 'the steps are on Tasks'), true);
+  }
+
+  /* A move into Submitted used to start the checklist by itself. It ASKS
+     now: which workflow (when the product matches more than one), and —
+     because every advisor step resolves to the case owner — who the main
+     agent on this case actually is. Skipping is a real answer; the move
+     itself stands either way. Everything else (the close-confirm
+     launches) stays automatic. */
+  const wfAsked = {};   // per session: "Not now" means not now, not "ask on every move"
+  function fireWorkflows(id) {
+    const c = SD().caseById(id); if (!c || !RWG.wf) return;
+    const bucket = P().bucketOf(c.product, P().stageForCase(c));
+    const cands = RWG.wf.candidates ? RWG.wf.candidates(c) : [];
+    if (!cands.length) return;
+    if (bucket !== 'Submitted') { announce(id, RWG.wf.autoLaunch(c)); return; }
+    if (wfAsked[id]) return;
+    wfAsked[id] = 1;
+
+    const users = RWG.data.users().filter(u => u.status === 'active');
+    const tplOpts = cands.map((t, i) =>
+      `<option value="${esc(t.id)}" ${i === 0 ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    // An agent's roster is themselves; the verify collapses to a statement.
+    const agentSel = users.length > 1
+      ? `<select id="plwf-agent">${users.map(u =>
+          `<option value="${esc(u.id)}" ${u.id === c.agentUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`
+      : `<input value="${esc(c.agentName || (users[0] && users[0].name) || '')}" disabled>`;
+    document.getElementById('modal-mount').innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card modal-sm">
+        <div class="modal-head"><h2>Start a workflow?</h2>
+          <p>${esc(c.title || c.clientName || 'This case')} · ${esc(SC().productName(c.product))} just went to Submitted.</p></div>
+        <div class="modal-body">
+          <div class="field-group"><label class="lbl">Workflow</label>
+            <select id="plwf-tpl">${tplOpts}</select>
+            <div class="hint">The checklist for this kind of business — steps land on the right lists with their due dates chained.</div></div>
+          <div class="field-group"><label class="lbl">Main agent on this case</label>
+            ${agentSel}
+            <div class="hint">The advisor steps go to whoever is named here. Changing it makes them the case owner.</div></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-action="close-modal">Not now</button>
+          <button class="btn btn-gold" data-action="pl-wf-start" data-id="${esc(c.recordId)}">Start workflow</button>
+        </div>
+      </div>`;
   }
 
   // Required workflow steps hold the door to Won shut (phase 4). The
@@ -333,6 +373,10 @@ window.RWG = window.RWG || {};
     }).catch(err => U().toast('Could not push: ' + err.message));
   }
 
+  // The opportunity window saves a case that may start at a Submitted
+  // stage; it asks the same question through the same door.
+  RWG.wfPrompt = fireWorkflows;
+
   RWG.modules.register({
     id: 'pipeline',
     title: 'Pipeline',
@@ -372,6 +416,25 @@ window.RWG = window.RWG || {};
           .catch(err => U().toast('Could not move: ' + err.message));
       },
       'pl-won': (el) => toWon(el.dataset.id),
+      'pl-wf-start': (el) => {
+        const c = SD().caseById(el.dataset.id); if (!c || !RWG.wf) return;
+        const g = (i) => { const x = document.getElementById(i); return x ? x.value : ''; };
+        const tplId = g('plwf-tpl');
+        const uid = g('plwf-agent') || c.agentUid;
+        const u = RWG.data.user(uid);
+        const proceed = (row) => {
+          const started = RWG.wf.launch(tplId, { caseRecord: row });
+          document.getElementById('modal-mount').innerHTML = '';
+          RWG.app.renderMain();
+          announce(row.recordId, started ? [started.name] : []);
+        };
+        // Verifying the agent IS assigning the case: the owner drives every
+        // advisor step, the boards and the scorecard alike.
+        if (uid && uid !== c.agentUid && u) {
+          SD().saveCase(Object.assign({}, c, { agentUid: uid, agentName: u.name || '' }))
+            .then(proceed).catch(err => U().toast('Could not set the agent: ' + err.message));
+        } else proceed(c);
+      },
       'pl-review': (el) => {
         const inbox = RWG.modules.get('inbox');
         if (inbox) { inbox.state.reviewId = el.dataset.id; RWG.app.nav('close-review'); }

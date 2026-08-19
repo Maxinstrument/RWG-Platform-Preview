@@ -129,7 +129,11 @@ RWG.scorecardData = (function () {
 
     const out = {
       recordId: existing.recordId || input.recordId || newRecordId(),
-      agentUid: existing.agentUid || input.agentUid || null,
+      // Both halves of the owner follow the input together. The old code
+      // froze the uid while letting the name through — so "changing the
+      // owner" in the window changed who it LOOKED like it belonged to
+      // while the scorecard kept crediting the original agent.
+      agentUid: input.agentUid != null ? input.agentUid : (existing.agentUid || null),
       agentName: input.agentName != null ? input.agentName : (existing.agentName || ''),
       clientName: input.clientName != null ? input.clientName : (existing.clientName || ''),
       product: product,
