@@ -648,6 +648,10 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   animation:modal-in .2s cubic-bezier(.2,.7,.3,1) backwards;
 }
 .modal-card.modal-lg{--modal-w:760px;}
+/* Home's "N items need you" — a count worth acting on, so it is a link to
+   the list it is counting rather than a statistic you have to go find. */
+.hm-need{color:var(--bad);cursor:pointer;border-bottom:1px dashed currentColor;}
+.hm-need:hover{opacity:.78;}
 /* The second modal layer: a task opened over the opportunity window.
    Its scrim dims the window below; its card sits above everything. */
 #modal-mount-2 .scrim{z-index:150;}

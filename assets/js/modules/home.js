@@ -889,7 +889,10 @@ window.RWG = window.RWG || {};
       <div class="flex" style="align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap">
         <div>
           <h2 class="serif" style="font-size:24px;color:var(--navy);margin:0">${esc(weekday)} ${daypart}, ${esc(firstName(user.name) || 'there')}</h2>
-          <p class="muted" style="margin:3px 0 0;font-size:13px">Week ending ${esc(curLabel)}${need ? ` · <b style="color:var(--bad)">${need} item${need === 1 ? '' : 's'} need you</b>` : ' · nothing waiting on you'}</p>
+          <p class="muted" style="margin:3px 0 0;font-size:13px">Week ending ${esc(curLabel)}${need
+            ? ` · <b class="hm-need" data-action="home-open" data-view="mywork"
+                 title="Open your tasks">${need} item${need === 1 ? '' : 's'} need you</b>`
+            : ' · nothing waiting on you'}</p>
         </div>
         <span class="topbar-spacer"></span>
         <select id="hm-period" class="fbar-select" style="width:auto">${periodOpts}</select>
