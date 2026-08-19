@@ -809,6 +809,7 @@ window.RWG = window.RWG || {};
       'hh-person-add': (el) => personModal(el.dataset.id, null),
       'hh-person-edit': (el) => { const c = H().contact(el.dataset.id); if (c) personModal(c.householdId, c); },
       'hh-person-save': (el) => {
+        let added = null;
         const fields = {
           firstName: g('p-first').trim(), lastName: g('p-last').trim(),
           preferredName: g('p-pref').trim(),
@@ -840,9 +841,19 @@ window.RWG = window.RWG || {};
             }
           }
           if (!hhId) { U().toast('Pick a household for this person'); return; }
-          H().addContact(Object.assign({ householdId: hhId }, fields));
+          added = H().addContact(Object.assign({ householdId: hhId }, fields));
         }
         mount().innerHTML = '';
+        /* A new person lands on their own record. Adding someone is the
+           start of working them — the next thing is a note, a task or an
+           opportunity, and all of that lives on the record. Editing an
+           existing person stays where it is: you were already somewhere
+           on purpose. */
+        if (added && RWG.modules.get('contacts')) {
+          RWG.modules.get('contacts').actions['ct-open']({ dataset: { id: added.id } }, null);
+          U().toast(H().contactName(added) + ' added', true);
+          return;
+        }
         RWG.app.renderMain();
         U().toast('Saved', true);
       },
