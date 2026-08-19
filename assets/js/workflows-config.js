@@ -222,8 +222,14 @@ RWG.wf = (function () {
       const byName = key ? us.find(x => (x.name || '').toLowerCase().indexOf(key) >= 0) : null;
       if (byName) return { uid: byName.id, name: byName.name || '' };
       // Unpinned AND not on the visible roster — the advisor keeps the
-      // step rather than it landing on nobody. Pinning in Settings →
-      // Workflows is what makes this resolve from every session.
+      // step rather than it landing on nobody, and the result SAYS SO
+      // (fellBack), so a launcher can warn instead of silently
+      // preselecting the wrong person on every case-manager row.
+      const fb = (c && c.agentUid) ? { uid: c.agentUid, name: c.agentName || '' }
+        : (RWG.auth && RWG.auth.currentUser && RWG.auth.currentUser())
+          ? { uid: RWG.auth.currentUser().id, name: RWG.auth.currentUser().name || '' }
+          : { uid: null, name: '' };
+      return { uid: fb.uid, name: fb.name, fellBack: true };
     }
     if (c && c.agentUid) return { uid: c.agentUid, name: c.agentName || '' };
     const me = RWG.auth && RWG.auth.currentUser && RWG.auth.currentUser();

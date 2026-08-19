@@ -115,7 +115,8 @@ window.RWG = window.RWG || {};
     const addBtn = `<button class="btn btn-quiet btn-sm" data-action="tk-new"
         data-case="${esc(recordId)}" ${contactId ? `data-contact="${esc(contactId)}"` : ''}
         title="Opens the task window — save any edits here first">＋ Task</button>`;
-    return `<div class="cs-correct" style="margin-top:var(--s3)">
+    return `<div class="cs-correct" style="margin-top:var(--s3)" id="op2-stepswrap"
+        data-rec="${esc(recordId)}" ${contactId ? `data-ctc="${esc(contactId)}"` : ''}>
       <div class="cs-correct-h" style="display:flex;align-items:center;gap:8px">Work on this opportunity
         <span class="muted">${steps.length
           ? (open ? open + ' open of ' + steps.length : 'all ' + steps.length + ' done') + (wfName ? ' · ' + esc(wfName) : '')
@@ -123,10 +124,13 @@ window.RWG = window.RWG || {};
         <span class="topbar-spacer"></span>${addBtn}</div>
       ${steps.map(t => {
         const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
+        const waitFor = t.status !== 'done' && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
         return `<div class="flex" style="gap:10px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--line)">
-          <span style="flex:none;color:${t.status === 'done' ? 'var(--good)' : 'var(--muted)'};font-size:12px">${t.status === 'done' ? '✓' : '○'}</span>
+          <input type="checkbox" data-action="cs-step-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
+            style="flex:none;margin-top:2px;accent-color:var(--good)" title="${waitFor ? 'Waits for: ' + esc(waitFor.title) : (t.status === 'done' ? 'Un-tick to reopen' : 'Mark done')}">
           <span style="min-width:0;flex:1;font-size:13.5px;${t.status === 'done' ? 'opacity:.55;text-decoration:line-through' : ''}">${esc(t.title)}
-            ${t.required && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px;margin-left:6px">required to close</span>' : ''}</span>
+            ${t.required && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px;margin-left:6px">required to close</span>' : ''}
+            ${waitFor ? `<span class="chip" style="font-size:10.5px;margin-left:6px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)" title="Chained: opens when “${esc(waitFor.title)}” is checked off">⛓ after: ${esc(waitFor.title.length > 26 ? waitFor.title.slice(0, 25) + '…' : waitFor.title)}</span>` : ''}</span>
           <span class="pill-soft" style="flex:none;font-size:11px">${esc((t.assigneeName || '').split(' ')[0] || '—')}</span>
           <span class="cell-sub" style="flex:none;font-size:11.5px;${late ? 'color:var(--bad);font-weight:700' : ''}">${esc(t.dueDate || '')}</span>
         </div>`;
@@ -574,6 +578,23 @@ window.RWG = window.RWG || {};
       'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null,
         contactId: el.dataset.contact || null, clientName: el.dataset.client || '' }),
       'cs-save': (el) => saveWindow(el),
+      /* Ticking a step inside the opportunity window. The window holds
+         half-typed money fields, so a full re-render would eat them —
+         only the steps block repaints. The chain guard and the chained
+         re-dating both live in the shared task engine, so a tick here
+         behaves exactly like a tick on the Tasks screen. */
+      'cs-step-done': (el) => {
+        const T = RWG.tasks; if (!T || !T.isStarted()) return;
+        const t = T.task(el.dataset.id); if (!t) return;
+        if (t.status !== 'done' && RWG.wf && RWG.wf.waitingOn) {
+          const b = RWG.wf.waitingOn(t);
+          if (b) { U().toast('First: ' + (b.title || 'the step before it')); el.checked = false; }
+          else T.toggleDone(t.id);
+        } else T.toggleDone(t.id);
+        const wrap = document.getElementById('op2-stepswrap');
+        if (wrap) wrap.outerHTML = stepsBlock(wrap.dataset.rec, wrap.dataset.ctc || null);
+        RWG.app.renderMain();   // boards and lists behind the window follow
+      },
       // Back to the board, on the track you clicked.
       'cs-to-board': (el) => {
         const pm = RWG.modules.get('pipeline');

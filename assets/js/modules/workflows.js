@@ -41,9 +41,22 @@ window.RWG = window.RWG || {};
     const users = D().users().filter(u => u.status === 'active');
     const dayMs = 86400000;
     const dueOf = (s) => T().todayKey(Date.parse(startKey + 'T12:00:00') + (s.dueDays || 0) * dayMs);
-    return tpl.steps.map((s, i) => {
+    // A case-manager role that cannot resolve used to default the select to
+    // the advisor with no sign anything went wrong — which is how a whole
+    // checklist lands on one person. Say it out loud instead.
+    let warned = false;
+    const warn = tpl.steps.some(s => W().resolveOwner(s.owner, c).fellBack)
+      ? `<p class="hint" style="color:var(--bad);font-weight:600">The case-manager role could not be resolved,
+          so those steps defaulted to the advisor. Pin the case manager in Settings → Workflows,
+          or re-point the steps below by hand.</p>` : '';
+    return warn + tpl.steps.map((s, i) => {
       const dflt = W().resolveOwner(s.owner, c);
-      const opts = users.map(u =>
+      // If the resolved person is not on this session's roster, name them
+      // anyway — never let the browser quietly select the first option.
+      const onRoster = users.some(u => u.id === dflt.uid);
+      const opts = (!onRoster && dflt.uid
+          ? `<option value="${esc(dflt.uid)}" selected>${esc(dflt.name || 'Case manager')}</option>` : '')
+        + users.map(u =>
         `<option value="${esc(u.id)}" ${u.id === dflt.uid ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
       return `<div class="flex" style="gap:10px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06);align-items:center">
         <span class="cell-sub" style="flex:none;width:18px;text-align:right">${i + 1}</span>

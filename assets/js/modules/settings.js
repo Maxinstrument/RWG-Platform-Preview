@@ -661,6 +661,17 @@ window.RWG = window.RWG || {};
       },
       'set-save-wf': () => {
         const d = draftW();
+        // The picker preselects the case manager by NAME-match even when no
+        // uid is pinned — so the screen can look done while nothing was
+        // written, and every agent session still fails to resolve her.
+        // Saving pins whoever the picker shows. What you see is what holds.
+        const cmSel = document.querySelector
+          ? document.querySelector('select[data-set="wf"][data-sf="casemanager"]') : null;
+        if (cmSel && cmSel.value && !d.caseManagerUid) {
+          const u = D().user(cmSel.value);
+          d.caseManagerUid = cmSel.value;
+          d.caseManagerName = (u && u.name) || d.caseManagerName;
+        }
         for (const t of d.templates) {
           if (!String(t.name || '').trim()) { U().toast('Every template needs a name'); return; }
           if (!t.steps.length) { U().toast('“' + t.name + '” has no steps — add some or delete it'); return; }
