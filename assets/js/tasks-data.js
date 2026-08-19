@@ -135,27 +135,47 @@ RWG.tasks = (function () {
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
 
-  // The My Work grouping: overdue / today / this week / later / no date.
-  // `today` is injectable so the grouping is testable.
+  /* The Tasks grouping, in the order a morning asks the question: what is
+     late, what is today, what is tomorrow, what is left of this week, what
+     is next week, what is beyond that, and what has no date at all.
+
+     The week boundary is the CALENDAR week, not seven rolling days — on a
+     Thursday "next week" has to mean the Monday coming, or the phrase is a
+     lie. Monday-based, matching the firm's Mon-Fri scorecard week. A
+     Sunday collapses "this week" to nothing and hands Monday to Tomorrow,
+     which is exactly how a Sunday feels.
+
+     `today` is injectable so the grouping is testable. */
   function groupByDue(list, today) {
     const t = today || todayKey();
-    const weekEdge = todayKey(Date.parse(t + 'T12:00:00') + 7 * 86400000);
-    const g = { overdue: [], today: [], week: [], later: [], nodate: [] };
+    const noon = Date.parse(t + 'T12:00:00');
+    const at = (n) => todayKey(noon + n * 86400000);
+    const tomorrow = at(1);
+    const toSunday = (7 - new Date(noon).getDay()) % 7;   // 0 Sun .. 6 Sat -> days left
+    const weekEnd = at(toSunday);
+    const nextEnd = at(toSunday + 7);
+    const g = { overdue: [], today: [], tomorrow: [], week: [], next: [], later: [], nodate: [] };
     list.forEach(x => {
       if (!x.dueDate) g.nodate.push(x);
       else if (x.dueDate < t) g.overdue.push(x);
       else if (x.dueDate === t) g.today.push(x);
-      else if (x.dueDate <= weekEdge) g.week.push(x);
+      else if (x.dueDate === tomorrow) g.tomorrow.push(x);
+      else if (x.dueDate <= weekEnd) g.week.push(x);
+      else if (x.dueDate <= nextEnd) g.next.push(x);
       else g.later.push(x);
     });
     const byDue = (a, b) => String(a.dueDate).localeCompare(String(b.dueDate)) || (a.createdAt || 0) - (b.createdAt || 0);
     Object.keys(g).forEach(k => g[k].sort(byDue));
     return g;
   }
-  // The nav badge: what this person owes right now.
+  /* The nav badge: what this person owes right now. A workflow step that
+     is waiting on an earlier step is not owed by anybody yet — counting it
+     puts a number on the nav for work that cannot be started, which is the
+     fastest way to teach someone to ignore the number. */
   function dueCount(uid) {
     const t = todayKey();
-    return openFor(uid).filter(x => x.dueDate && x.dueDate <= t).length;
+    const held = (RWG.wf && RWG.wf.blockedIds) ? RWG.wf.blockedIds() : {};
+    return openFor(uid).filter(x => x.dueDate && x.dueDate <= t && !held[x.id]).length;
   }
   const doneThisWeek = () => {
     const edge = now() - 7 * 86400000;

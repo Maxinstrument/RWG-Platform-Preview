@@ -535,7 +535,10 @@ window.RWG = window.RWG || {};
   function wMyTasks(ctx) {
     if (!T().isStarted()) return card('My tasks today', '', emptyRow('Loading…'));
     const today = T().todayKey();
-    const due = T().openFor(ctx.eff.id).filter(t => t.dueDate && t.dueDate <= today)
+    // Same rule as the Tasks page and the nav badge: a workflow step
+    // waiting on an earlier step is not on anybody's morning list yet.
+    const held = (RWG.wf && RWG.wf.blockedIds) ? RWG.wf.blockedIds() : {};
+    const due = T().openFor(ctx.eff.id).filter(t => t.dueDate && t.dueDate <= today && !held[t.id])
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
     const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
         <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">

@@ -387,6 +387,30 @@ RWG.wf = (function () {
     return (prereq && prereq.status !== 'done') ? prereq : null;
   }
 
+  /* The same question asked of the whole list at once. waitingOn walks
+     every task to answer for ONE task, which is fine for a chip on a row
+     and wrong for a filter that runs over every list, count and badge on
+     the screen — that is n squared on the busiest data in the app. One
+     pass, then O(1) lookups. Same rule: a prerequisite that was never
+     launched or has been deleted holds nothing hostage. */
+  function blockedIds(list) {
+    const out = {};
+    if (!list && (!T() || !T().isStarted())) return out;
+    const tasks = list || T().all();
+    const done = {}, known = {};
+    tasks.forEach(t => {
+      if (!t.workflowId || !t.workflowStepId) return;
+      (known[t.workflowId] = known[t.workflowId] || {})[t.workflowStepId] = 1;
+      if (t.status === 'done') (done[t.workflowId] = done[t.workflowId] || {})[t.workflowStepId] = 1;
+    });
+    tasks.forEach(t => {
+      if (t.status === 'done' || !t.awaitsStep || !t.workflowId) return;
+      const k = known[t.workflowId], d = done[t.workflowId];
+      if (k && k[t.awaitsStep] && !(d && d[t.awaitsStep])) out[t.id] = 1;
+    });
+    return out;
+  }
+
   /* When a step completes, every step chained to it gets its REAL due
      date: today plus its own offset. The launch estimate dies here —
      sign the application in four days or four weeks, the medical is due
@@ -438,7 +462,7 @@ RWG.wf = (function () {
   return {
     DEFAULTS, init,
     templates, template, resolveOwner, pinCaseManager, caseManager,
-    launch, autoLaunch, candidates, hasRun, blockers, waitingOn, rebaseChains, instancesFor,
+    launch, autoLaunch, candidates, hasRun, blockers, waitingOn, blockedIds, rebaseChains, instancesFor,
     current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();

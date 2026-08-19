@@ -31,7 +31,20 @@ window.RWG = window.RWG || {};
 
   // who: 'me' | 'all' | a uid.  Everything stays visible either way.
   // sel: null = the ordinary list; {} = select mode, ids → 1 while picking.
-  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '', sel: null };
+  // chain: show the workflow steps that are waiting on an earlier step.
+  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '', sel: null, chain: false };
+
+  /* Which day groups are folded shut. Kept on the device, not the record:
+     it is how one person likes to read the screen, not something about the
+     firm. Future and no-date start shut — they are the two groups that
+     answer "not now", and a morning list should open on what is now. */
+  const FOLD_KEY = 'rwg.tasks.folded';
+  let folded = { later: 1, nodate: 1 };
+  try {
+    const saved = localStorage.getItem(FOLD_KEY);
+    if (saved) folded = JSON.parse(saved) || {};
+  } catch (e) {}
+  function saveFold() { try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) {} }
   // Deleting is a partner power, like everywhere else in the app — and it
   // is a move to the Trash, never an erasure.
   const canDelete = () => RWG.auth.isAdmin && RWG.auth.isAdmin()
@@ -225,11 +238,15 @@ window.RWG = window.RWG || {};
   }
   function taskRow(t, today, showAssignee) {
     const picking = !!st.sel;
+    // The step this one is chained behind, when that step is still open.
+    // Normally these rows are not on the list at all; they appear when the
+    // chain toggle is on, and then they read as pending, not as work.
+    const wait = t.status !== 'done' && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
     /* The whole row is the door: it carries the action, and the dispatcher's
        innermost-wins rule keeps every control inside it (the done box, a
        contact chip, a category) doing its own job. In select mode the row
        picks instead of opens, so a batch is click-click-click anywhere. */
-    return `<div class="list-row list-row-click" data-action="${picking ? 'tk-sel' : 'tk-edit'}" data-id="${esc(t.id)}"
+    return `<div class="list-row list-row-click${wait ? ' held' : ''}" data-action="${picking ? 'tk-sel' : 'tk-edit'}" data-id="${esc(t.id)}"
         ${picking && st.sel[t.id] ? 'style="background:rgba(194,161,77,.07)"' : ''}>
       ${picking
         ? `<input type="checkbox" data-action="tk-sel" data-id="${esc(t.id)}" ${st.sel[t.id] ? 'checked' : ''}
@@ -246,9 +263,8 @@ window.RWG = window.RWG || {};
           ${t.kind === 'service' ? `<span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>` : ''}
           ${t.kind === 'service' && t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.required ? '<span class="chip tier-medium" style="font-size:10.5px" title="A required step — the case cannot be pushed to Won until this is done">required</span>' : ''}
-          ${(() => { const b = t.status !== 'done' && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
-            return b ? `<span class="chip" style="font-size:10.5px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)"
-              title="Chained: this step opens when “${esc(b.title)}” is checked off">⛓ after: ${esc(b.title.length > 34 ? b.title.slice(0, 33) + '…' : b.title)}</span>` : ''; })()}
+          ${wait ? `<span class="chip" style="font-size:10.5px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)"
+            title="Chained: this step opens when “${esc(wait.title)}” is checked off">⛓ after: ${esc(wait.title.length > 34 ? wait.title.slice(0, 33) + '…' : wait.title)}</span>` : ''}
           ${t.repeat && t.repeat !== 'none' ? '<span class="cell-sub" style="font-size:11px" title="Repeats">↻</span>' : ''}
           ${priorityFlag(t)}
           ${showAssignee ? `<span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>` : ''}
@@ -258,11 +274,18 @@ window.RWG = window.RWG || {};
       <div class="end" style="padding-top:3px">${dueLabel(t, today)}</div>
     </div>`;
   }
-  function group(label, list, today, showAssignee, tone) {
+  /* Each day group is a lid you can shut. Fifteen rows under one heading
+     is a list; fifteen rows under six headings is a day you can read. The
+     header is a real button, so it folds from the keyboard too, and the
+     count stays visible while it is shut — folding must never become a way
+     to lose track of eight overdue tasks. */
+  function group(key, label, list, today, showAssignee, tone) {
     if (!list.length) return '';
-    return `<div class="list-group${tone === 'bad' ? ' bad' : ''}">
-        ${label} <span style="opacity:.7">· ${list.length}</span></div>
-      ${list.map(t => taskRow(t, today, showAssignee)).join('')}`;
+    const shut = !!folded[key];
+    return `<button type="button" class="list-group fold${tone ? ' ' + tone : ''}${shut ? ' shut' : ''}"
+        data-action="tk-fold" data-key="${key}" aria-expanded="${shut ? 'false' : 'true'}">
+        <span class="fold-caret">▾</span><span>${label}</span><span class="fold-n">${list.length}</span></button>
+      ${shut ? '' : list.map(t => taskRow(t, today, showAssignee)).join('')}`;
   }
 
   // ── the filtered set ──────────────────────────────────────
@@ -345,32 +368,49 @@ window.RWG = window.RWG || {};
   function screenHtml(user, ctx) {
     const today = T().todayKey();
     const uid = user.id;
-    const list = base(uid);
+    const shown = base(uid);
+    /* A workflow step chained behind another one is not work anybody can
+       start — it is work that has not begun. Launching a life case put all
+       seven steps on the list at once, four of them impossible, and a list
+       where most rows cannot be actioned is a list people stop reading.
+       They wait their turn off-screen and arrive when the step before them
+       is ticked, with a real due date instead of the launch estimate.
+       Asked of the WHOLE book, never of the filtered list: the step you
+       are waiting on is usually somebody else's. */
+    const held = (RWG.wf && RWG.wf.blockedIds) ? RWG.wf.blockedIds() : {};
+    const heldN = shown.filter(t => held[t.id]).length;
+    const list = st.chain ? shown : shown.filter(t => !held[t.id]);
     const gps = T().groupByDue(list.filter(t => t.status !== 'done'), today);
     const showAssignee = st.who !== 'me';
     const rail = railHtml(user, ctx.isAdmin);
 
+    // Overdue, today, tomorrow, the rest of this week, next week, then
+    // everything after that. The tone carries the deadline: red is late,
+    // amber is today, and it cools off as the date moves away.
+    const days = (far) => group('overdue', 'Overdue', gps.overdue, today, showAssignee, 'bad')
+      + group('today', 'Today', gps.today, today, showAssignee, 'warn')
+      + group('tomorrow', 'Tomorrow', gps.tomorrow, today, showAssignee, 'gold')
+      + group('week', 'This week', gps.week, today, showAssignee, 'cool')
+      + (far ? group('next', 'Next week', gps.next, today, showAssignee, 'cool')
+        + group('later', 'Future', gps.later, today, showAssignee)
+        + group('nodate', 'No date', gps.nodate, today, showAssignee) : '');
+
     let body = '';
     if (st.when === 'completed') {
       const done = list.slice().sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
-      body = group('Completed', done, today, showAssignee);
+      body = group('done', 'Completed', done, today, showAssignee);
     } else if (st.when === 'overdue') {
-      body = group('Overdue', gps.overdue, today, showAssignee, 'bad');
+      body = group('overdue', 'Overdue', gps.overdue, today, showAssignee, 'bad');
     } else if (st.when === 'today') {
-      body = group('Due today', gps.today, today, showAssignee);
+      body = group('today', 'Today', gps.today, today, showAssignee, 'warn');
     } else if (st.when === 'week') {
-      body = group('Overdue', gps.overdue, today, showAssignee, 'bad')
-        + group('Due today', gps.today, today, showAssignee)
-        + group('This week', gps.week, today, showAssignee);
+      body = days(false);
     } else {
       // upcoming (default) and everything
-      body = group('Overdue', gps.overdue, today, showAssignee, 'bad')
-        + group('Due today', gps.today, today, showAssignee)
-        + group('This week', gps.week, today, showAssignee)
-        + group('Later', gps.later.concat(gps.nodate), today, showAssignee);
+      body = days(true);
       if (st.when === 'all') {
         const done = list.filter(t => t.status === 'done').sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
-        body += group('Completed', done, today, showAssignee);
+        body += group('done', 'Completed', done, today, showAssignee);
       }
     }
 
@@ -397,7 +437,8 @@ window.RWG = window.RWG || {};
       .concat(T().categories().map(c =>
         `<option value="${esc(c)}" ${st.cat === c ? 'selected' : ''}>${esc(c)}</option>`)).join('');
 
-    const count = st.when === 'completed' ? list.length : (gps.overdue.length + gps.today.length + gps.week.length + gps.later.length + gps.nodate.length);
+    const count = st.when === 'completed' ? list.length
+      : Object.keys(gps).reduce((n, k) => n + gps[k].length, 0);
 
     return `<div class="mw-grid">
       <div class="card flush">
@@ -423,6 +464,8 @@ window.RWG = window.RWG || {};
           <span class="tb-word">in category</span>
           ${sel('tk-f-cat', catOpts)}
           ${narrowed ? '<button class="btn btn-quiet btn-sm" data-action="tk-reset">Reset</button>' : ''}
+          ${heldN ? `<button class="btn btn-quiet btn-sm" data-action="tk-chain"
+            title="Workflow steps that cannot be started until the step before them is checked off">⛓ ${st.chain ? 'Hide' : 'Show'} ${heldN} waiting on ${heldN === 1 ? 'an earlier step' : 'earlier steps'}</button>` : ''}
         </div>
         ${body || empty}
         ${doneWk.length && st.when !== 'completed' ? `<div class="list-foot"><span class="cell-sub">✓ ${doneWk.length} done in the last 7 days</span></div>` : ''}
@@ -480,7 +523,14 @@ window.RWG = window.RWG || {};
     actions: {
       'tk-who': (el) => { st.who = el.dataset.who; RWG.app.renderMain(); },
       'tk-cat-pick': (el) => { st.cat = el.dataset.cat || ''; RWG.app.renderMain(); },
-      'tk-reset': () => { st.who = 'me'; st.when = 'upcoming'; st.kind = 'all'; st.cat = ''; RWG.app.renderMain(); },
+      'tk-reset': () => { st.who = 'me'; st.when = 'upcoming'; st.kind = 'all'; st.cat = ''; st.chain = false; RWG.app.renderMain(); },
+      'tk-chain': () => { st.chain = !st.chain; RWG.app.renderMain(); },
+      'tk-fold': (el) => {
+        const k = el.dataset.key;
+        if (folded[k]) delete folded[k]; else folded[k] = 1;
+        saveFold();
+        RWG.app.renderMain();
+      },
       // A task started from a record is already about that record. The most
       // specific pointer wins: the opportunity you were looking at, then the
       // person, then the family — never the family when a person was named.

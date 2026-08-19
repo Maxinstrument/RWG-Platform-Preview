@@ -736,6 +736,29 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
   color:var(--muted);
 }
 .list-group.bad{background:rgba(178,58,72,.07);color:var(--bad);}
+/* ── A date heading that folds. It is a real <button> so the keyboard
+      reaches it, laid out as a bar: caret, name, then the count pinned
+      right — the count is the reason folding is safe, so it never
+      disappears with the rows. The tone is the deadline speaking. ── */
+button.list-group{
+  display:flex;align-items:center;gap:8px;width:100%;
+  border:none;border-bottom:1px solid var(--line);
+  text-align:left;cursor:pointer;transition:background-color .12s;
+}
+button.list-group:hover{background:rgba(14,36,64,.05);}
+.list-group.warn{background:rgba(176,105,31,.09);color:var(--warn);}
+.list-group.gold{background:rgba(194,161,77,.13);color:#7C6320;}
+.list-group.cool{background:rgba(62,92,130,.08);color:#3E5C82;}
+.list-group .fold-caret{font-size:9px;line-height:1;opacity:.75;transition:transform .15s;}
+.list-group.shut .fold-caret{transform:rotate(-90deg);}
+.list-group .fold-n{
+  margin-left:auto;font-size:11px;letter-spacing:0;font-weight:700;
+  background:rgba(255,255,255,.6);border-radius:9px;padding:1px 7px;opacity:.85;
+}
+/* A step that is only on screen because you asked to see what is waiting.
+   It reads as pending — you can open it, but it is not today's work. */
+.list-row.held{opacity:.62;}
+.list-row.held:hover{opacity:.85;}
 .list-row{
   display:flex;align-items:flex-start;gap:11px;
   padding:var(--s2) var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);
