@@ -59,16 +59,16 @@ RWG.wf = (function () {
           // from the moment that step IS done, not from launch. Signed
           // application ticked today, medical due tomorrow — whether the
           // signature took two days or two weeks.
-          { id: 'carrier',   title: 'Enter the application in the carrier portal — confirm in good order', owner: 'casemanager', dueDays: 1 },
-          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 1,  after: 'carrier' },
-          { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10 },
-          { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21 },
-          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 3,  after: 'chase-uw' },
+          { id: 'carrier',   title: 'Enter the application in the carrier portal — confirm in good order', owner: 'casemanager', dueDays: 1,  stage: 'application' },
+          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 1,  after: 'carrier', stage: 'sched-medical' },
+          { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10, stage: 'medical-uw' },
+          { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21, stage: 'approval' },
+          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 3,  after: 'chase-uw', stage: 'closing-pres' },
           // Premium and signature are two different clocks. The premium is
           // what pays us and is the door to Delivery Requirements; it gates
           // the close and follows the closing meeting. The signature chase
           // lives in Policy Delivery, which fires when a partner confirms.
-          { id: 'premium',   title: 'Collect the initial premium — we are not paid until it is in',          owner: 'casemanager', dueDays: 3,  after: 'closing', required: true, gate: 'Closed' },
+          { id: 'premium',   title: 'Collect the initial premium — we are not paid until it is in',          owner: 'casemanager', dueDays: 3,  after: 'closing', required: true, gate: 'Closed', stage: 'funding' },
           { id: 'a360',      title: 'Upload the signed policy file to A360',                                owner: 'casemanager', dueDays: 31 }
         ]
       },
@@ -78,10 +78,10 @@ RWG.wf = (function () {
         trigger: { bucket: 'Submitted', products: ['annuity'] },
         related: 'case',
         steps: [
-          { id: 'suitability', title: 'Suitability and disclosure paperwork complete',                    owner: 'advisor',     dueDays: 1 },
-          { id: 'submit',      title: 'Submit the application to the carrier',                            owner: 'casemanager', dueDays: 2 },
-          { id: 'transfer',    title: 'Initiate the transfer / 1035 exchange paperwork',                  owner: 'casemanager', dueDays: 3 },
-          { id: 'funds',       title: 'Track incoming funds until received',                              owner: 'casemanager', dueDays: 14 },
+          { id: 'suitability', title: 'Suitability and disclosure paperwork complete',                    owner: 'advisor',     dueDays: 1,  stage: 'application' },
+          { id: 'submit',      title: 'Submit the application to the carrier',                            owner: 'casemanager', dueDays: 2,  stage: 'application' },
+          { id: 'transfer',    title: 'Initiate the transfer / 1035 exchange paperwork',                  owner: 'casemanager', dueDays: 3,  stage: 'financial-uw' },
+          { id: 'funds',       title: 'Track incoming funds until received',                              owner: 'casemanager', dueDays: 14, stage: 'funding' },
           { id: 'issued',      title: 'Contract issued — confirm allocations match the illustration',     owner: 'casemanager', dueDays: 18, required: true, gate: 'Closed' },
           { id: 'a360',        title: 'Upload the contract and suitability file to A360',                 owner: 'casemanager', dueDays: 19 }
         ]
@@ -286,10 +286,28 @@ RWG.wf = (function () {
       seen[x.id] = 1;
       return est(stepById[x.after], seen) + (x.dueDays || 0);
     };
+    /* Where the case ENTERED its pipeline. A step tied to an earlier
+       stage is work that already happened out in the world — starting an
+       opportunity at Medical Underwriting means the application is in and
+       the exam is scheduled — so those steps launch already checked off,
+       and the checklist reads as history instead of nagging about it. */
+    let entryIdx = -1, stageIdx = {};
+    if (c) {
+      const pl = P().pipelineForProduct(c.product);
+      pl.stages.forEach((x, n) => { stageIdx[x.id] = n; });
+      const cur = stageIdx[P().stageForCase(c)];
+      entryIdx = cur == null ? -1 : cur;
+    }
+    let preDone = 0;
     tpl.steps.forEach((s, i) => {
+      const already = entryIdx >= 0 && s.stage != null
+        && stageIdx[s.stage] != null && stageIdx[s.stage] < entryIdx;
+      if (already) preDone++;
       const who = (opts.assignees && opts.assignees[s.id]) || resolveOwner(s.owner, c);
       T().addTask({
         title: s.title, note: s.note || '',
+        status: already ? 'done' : 'open',
+        doneAt: already ? Date.now() : null,
         assigneeUid: who.uid, assigneeName: who.name,
         dueDate: dueKey(start, est(s)),
         relatedType: rel.type, relatedId: rel.id, relatedLabel: rel.label,
@@ -307,7 +325,7 @@ RWG.wf = (function () {
         chainDays: s.after ? (s.dueDays || 0) : null
       });
     });
-    return { id: wfId, name: tpl.name, count: tpl.steps.length };
+    return { id: wfId, name: tpl.name, count: tpl.steps.length, preDone: preDone };
   }
 
   /* Auto-launch: called after a board move and after a confirmed close.

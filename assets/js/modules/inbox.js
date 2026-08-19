@@ -437,13 +437,12 @@ window.RWG = window.RWG || {};
           .then(() => saveSplits(c.recordId, st.splits, true))
           .then(() => {
             const worth = U().money(Math.round(headline(c)));
-            // A confirmed close is what starts onboarding (phase 4) —
-            // once per household, however many cases close after.
-            const started = RWG.wf ? RWG.wf.autoLaunch(SD().caseById(c.recordId)) : [];
             st.reviewId = null; st.form = null; st.formId = null; st.splits = null; st.splitsId = null;
             RWG.app.nav('inbox');
-            U().toast('Closed and confirmed · ' + worth
-              + (started.length ? ' · ' + started.join(' + ') + ' started' : ''), true);
+            U().toast('Closed and confirmed · ' + worth, true);
+            // Nothing launches without asking: the close offers Policy
+            // Delivery and Onboarding through the same prompt as the board.
+            if (RWG.wfPrompt) RWG.wfPrompt(c.recordId);
           })
           .catch(err => U().toast('Could not confirm: ' + err.message));
       }

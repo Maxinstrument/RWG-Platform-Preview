@@ -296,16 +296,21 @@ window.RWG = window.RWG || {};
   const wfAsked = {};   // per session: "Not now" means not now, not "ask on every move"
   function fireWorkflows(id) {
     const c = SD().caseById(id); if (!c || !RWG.wf) return;
-    const bucket = P().bucketOf(c.product, P().stageForCase(c));
     const cands = RWG.wf.candidates ? RWG.wf.candidates(c) : [];
     if (!cands.length) return;
-    if (bucket !== 'Submitted') { announce(id, RWG.wf.autoLaunch(c)); return; }
+    // Nothing launches without asking — Carlos's rule, and it covers the
+    // close-confirm launches (Policy Delivery, Onboarding) the same as the
+    // Submitted entry. More than one match renders as checkboxes, all on.
     if (wfAsked[id]) return;
     wfAsked[id] = 1;
 
+    const bucket = P().bucketOf(c.product, P().stageForCase(c));
+    const stageLbl = P().stageLabel(c.product, P().stageForCase(c));
     const users = RWG.data.users().filter(u => u.status === 'active');
-    const tplOpts = cands.map((t, i) =>
-      `<option value="${esc(t.id)}" ${i === 0 ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    const picks = cands.map(t => `<label class="checkitem" style="display:flex;align-items:flex-start;gap:8px;font-size:13.5px;padding:4px 0">
+        <input type="checkbox" id="plwf-t-${esc(t.id)}" checked style="accent-color:var(--gold);margin-top:2px">
+        <span><b>${esc(t.name)}</b>${t.desc ? `<span class="cell-sub" style="display:block">${esc(t.desc)}</span>` : ''}</span>
+      </label>`).join('');
     // An agent's roster is themselves; the verify collapses to a statement.
     const agentSel = users.length > 1
       ? `<select id="plwf-agent">${users.map(u =>
@@ -314,19 +319,20 @@ window.RWG = window.RWG || {};
     document.getElementById('modal-mount').innerHTML = `
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card modal-sm">
-        <div class="modal-head"><h2>Start a workflow?</h2>
-          <p>${esc(c.title || c.clientName || 'This case')} · ${esc(SC().productName(c.product))} just went to Submitted.</p></div>
+        <div class="modal-head"><h2>Start ${cands.length === 1 ? 'a workflow' : 'workflows'}?</h2>
+          <p>${esc(c.title || c.clientName || 'This case')} · ${esc(SC().productName(c.product))} — now in ${esc(stageLbl || bucket)}.</p></div>
         <div class="modal-body">
-          <div class="field-group"><label class="lbl">Workflow</label>
-            <select id="plwf-tpl">${tplOpts}</select>
-            <div class="hint">The checklist for this kind of business — steps land on the right lists with their due dates chained.</div></div>
+          <div class="field-group"><label class="lbl">${cands.length === 1 ? 'Workflow' : 'Workflows'}</label>
+            ${picks}
+            <div class="hint">Steps land on the right lists with their dates chained. Work the case
+              already got past launches checked off, not nagging.</div></div>
           <div class="field-group"><label class="lbl">Main agent on this case</label>
             ${agentSel}
             <div class="hint">The advisor steps go to whoever is named here. Changing it makes them the case owner.</div></div>
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" data-action="close-modal">Not now</button>
-          <button class="btn btn-gold" data-action="pl-wf-start" data-id="${esc(c.recordId)}">Start workflow</button>
+          <button class="btn btn-gold" data-action="pl-wf-start" data-id="${esc(c.recordId)}">Start</button>
         </div>
       </div>`;
   }
@@ -419,14 +425,23 @@ window.RWG = window.RWG || {};
       'pl-wf-start': (el) => {
         const c = SD().caseById(el.dataset.id); if (!c || !RWG.wf) return;
         const g = (i) => { const x = document.getElementById(i); return x ? x.value : ''; };
-        const tplId = g('plwf-tpl');
+        const chosen = (RWG.wf.candidates(c) || []).filter(t => {
+          const box = document.getElementById('plwf-t-' + t.id);
+          return box ? box.checked : true;
+        });
         const uid = g('plwf-agent') || c.agentUid;
         const u = RWG.data.user(uid);
         const proceed = (row) => {
-          const started = RWG.wf.launch(tplId, { caseRecord: row });
+          const names = [];
+          let pre = 0;
+          chosen.forEach(t => {
+            const r = RWG.wf.launch(t.id, { caseRecord: row });
+            if (r) { names.push(r.name); pre += r.preDone || 0; }
+          });
           document.getElementById('modal-mount').innerHTML = '';
           RWG.app.renderMain();
-          announce(row.recordId, started ? [started.name] : []);
+          announce(row.recordId, names);
+          if (pre) U().toast(pre + (pre === 1 ? ' step the case was already past is' : ' steps the case was already past are') + ' checked off', true);
         };
         // Verifying the agent IS assigning the case: the owner drives every
         // advisor step, the boards and the scorecard alike.

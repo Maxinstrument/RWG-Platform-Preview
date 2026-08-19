@@ -296,8 +296,8 @@ window.RWG = window.RWG || {};
 
           <div class="field-row">
             <div class="field-group"><label class="lbl">Product</label>
-              <select id="op2-prod" ${c ? 'disabled title="A product picks its pipeline — change it by reopening the opportunity"' : ''}>${prodOpts}</select>
-              <div class="hint" id="op2-track"></div></div>
+              <select id="op2-prod" ${stageLocked || !editable ? 'disabled title="Closed, pending or lost business keeps its product — history is written in it"' : ''}>${prodOpts}</select>
+              <div class="hint" id="op2-track">${c && !stageLocked ? 'Changing the product moves the case to the matching pipeline; its stage carries over where the track has it.' : ''}</div></div>
             <div class="field-group"><label class="lbl">Stage</label>
               ${stageLocked ? stageChip : `<select id="op2-stage" ${dis}>${stageOptions(product)}</select>
               <div class="hint" id="op2-stage-hint"></div>`}</div>
@@ -360,7 +360,7 @@ window.RWG = window.RWG || {};
       }
     }
     const prodSel = byId('op2-prod');
-    if (prodSel && !c) prodSel.addEventListener('change', () => {
+    if (prodSel && !prodSel.disabled) prodSel.addEventListener('change', () => {
       const p = prodSel.value;
       form.fam = FAM(p);
       const dflt = sc.defaultRate(p);
@@ -430,7 +430,7 @@ window.RWG = window.RWG || {};
     const clientName = (relNow && relNow !== relWas) ? derived
       : (typedName || (c && c.clientName) || derived || '');
     if (!clientName) { U().toast('Who is this opportunity for? Pick a contact or a household'); return; }
-    const product = c ? c.product : (g('op2-prod') || 'wl');
+    const product = g('op2-prod') || (c ? c.product : 'wl');
     const fam = FAM(product);
     const ownerUid = g('op2-agent') || (c ? c.agentUid : user.id);
     const owner = RWG.data.user(ownerUid) || user;
@@ -467,7 +467,21 @@ window.RWG = window.RWG || {};
       // fall back to whatever the window was opened from.
       householdId: (rel && rel.householdId)
         || (hasRel ? null : ((c && c.householdId) || el.dataset.hh || null)),
-      stageId: c ? c.stageId : 'uncovered'
+      stageId: (() => {
+        if (!c) return 'uncovered';
+        // A product picks its pipeline. When it changes, the stage carries
+        // over where the new track knows it (application, funding…) and
+        // falls back to the first stage of its bucket where it does not
+        // (medical-uw has no investments twin).
+        if (product === c.product) return c.stageId;
+        const P2 = RWG.pipelines;
+        const newPl = P2.pipelineForProduct(product);
+        const cur = P2.stageForCase(c);
+        if (P2.stageOf(newPl, cur)) return cur;
+        const bucket = P2.bucketOf(c.product, cur) || 'Opened';
+        const landing = newPl.stages.find(x => x.bucket === bucket) || newPl.stages[0];
+        return landing.id;
+      })()
     };
     D().saveCase(patch).then(row => {
       // stage move (add: from Uncovered to the chosen start; edit: if changed)
