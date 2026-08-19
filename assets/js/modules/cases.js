@@ -128,7 +128,9 @@ window.RWG = window.RWG || {};
         return `<div class="flex" style="gap:10px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--line)">
           <input type="checkbox" data-action="cs-step-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
             style="flex:none;margin-top:2px;accent-color:var(--good)" title="${waitFor ? 'Waits for: ' + esc(waitFor.title) : (t.status === 'done' ? 'Un-tick to reopen' : 'Mark done')}">
-          <span style="min-width:0;flex:1;font-size:13.5px;${t.status === 'done' ? 'opacity:.55;text-decoration:line-through' : ''}">${esc(t.title)}
+          <span style="min-width:0;flex:1;font-size:13.5px;${t.status === 'done' ? 'opacity:.55;text-decoration:line-through' : ''}">
+            <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer"
+              title="Open this task — it opens over this window, so save any edits here first">${esc(t.title)}</span>
             ${t.required && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px;margin-left:6px">required to close</span>' : ''}
             ${waitFor ? `<span class="chip" style="font-size:10.5px;margin-left:6px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)" title="Chained: opens when “${esc(waitFor.title)}” is checked off">⛓ after: ${esc(waitFor.title.length > 26 ? waitFor.title.slice(0, 25) + '…' : waitFor.title)}</span>` : ''}</span>
           <span class="pill-soft" style="flex:none;font-size:11px">${esc((t.assigneeName || '').split(' ')[0] || '—')}</span>
@@ -182,6 +184,21 @@ window.RWG = window.RWG || {};
     const custom = Math.abs(f.ratePct / 100 - dflt) > 1e-6;
     return 'at ' + (+f.ratePct.toFixed(2)) + '% — ' + (custom ? 'custom rate, stored on this case' : 'the product default');
   }
+
+  /* Money reads as money. The inputs are text (a number input cannot hold
+     $ or commas): they show $328,787, strip to 328787 the moment you focus
+     to type, and dress back up on blur. Everything that READS them goes
+     through num$ so a formatted value never poisons the math. */
+  const fmt$ = (v) => {
+    if (v === '' || v == null) return '';
+    const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? '' : '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
+  const num$ = (v) => {
+    if (v === '' || v == null) return '';
+    const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? '' : n;
+  };
 
   function oppWindow(opts) {
     const sc = S();
@@ -309,14 +326,14 @@ window.RWG = window.RWG || {};
 
           <div class="op2-money">
             <div class="field-group"><label class="lbl">Benefit amount</label>
-              <input id="op2-benefit" type="number" step="any" value="${esc(c && c.benefit != null && c.benefit !== '' ? c.benefit : '')}" ${dis}></div>
+              <input id="op2-benefit" type="text" inputmode="decimal" value="${esc(fmt$(c && c.benefit != null && c.benefit !== '' ? c.benefit : ''))}" ${dis}></div>
             <div class="field-group"><label class="lbl" id="op2-prem-label">${esc(L.premium)}</label>
-              <input id="op2-premium" type="number" step="any" value="${form.premium || ''}" ${dis}></div>
+              <input id="op2-premium" type="text" inputmode="decimal" value="${esc(fmt$(form.premium || ''))}" ${dis}></div>
             <div class="field-group"><label class="lbl" id="op2-fyc-label">${esc(L.fyc)}</label>
-              <input id="op2-fyc" type="number" step="any" value="${form.fyc || ''}" ${dis}>
+              <input id="op2-fyc" type="text" inputmode="decimal" value="${esc(fmt$(form.fyc || ''))}" ${dis}>
               <div class="hint" id="op2-rate-hint">${esc(rateHintText(form, product))}</div></div>
             <div class="field-group"><label class="lbl">Renewals / yr</label>
-              <input id="op2-renewal" type="number" step="any" value="${esc(c && c.renewalAnnual != null && c.renewalAnnual !== '' ? c.renewalAnnual : '')}" ${dis}>
+              <input id="op2-renewal" type="text" inputmode="decimal" value="${esc(fmt$(c && c.renewalAnnual != null && c.renewalAnnual !== '' ? c.renewalAnnual : ''))}" ${dis}>
               <div class="hint">reporting only</div></div>
           </div>
 
@@ -371,8 +388,8 @@ window.RWG = window.RWG || {};
       form.ratePct = dflt ? +(dflt * 100).toFixed(4) : null;
       applyMoney(form, 'premium', form.premium);
       const st2 = byId('op2-stage'); if (st2) st2.innerHTML = stageOptions(p);
-      const pi = byId('op2-premium'); if (pi) pi.value = form.premium || '';
-      const fi = byId('op2-fyc'); if (fi) fi.value = form.fyc || '';
+      const pi = byId('op2-premium'); if (pi) pi.value = fmt$(form.premium || '');
+      const fi = byId('op2-fyc'); if (fi) fi.value = fmt$(form.fyc || '');
       paintStatic();
     });
     // Regarding IS the client now — there is no second box asking for the
@@ -388,14 +405,20 @@ window.RWG = window.RWG || {};
     if (stSel2) stSel2.addEventListener('change', paintStatic);
     const premIn = byId('op2-premium');
     if (premIn) premIn.addEventListener('input', () => {
-      applyMoney(form, 'premium', premIn.value);
-      const fi = byId('op2-fyc'); if (fi && document.activeElement !== fi) fi.value = form.fyc || '';
+      applyMoney(form, 'premium', num$(premIn.value));
+      const fi = byId('op2-fyc'); if (fi && document.activeElement !== fi) fi.value = fmt$(form.fyc || '');
       paintStatic();
     });
     const fycIn = byId('op2-fyc');
     if (fycIn) fycIn.addEventListener('input', () => {
-      applyMoney(form, 'fyc', fycIn.value);
+      applyMoney(form, 'fyc', num$(fycIn.value));
       paintStatic();
+    });
+    // undress to type, dress back up on the way out
+    ['op2-benefit', 'op2-premium', 'op2-fyc', 'op2-renewal'].forEach(mid => {
+      const el = byId(mid); if (!el || el.disabled || !el.addEventListener) return;
+      el.addEventListener('focus', () => { el.value = num$(el.value); });
+      el.addEventListener('blur', () => { el.value = fmt$(el.value); });
     });
     paintStatic();
     const t = byId('op2-title'); if (t && !c) t.focus();
@@ -448,7 +471,7 @@ window.RWG = window.RWG || {};
       : (Number(form.premium) || 0);
     const dflt = sc.defaultRate(product);
     const custom = form.ratePct && dflt != null && Math.abs(form.ratePct / 100 - dflt) > 1e-6;
-    const num = (i) => { const v = g(i); return v === '' ? null : (Number(v) || 0); };
+    const num = (i) => { const v = num$(g(i)); return v === '' ? null : (Number(v) || 0); };
     const hasDetails = !!document.getElementById('op2-details');
 
     const patch = {
