@@ -265,13 +265,20 @@ window.RWG = window.RWG || {};
     const clockTxt = kclock ? (kclock.left < 0
         ? ` <span class="chip tier-low" style="background:rgba(178,58,72,.14);color:var(--bad);border-color:rgba(178,58,72,.4)">CHARGEBACK — ${kclock.left * -1}d past the month-3 line</span>`
         : ` <span class="chip tier-low" ${kclock.left <= 21 ? 'style="color:var(--bad)"' : ''}>receipt due in ${kclock.left}d</span>`) : '';
+    // The close review is the only screen holding the credit split and the
+    // verified money — a partner can reach it from here even after the
+    // close, because a close that skipped it (or got the split wrong) is
+    // otherwise a locked door.
+    const reviewBtn = isAdmin && c ? `<button class="btn btn-quiet btn-sm" style="margin-left:8px"
+           data-action="cs-review" data-id="${esc(c.recordId)}"
+           title="Open the close review — final money, closed week, and each person's share of the credit">Credit split ✎</button>` : '';
     const stageChip = closed ? (nextDone
         ? `<span class="chip tier-high">Closed ✓ — counted; delivery receipt outstanding</span>${clockTxt}
            <button class="btn btn-gold btn-sm" style="margin-left:8px" data-action="cs-signed"
              data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}"
-             title="The client signed the delivery receipt — nothing else owed">Receipt signed ✓</button>`
-        : '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>')
-      : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>'
+             title="The client signed the delivery receipt — nothing else owed">Receipt signed ✓</button>${reviewBtn}`
+        : '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>' + reviewBtn)
+      : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>' + reviewBtn
       : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(c.lostReason.split(' — ')[0]) : ''}</span>` : '';
 
     const L = MONEY_LABELS[form.fam];
@@ -514,6 +521,7 @@ window.RWG = window.RWG || {};
         return landing.id;
       })()
     };
+    let routedToReview = false;
     D().saveCase(patch).then(row => {
       // stage move (add: from Uncovered to the chosen start; edit: if changed)
       const sel = g('op2-stage');
@@ -523,6 +531,7 @@ window.RWG = window.RWG || {};
         // that is the close's door, so it walks the same path as the board's
         // push: blockers, the premium question, then the partner.
         if (P.bucketOf(row.product, sel) === 'Closed' && !row.closedAt && !row.pendingClose) {
+          routedToReview = true;
           const owner = RWG.modules.actionOwner('pl-won');
           if (owner) setTimeout(() => owner.actions['pl-won']({ dataset: { id: row.recordId } }), 0);
           return row;
@@ -536,7 +545,22 @@ window.RWG = window.RWG || {};
         const w = sc.deriveWeeks(c);
         const ow = g('cm-ow'), sw = g('cm-sw'), cw = g('cm-cw');
         if (ow !== w.openedWeek || sw !== w.submittedWeek || cw !== w.closedWeek) {
-          return D().adminSetStamps(row.recordId, { openedWeek: ow || w.openedWeek, submittedWeek: sw, closedWeek: cw }).then(() => row);
+          /* The weeks block CORRECTS stamps on business that already holds
+             them - it is not a door. Writing a closed week onto a case that
+             never closed would stamp it Closed with no premium question, no
+             partner verify and no credit split (which is exactly how three
+             cases slipped through in August '26). That one write routes
+             through the close review like every other close. */
+          const stamps = { openedWeek: ow || w.openedWeek, submittedWeek: sw, closedWeek: cw };
+          if (cw && !row.closedAt && !row.pendingClose) {
+            delete stamps.closedWeek;
+            if (!routedToReview) {
+              routedToReview = true;
+              const owner = RWG.modules.actionOwner('pl-won');
+              if (owner) setTimeout(() => owner.actions['pl-won']({ dataset: { id: row.recordId } }), 0);
+            }
+          }
+          return D().adminSetStamps(row.recordId, stamps).then(() => row);
         }
       }
       return row;
@@ -630,6 +654,18 @@ window.RWG = window.RWG || {};
       },
       'cs-open': (el) => oppWindow({ id: el.dataset.id }),
       // Post-close bookkeeping, not a close: stamps are untouched by design.
+      /* Into the close review from an open case window. The review is a
+         page, not a layer — both modal layers close first, and the inbox's
+         cached form is dropped so the review reads THIS case fresh. */
+      'cs-review': (el) => {
+        const inbox = RWG.modules.get('inbox'); if (!inbox) return;
+        inbox.state.reviewId = el.dataset.id;
+        inbox.state.form = null; inbox.state.formId = null;
+        inbox.state.splits = null; inbox.state.splitsId = null;
+        const m1 = document.getElementById('modal-mount'); if (m1) m1.innerHTML = '';
+        const m2 = document.getElementById('modal-mount-2'); if (m2) m2.innerHTML = '';
+        RWG.app.nav('close-review');
+      },
       'cs-signed': (el) => {
         D().setPipelineStage(el.dataset.id, el.dataset.stage).then(() => {
           U().toast('Fully done — receipt on file', true);

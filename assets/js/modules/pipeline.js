@@ -96,8 +96,12 @@ window.RWG = window.RWG || {};
       <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
         ${closed ? (stage.bucket === 'Closed' && stage.id !== 'won'
-              ? '<span class="chip tier-high" style="font-size:10.5px" title="Closed and counted — the delivery receipt is still out">Closed ✓</span>' + clockChip(c)
-              : '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>')
+              ? (isAdmin
+                  ? `<button class="chip tier-high" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Closed and counted — click to review the final money and credit split">Closed ✓</button>`
+                  : '<span class="chip tier-high" style="font-size:10.5px" title="Closed and counted — the delivery receipt is still out">Closed ✓</span>') + clockChip(c)
+              : (isAdmin
+                  ? `<button class="chip tier-high" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Confirmed — click to review the final money and credit split">Confirmed ✓</button>`
+                  : '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>'))
           : (stage.bucket === 'Closed'
               ? (isAdmin
                   ? `<button class="chip tier-medium" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Verify the money and confirm the close">Pending — Review ✓</button>`
@@ -476,7 +480,11 @@ window.RWG = window.RWG || {};
       },
       'pl-review': (el) => {
         const inbox = RWG.modules.get('inbox');
-        if (inbox) { inbox.state.reviewId = el.dataset.id; RWG.app.nav('close-review'); }
+        if (!inbox) return;
+        inbox.state.reviewId = el.dataset.id;
+        inbox.state.form = null; inbox.state.formId = null;
+        inbox.state.splits = null; inbox.state.splitsId = null;
+        RWG.app.nav('close-review');
       },
       'pl-lost': (el) => lostModal(el.dataset.id),
       'pl-lost-save': (el) => {
