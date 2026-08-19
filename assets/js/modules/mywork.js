@@ -62,6 +62,17 @@ window.RWG = window.RWG || {};
     if (m2 && m1 && m1.firstElementChild) return m2;
     return m1;
   };
+  /* mount() answers "where should this OPEN". Asking it again on the way
+     out returns the wrong layer: by then layer 1 holds the task modal
+     itself, so the answer flips to layer 2 and the clear lands on an
+     empty div while the window stays on screen. Closing is its own
+     question — peel whichever layer is actually on top. */
+  const closeTop = () => {
+    const m2 = document.getElementById('modal-mount-2');
+    if (m2 && (m2.firstElementChild || m2.innerHTML)) { m2.innerHTML = ''; return; }
+    const m1 = document.getElementById('modal-mount');
+    if (m1) m1.innerHTML = '';
+  };
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
   /* ── "Related to": one box, three kinds of record ─────────
@@ -513,7 +524,7 @@ window.RWG = window.RWG || {};
         const t = T().task(el.dataset.id); if (!t) return;
         if (!confirm('Move “' + (t.title || 'this task') + '” to the Trash?')) return;
         T().removeTask(el.dataset.id);
-        mount().innerHTML = '';
+        closeTop();
         if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast('Moved to the Trash — restorable from there', true);
@@ -550,7 +561,7 @@ window.RWG = window.RWG || {};
         };
         if (el.dataset.id) T().saveTask(Object.assign({ id: el.dataset.id }, fields));
         else T().addTask(fields);
-        mount().innerHTML = '';
+        closeTop();
         if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast(el.dataset.id ? 'Saved' : 'Task added — it is on ' + (fields.assigneeName || 'their') + "'s list", true);
