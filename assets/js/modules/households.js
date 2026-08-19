@@ -597,6 +597,9 @@ window.RWG = window.RWG || {};
           : `<p class="muted" style="font-size:13.5px;padding:6px 2px">Nobody here yet — add the family.</p>`}
       </div>
 
+      <!-- Who the family is, then what we are doing for them. -->
+      ${opportunitiesCard(h)}
+
       <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
         <div class="card">
           <div class="card-head"><h3>Key dates</h3><span class="sub">next 60 days</span>
@@ -623,8 +626,6 @@ window.RWG = window.RWG || {};
           <button class="btn btn-navy btn-sm" data-action="hh-notes-save" data-id="${esc(h.id)}">Save notes</button>
         </div>
       </div>
-
-      ${opportunitiesCard(h)}
 
       ${isAdmin ? `
       <div style="margin-top:18px">
