@@ -30,7 +30,12 @@ window.RWG = window.RWG || {};
   const dayMs = 86400000;
 
   // who: 'me' | 'all' | a uid.  Everything stays visible either way.
-  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '' };
+  // sel: null = the ordinary list; {} = select mode, ids → 1 while picking.
+  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '', sel: null };
+  // Deleting is a partner power, like everywhere else in the app — and it
+  // is a move to the Trash, never an erasure.
+  const canDelete = () => RWG.auth.isAdmin && RWG.auth.isAdmin()
+    && (!RWG.app.effectiveRole || RWG.app.effectiveRole() === 'admin');
 
   const WHEN = [
     { id: 'upcoming', label: 'Upcoming' },
@@ -116,6 +121,9 @@ window.RWG = window.RWG || {};
               placeholder: 'Anything worth remembering about this task…' })}</div>
         </div>
         <div class="modal-foot">
+          ${t && canDelete() ? `<button class="btn btn-quiet" style="color:var(--bad)" data-action="tk-del" data-id="${esc(t.id)}"
+            title="Moves to the Trash — a partner can restore it">Delete</button>` : ''}
+          <span class="topbar-spacer"></span>
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
           <button class="btn btn-gold" data-action="tk-save" ${t ? `data-id="${esc(t.id)}"` : ''}>${t ? 'Save' : 'Add task'}</button>
         </div>
@@ -189,9 +197,13 @@ window.RWG = window.RWG || {};
     return '';
   }
   function taskRow(t, today, showAssignee) {
-    return `<div class="list-row">
-      <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
-        style="margin-top:3px">
+    const picking = !!st.sel;
+    return `<div class="list-row${picking && st.sel[t.id] ? '" style="background:rgba(194,161,77,.07)' : ''}">
+      ${picking
+        ? `<input type="checkbox" data-action="tk-sel" data-id="${esc(t.id)}" ${st.sel[t.id] ? 'checked' : ''}
+            style="margin-top:3px;accent-color:var(--gold)" title="Select for deletion">`
+        : `<input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}
+            style="margin-top:3px">`}
       <div class="grow">
         <div style="font-size:13.5px;color:var(--ink);${t.status === 'done' ? 'text-decoration:line-through;opacity:.55' : ''}">
           <span data-action="tk-edit" data-id="${esc(t.id)}" style="cursor:pointer">${esc(t.title)}</span></div>
@@ -358,7 +370,14 @@ window.RWG = window.RWG || {};
           <span class="t">Tasks</span>
           <span class="s">${gps.overdue.length ? gps.overdue.length + ' overdue · ' : ''}${count} shown</span>
           <span class="topbar-spacer"></span>
-          <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>
+          ${st.sel ? `
+            <span class="cell-sub" style="font-weight:700">${Object.keys(st.sel).length} selected</span>
+            <button class="btn btn-quiet btn-sm" data-action="tk-sel-all">All shown</button>
+            <button class="btn btn-sm" style="background:rgba(178,58,72,.09);color:var(--bad);border:1px solid rgba(178,58,72,.35)"
+              data-action="tk-del-sel" ${Object.keys(st.sel).length ? '' : 'disabled'}>Move to Trash</button>
+            <button class="btn btn-quiet btn-sm" data-action="tk-sel-off">Cancel</button>`
+          : `${canDelete() ? '<button class="btn btn-quiet btn-sm" data-action="tk-sel-on" title="Pick several tasks to move to the Trash at once">Select</button>' : ''}
+            <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>`}
         </div>
         <div class="list-toolbar tb-inline">
           <span class="tb-word">Filtering by</span>
@@ -446,6 +465,42 @@ window.RWG = window.RWG || {};
         taskModal(null, preset);
       },
       'tk-edit': (el) => { const t = T().task(el.dataset.id); if (t) taskModal(t); },
+      // ── selection & deletion (partners; everything goes via the Trash) ──
+      'tk-sel-on': () => { st.sel = {}; RWG.app.renderMain(); },
+      'tk-sel-off': () => { st.sel = null; RWG.app.renderMain(); },
+      'tk-sel': (el) => {
+        if (!st.sel) return;
+        if (st.sel[el.dataset.id]) delete st.sel[el.dataset.id];
+        else st.sel[el.dataset.id] = 1;
+        RWG.app.renderMain();
+      },
+      'tk-sel-all': () => {
+        if (!st.sel) return;
+        const eff = RWG.app.effectiveUser ? RWG.app.effectiveUser() : RWG.auth.currentUser();
+        base(eff.id).forEach(t => { st.sel[t.id] = 1; });
+        RWG.app.renderMain();
+      },
+      'tk-del-sel': () => {
+        if (!st.sel) return;
+        const ids = Object.keys(st.sel).filter(id => T().task(id));
+        if (!ids.length) return;
+        if (!confirm('Move ' + ids.length + (ids.length === 1 ? ' task' : ' tasks')
+          + ' to the Trash? A partner can restore them from there.')) return;
+        Promise.all(ids.map(id => T().removeTask(id)))
+          .then(() => U().toast(ids.length + ' moved to the Trash', true))
+          .catch(() => U().toast('Some did not delete — check the Trash for what made it'))
+          .then(() => { st.sel = null; RWG.app.renderMain(); });
+        st.sel = null;
+        RWG.app.renderMain();   // the cache already moved; paint now, settle later
+      },
+      'tk-del': (el) => {
+        const t = T().task(el.dataset.id); if (!t) return;
+        if (!confirm('Move “' + (t.title || 'this task') + '” to the Trash?')) return;
+        T().removeTask(el.dataset.id);
+        mount().innerHTML = '';
+        RWG.app.renderMain();
+        U().toast('Moved to the Trash — restorable from there', true);
+      },
       'tk-save': (el) => {
         const title = g('tk-title').trim();
         if (!title) { U().toast('What needs doing?'); return; }
