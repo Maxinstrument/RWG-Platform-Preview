@@ -214,6 +214,11 @@ RWG.tasks = (function () {
       }
     }
 
+    // Completing a workflow step starts the clocks of the steps chained
+    // to it — "medical due 1 day after the signed application", counted
+    // from the tick, not from launch. The workflow module owns the math.
+    if (done && t.workflowId && RWG.wf && RWG.wf.rebaseChains) RWG.wf.rebaseChains(t);
+
     onChange();
     return persist(t).then(() => spawned);
   }

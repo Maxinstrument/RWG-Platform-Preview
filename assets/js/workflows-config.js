@@ -55,18 +55,20 @@ RWG.wf = (function () {
         related: 'case',
         steps: [
           // `after` chains a step to another: it cannot be checked off
-          // until the step it waits for is done. No signed application, no
-          // medical; underwriting still open, no closing presentation.
+          // until the step it waits for is done — and its dueDays count
+          // from the moment that step IS done, not from launch. Signed
+          // application ticked today, medical due tomorrow — whether the
+          // signature took two days or two weeks.
           { id: 'carrier',   title: 'Enter the application in the carrier portal — confirm in good order', owner: 'casemanager', dueDays: 1 },
-          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 3,  after: 'carrier' },
+          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 1,  after: 'carrier' },
           { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10 },
           { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21 },
-          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 24, after: 'chase-uw' },
+          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 3,  after: 'chase-uw' },
           // Premium and signature are two different clocks. The premium is
           // what pays us and is the door to Delivery Requirements; it gates
-          // the close. The signature chase lives in the Policy Delivery
-          // workflow, which starts when a partner confirms the close.
-          { id: 'premium',   title: 'Collect the initial premium — we are not paid until it is in',          owner: 'casemanager', dueDays: 28, required: true, gate: 'Closed' },
+          // the close and follows the closing meeting. The signature chase
+          // lives in Policy Delivery, which fires when a partner confirms.
+          { id: 'premium',   title: 'Collect the initial premium — we are not paid until it is in',          owner: 'casemanager', dueDays: 3,  after: 'closing', required: true, gate: 'Closed' },
           { id: 'a360',      title: 'Upload the signed policy file to A360',                                owner: 'casemanager', dueDays: 31 }
         ]
       },
@@ -118,9 +120,9 @@ RWG.wf = (function () {
         related: 'case',
         steps: [
           { id: 'send',    title: 'Send the delivery requirements to the client',                          owner: 'casemanager', dueDays: 2 },
-          { id: 'chase',   title: 'Chase the signed delivery receipt — call, do not wait',                  owner: 'casemanager', dueDays: 21, after: 'send' },
-          { id: 'receipt', title: 'Signed receipt on file, case moved to Close/Won — chargeback lands at day 90', owner: 'casemanager', dueDays: 60, after: 'send' },
-          { id: 'upload',  title: 'Upload the signed delivery receipt to A360',                             owner: 'casemanager', dueDays: 62, after: 'receipt' }
+          { id: 'chase',   title: 'Chase the signed delivery receipt — call, do not wait',                  owner: 'casemanager', dueDays: 14, after: 'send' },
+          { id: 'receipt', title: 'Signed receipt on file, case moved to Close/Won — chargeback lands at day 90', owner: 'casemanager', dueDays: 45, after: 'send' },
+          { id: 'upload',  title: 'Upload the signed delivery receipt to A360',                             owner: 'casemanager', dueDays: 2,  after: 'receipt' }
         ]
       },
       {
@@ -169,7 +171,7 @@ RWG.wf = (function () {
       (t.steps || []).forEach(st => {
         if (st.after !== undefined) return;
         const ds = dt.steps.find(x => x.id === st.id);
-        if (ds && ds.after) st.after = ds.after;
+        if (ds && ds.after) { st.after = ds.after; st.dueDays = ds.dueDays; }
       });
     });
     if (!(c.templates || []).some(t => t.id === 'policy-delivery')) {
@@ -273,12 +275,23 @@ RWG.wf = (function () {
     const wfId = tplId + '.' + ((c && c.recordId) || hhId || 'x') + '.' + Date.now();
     const key = keyFor(tpl, c, hhId);
     const rel = relatedFor(tpl, c, hhId);
+    /* A chained step's dueDays count from its prerequisite's completion,
+       unknowable at launch — so the launch date is an honest estimate
+       walked through the chain (carrier day 1, medical day 2), replaced
+       with the real clock the moment the prerequisite is ticked off. */
+    const stepById = {}; tpl.steps.forEach(x => { stepById[x.id] = x; });
+    const est = (x, seen) => {
+      seen = seen || {};
+      if (!x.after || !stepById[x.after] || seen[x.id]) return x.dueDays || 0;
+      seen[x.id] = 1;
+      return est(stepById[x.after], seen) + (x.dueDays || 0);
+    };
     tpl.steps.forEach((s, i) => {
       const who = (opts.assignees && opts.assignees[s.id]) || resolveOwner(s.owner, c);
       T().addTask({
         title: s.title, note: s.note || '',
         assigneeUid: who.uid, assigneeName: who.name,
-        dueDate: dueKey(start, s.dueDays),
+        dueDate: dueKey(start, est(s)),
         relatedType: rel.type, relatedId: rel.id, relatedLabel: rel.label,
         // A step is ABOUT the case and FOR the person. Carrying the contact
         // is what puts an underwriting step on that client's record — open
@@ -290,7 +303,8 @@ RWG.wf = (function () {
         required: !!s.required, gate: s.gate || null,
         workflowId: wfId, workflowTemplate: tplId, workflowName: tpl.name,
         workflowKey: key, workflowStep: i,
-        workflowStepId: s.id, awaitsStep: s.after || null
+        workflowStepId: s.id, awaitsStep: s.after || null,
+        chainDays: s.after ? (s.dueDays || 0) : null
       });
     });
     return { id: wfId, name: tpl.name, count: tpl.steps.length };
@@ -322,6 +336,20 @@ RWG.wf = (function () {
     const prereq = T().all().find(x =>
       x.workflowId === t.workflowId && x.workflowStepId === t.awaitsStep);
     return (prereq && prereq.status !== 'done') ? prereq : null;
+  }
+
+  /* When a step completes, every step chained to it gets its REAL due
+     date: today plus its own offset. The launch estimate dies here —
+     sign the application in four days or four weeks, the medical is due
+     one day after the tick either way. */
+  function rebaseChains(doneTask) {
+    if (!doneTask || !doneTask.workflowId || !doneTask.workflowStepId) return;
+    if (!T() || !T().isStarted()) return;
+    T().all().filter(x => x.workflowId === doneTask.workflowId
+        && x.awaitsStep === doneTask.workflowStepId && x.status !== 'done')
+      .forEach(x => {
+        T().saveTask({ id: x.id, dueDate: T().todayKey(Date.now() + (x.chainDays || 0) * dayMs) });
+      });
   }
 
   // Open required steps that hold the door to Won shut for this case.
@@ -361,7 +389,7 @@ RWG.wf = (function () {
   return {
     DEFAULTS, init,
     templates, template, resolveOwner,
-    launch, autoLaunch, hasRun, blockers, waitingOn, instancesFor,
+    launch, autoLaunch, hasRun, blockers, waitingOn, rebaseChains, instancesFor,
     current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();

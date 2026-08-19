@@ -236,7 +236,8 @@ window.RWG = window.RWG || {};
       <p class="muted" style="font-size:12px;margin:10px 2px 0">
         Owners are roles, resolved when the workflow launches — reassignable after. Due dates count
         from the launch day. <b>Required</b> steps hold the push to Won until they are checked off.
-        A <b>chained</b> step cannot be checked off until the step it waits for is done.
+        A <b>chained</b> step cannot be checked off until the step it waits for is done — and its
+        days count from the moment that step is ticked, not from launch.
         Edits here touch future launches only; checklists already running keep their course.
       </p>`;
 
