@@ -49,8 +49,9 @@ window.RWG = window.RWG || {};
         const h = hhOf(c);
         return H().contactName(c).toLowerCase().indexOf(q) >= 0
           || String(c.preferredName || '').toLowerCase().indexOf(q) >= 0
-          || String(c.email || '').toLowerCase().indexOf(q) >= 0
-          || String(c.phone || '').replace(/\D/g, '').indexOf(q.replace(/\D/g, '')) >= 0 && /\d/.test(q)
+          || H().emailsOf(c).some(w => w.v.toLowerCase().indexOf(q) >= 0)
+          || (/\d/.test(q) && H().phonesOf(c).some(w =>
+               w.v.replace(/\D/g, '').indexOf(q.replace(/\D/g, '')) >= 0))
           || String(c.employer || '').toLowerCase().indexOf(q) >= 0
           || (h && h.name.toLowerCase().indexOf(q) >= 0)
           || (c.tags || []).some(t => String(t).toLowerCase().indexOf(q) >= 0);
@@ -575,16 +576,14 @@ window.RWG = window.RWG || {};
       count != null ? ` <span class="muted" style="font-weight:400">${count}</span>` : ''}</div>${body}`;
 
     // The reason this panel exists: how to reach them, first and biggest.
-    const tel = c.phone ? String(c.phone).replace(/[^\d+]/g, '') : '';
-    const reach = (c.phone || c.email)
-      ? (c.phone ? `<div class="list-row mid"><span class="grow">
-            <span class="cell-sub" style="display:block">Phone</span>
-            <a href="tel:${esc(tel)}" style="font-size:16px;font-weight:600">${esc(fmtPhone(c.phone))}</a></span>
-          </div>` : '')
-        + (c.email ? `<div class="list-row mid"><span class="grow" style="min-width:0">
-            <span class="cell-sub" style="display:block">Email</span>
-            <a href="mailto:${esc(c.email)}" style="font-size:var(--fs-dense);word-break:break-all">${esc(c.email)}</a></span>
-          </div>` : '')
+    const phones = H().phonesOf(c), emails = H().emailsOf(c);
+    const reachRow = (label, body) => `<div class="list-row mid"><span class="grow" style="min-width:0">
+        <span class="cell-sub" style="display:block">${esc(label || 'Phone')}</span>${body}</span></div>`;
+    const reach = (phones.length || emails.length)
+      ? phones.map(w => reachRow(w.label || 'Phone',
+          `<a href="tel:${esc(w.v.replace(/[^\d+]/g, ''))}" style="font-size:16px;font-weight:600">${esc(fmtPhone(w.v))}</a>`)).join('')
+        + emails.map(w => reachRow(w.label || 'Email',
+          `<a href="mailto:${esc(w.v)}" style="font-size:var(--fs-dense);word-break:break-all">${esc(w.v)}</a>`)).join('')
       : '<p class="list-empty">No phone or email on file.</p>';
 
     const caseRows = cases.length ? cases.map(x => `<div class="list-row mid"
@@ -669,8 +668,12 @@ window.RWG = window.RWG || {};
 
   function contactHtml(c, user, ctx) {
     const h = hhOf(c);
-    const phone = c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(fmtPhone(c.phone))}</a>` : '';
-    const email = c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '';
+    // Every way to reach them, each wearing the label it was filed under.
+    const tag = (l) => l ? `<span class="cell-sub" style="margin-left:6px;font-size:11px">${esc(l)}</span>` : '';
+    const phone = H().phonesOf(c).map(w =>
+      `<div><a href="tel:${esc(w.v.replace(/[^\d+]/g, ''))}">${esc(fmtPhone(w.v))}</a>${tag(w.label)}</div>`).join('');
+    const email = H().emailsOf(c).map(w =>
+      `<div><a href="mailto:${esc(w.v)}">${esc(w.v)}</a>${tag(w.label)}</div>`).join('');
     return `
       <button class="btn btn-quiet btn-sm" data-action="ct-back" style="margin-bottom:var(--s3)">← ${esc(backLabel())}</button>
       <div class="card" style="margin-bottom:var(--panel-gap)">
@@ -898,11 +901,13 @@ window.RWG = window.RWG || {};
         if (st.scope === 'households') { exportHouseholds(); return; }
         const list = rows();
         if (!list.length) { U().toast('Nothing to export'); return; }
-        const head = ['First name', 'Last name', 'Preferred name', 'Contact type', 'Relationship', 'Phone', 'Email', 'Date of birth',
+        const head = ['First name', 'Last name', 'Preferred name', 'Contact type', 'Relationship', 'Phones', 'Emails', 'Date of birth',
           'Employer', 'Plan type', 'Years of service', 'AFC', 'Tags', 'Household', 'Advisor', 'AdvisorStream'];
         const data = list.map(c => {
           const h = hhOf(c);
-          return [c.firstName || '', c.lastName || '', c.preferredName || '', c.contactType || '', c.relationship || '', c.phone || '', c.email || '',
+          const wayList = (ws) => ws.map(w => w.v + (w.label ? ' (' + w.label + ')' : '')).join('; ');
+          return [c.firstName || '', c.lastName || '', c.preferredName || '', c.contactType || '', c.relationship || '',
+            wayList(H().phonesOf(c)), wayList(H().emailsOf(c)),
             c.dob || '', c.employer || '', c.planType || '', c.yos == null ? '' : c.yos,
             c.afc == null ? '' : c.afc, (c.tags || []).join('; '), h ? h.name : '',
             advisorOf(c) || '', c.advisorstream ? 'yes' : 'no'];

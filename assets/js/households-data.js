@@ -29,6 +29,31 @@ RWG.hh = (function () {
      what they are to their family (RELATIONSHIPS, above). A spouse can be
      a client; a client's brother can be a COI. */
   const CONTACT_TYPES = ['Client', 'Past Client', 'Prospect', 'COI'];
+  const PHONE_LABELS = ['Work', 'Home', 'Mobile', 'Fax', 'Other'];
+  const EMAIL_LABELS = ['Personal', 'Work', 'Other'];
+
+  /* People have more than one number. The record keeps LISTS —
+     phones:[{v,label}], emails:[{v,label}] — while `phone` and `email`
+     stay as mirrors of the first entry, because a dozen screens, the
+     duplicate check, the CSV and the AdvisorStream list all read those
+     two fields. Writing the mirror on save keeps every one of them
+     working without a risky sweep, and makes "the first one" mean
+     "the one we use", which is what the order in the editor is for.
+
+     Legacy rows carry only the flat fields, so reading normalises them
+     into a one-entry list — at read time, nothing written, no label
+     invented for a number nobody labelled. */
+  function normalizeWays(list, flat) {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach(w => {
+      const v = String((w && w.v) || '').trim();
+      if (v) out.push({ v: v, label: String((w && w.label) || '') });
+    });
+    if (!out.length && String(flat || '').trim()) out.push({ v: String(flat).trim(), label: '' });
+    return out;
+  }
+  const phonesOf = (c) => normalizeWays(c && c.phones, c && c.phone);
+  const emailsOf = (c) => normalizeWays(c && c.emails, c && c.email);
   // How two households connect. Stored one entry per side, so each
   // household's card can say what the other one is to it.
   const LINK_KINDS = [
@@ -96,7 +121,8 @@ RWG.hh = (function () {
   function findDupContact(phone, email, ignoreId) {
     const pk = phoneKey(phone), ek = emailKey(email);
     return cache.contacts.find(c => c.id !== ignoreId &&
-      ((pk && phoneKey(c.phone) === pk) || (ek && emailKey(c.email) === ek))) || null;
+      ((pk && phonesOf(c).some(w => phoneKey(w.v) === pk))
+        || (ek && emailsOf(c).some(w => emailKey(w.v) === ek)))) || null;
   }
 
   // ── tags ──
@@ -190,12 +216,27 @@ RWG.hh = (function () {
   }
 
   // ── contact writes ──
+  /* Keep the list and its mirror agreeing, in whichever direction the
+     caller wrote. A form that sends lists is the authority — clearing
+     every row must clear the number, not resurrect it from the mirror.
+     A caller that only knows the flat field (converting a lead, an
+     import) has its value promoted into the list instead of dropped. */
+  function syncWays(c, patch) {
+    const sent = (k) => patch && Object.prototype.hasOwnProperty.call(patch, k);
+    c.phones = sent('phones') ? normalizeWays(patch.phones, null) : normalizeWays(c.phones, c.phone);
+    c.phone = c.phones.length ? c.phones[0].v : '';
+    c.emails = sent('emails') ? normalizeWays(patch.emails, null) : normalizeWays(c.emails, c.email);
+    c.email = c.emails.length ? c.emails[0].v : '';
+    return c;
+  }
+
   function addContact(fields) {
     const ref = db().collection('contacts').doc();
     const c = Object.assign({
       id: ref.id, householdId: null, firstName: '', lastName: '',
       preferredName: '',               // what they actually go by — Bob for Robert
       contactType: '',                 // Client | Past Client | Prospect | COI
+      phones: [], emails: [],          // [{v,label}] — phone/email mirror the first
       relationship: 'Other', email: '', phone: '', dob: '', employer: '',
       planType: '', memberClass: '', yos: null, afc: null, age: null,
       tags: [],                        // free-form labels; the tag list is derived from use
@@ -206,6 +247,7 @@ RWG.hh = (function () {
       createdAt: now(), createdBy: (me && me.id) || null, updatedAt: now()
     }, fields);
     ['yos', 'afc', 'age'].forEach(k => { c[k] = (c[k] === '' || c[k] == null) ? null : Number(c[k]); });
+    syncWays(c, fields);
     cache.contacts.push(c); onChange();
     persistContact(c);
     return c;
@@ -215,6 +257,7 @@ RWG.hh = (function () {
     const c = contact(patch.id); if (!c) return;
     Object.assign(c, patch, { updatedAt: now() });
     ['yos', 'afc', 'age'].forEach(k => { if (c[k] === '' || c[k] == null) c[k] = null; else c[k] = Number(c[k]); });
+    syncWays(c, patch);
     onChange();
     return persistContact(c);
   }
@@ -432,7 +475,8 @@ RWG.hh = (function () {
   }
 
   return {
-    RELATIONSHIPS, CONTACT_TYPES, LINK_KINDS, linkLabel,
+    RELATIONSHIPS, CONTACT_TYPES, PHONE_LABELS, EMAIL_LABELS,
+    phonesOf, emailsOf, LINK_KINDS, linkLabel,
     init, teardown, isStarted,
     households, household, contacts, contact, contactsFor, primaryContact, contactName,
     callName, spokenName,

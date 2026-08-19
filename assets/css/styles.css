@@ -661,6 +661,14 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    panel opened from a page must still sit under a modal opened on top. */
 .scrim.scrim-top{z-index:165;}
 .drawer.drawer-top{z-index:170;}
+/* Phone / email stacks in the person window: the number takes the room,
+   the label rides beside it, and the ✕ never grows. */
+.way-list{display:flex;flex-direction:column;gap:6px;}
+.way-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 30px;gap:6px;align-items:center;}
+.way-row .way-v,.way-row .way-l{margin:0;padding:6px 9px;font-size:13px;}
+.way-row .way-x{padding:2px 6px;color:var(--muted);}
+.way-row .way-x:hover{color:var(--bad);}
+@media (max-width:560px){.way-row{grid-template-columns:minmax(0,1fr) 78px 28px;}}
 .modal-card.modal-sm{--modal-w:460px;}
 @keyframes modal-in{from{opacity:0;transform:translateY(-10px) scale(.985);}}
 .modal-card.leaving{

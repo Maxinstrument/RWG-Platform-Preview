@@ -61,6 +61,25 @@ window.RWG = window.RWG || {};
   }
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
+  // Row add/remove, in the DOM only — nothing else in the window moves.
+  function addWayRow(listId, kind) {
+    const box = document.getElementById(listId); if (!box) return;
+    box.insertAdjacentHTML('beforeend', lastWayRow(kind));
+    const rows = box.querySelectorAll('.way-row');
+    const last = rows[rows.length - 1];
+    const inp = last && last.querySelector('.way-v'); if (inp && inp.focus) inp.focus();
+  }
+  function dropWayRow(el, listId, kind) {
+    const row = el.closest ? el.closest('.way-row') : null;
+    const box = document.getElementById(listId);
+    if (!row || !box) return;
+    row.parentNode.removeChild(row);
+    // never leave the stack empty — an empty stack has nothing to type into
+    if (!box.querySelectorAll('.way-row').length) box.insertAdjacentHTML('beforeend', lastWayRow(kind));
+  }
+  // The row builder personModal closes over, kept reachable for add/remove.
+  let lastWayRow = () => '';
+
   function newHouseholdModal() {
     const me = RWG.auth.currentUser();
     modal('New household', 'The account a client family lives under.', `
@@ -95,10 +114,49 @@ window.RWG = window.RWG || {};
   // same fields the lead drawer knows, so a converted person looks familiar.
   // hhId null means the caller (the Contacts page) has no household in hand,
   // so the form grows a picker that can also create one on the spot.
+  /* Read a stack of way-rows back out of the DOM, in the order they sit
+     on screen — dragging aside, that order is what "first" means. */
+  function readWays(listId) {
+    const box = document.getElementById(listId);
+    if (!box || !box.querySelectorAll) return [];
+    const out = [];
+    Array.prototype.forEach.call(box.querySelectorAll('.way-row'), row => {
+      const v = row.querySelector('.way-v'), l = row.querySelector('.way-l');
+      const val = v && v.value ? String(v.value).trim() : '';
+      if (val) out.push({ v: val, label: (l && l.value) || '' });
+    });
+    return out;
+  }
+
   function personModal(hhId, c) {
     const v = (k) => c && c[k] != null ? c[k] : '';
     const relOpts = H().RELATIONSHIPS.map(r =>
       `<option ${c && c.relationship === r ? 'selected' : ''}>${r}</option>`).join('');
+    /* One row per way to reach them. Rows are added and removed straight
+       in the DOM rather than by re-rendering the window — a re-render
+       would throw away everything else half-typed in it. */
+    const wayRow = (kind, w) => {
+      const labels = kind === 'phone' ? H().PHONE_LABELS : H().EMAIL_LABELS;
+      const opts = [`<option value="">—</option>`].concat(labels.map(l =>
+        `<option value="${esc(l)}" ${w && w.label === l ? 'selected' : ''}>${esc(l)}</option>`)).join('');
+      return `<div class="way-row">
+        <input class="way-v" type="${kind === 'phone' ? 'tel' : 'email'}"
+          value="${esc((w && w.v) || '')}" placeholder="${kind === 'phone' ? '(305) 555-0132' : 'name@example.com'}">
+        <select class="way-l">${opts}</select>
+        <button type="button" class="btn btn-quiet btn-sm way-x"
+          data-action="${kind === 'phone' ? 'hh-ph-del' : 'hh-em-del'}" title="Remove this one">✕</button>
+      </div>`;
+    };
+    const waysBlock = (kind, list) => {
+      const id = kind === 'phone' ? 'p-phones' : 'p-emails';
+      const rows = (list && list.length ? list : [null]).map(w => wayRow(kind, w)).join('');
+      return `<div class="field-group"><label class="lbl">${kind === 'phone' ? 'Phone numbers' : 'Email addresses'}</label>
+        <div id="${id}" class="way-list">${rows}</div>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:7px"
+          data-action="${kind === 'phone' ? 'hh-ph-add' : 'hh-em-add'}">＋ Add ${kind === 'phone' ? 'phone' : 'email'}</button>
+        <div class="hint">The first one is the one we use — it is what shows on lists and exports.</div></div>`;
+    };
+    lastWayRow = (kind) => wayRow(kind, null);
     const typeOpts = [''].concat(H().CONTACT_TYPES).map(t =>
       `<option value="${esc(t)}" ${c && c.contactType === t ? 'selected' : ''}>${esc(t || '—')}</option>`).join('');
     const planOpts = ['', ...D().PLAN_TYPES].map(p =>
@@ -138,8 +196,8 @@ window.RWG = window.RWG || {};
         <div class="field-group"><label class="lbl">Date of birth</label><input id="p-dob" type="date" value="${esc(v('dob'))}"></div>
       </div>
       <div class="field-row">
-        <div class="field-group"><label class="lbl">Phone</label><input id="p-phone" type="tel" value="${esc(v('phone'))}"></div>
-        <div class="field-group"><label class="lbl">Email</label><input id="p-email" type="email" value="${esc(v('email'))}"></div>
+        ${waysBlock('phone', H().phonesOf(c || {}))}
+        ${waysBlock('email', H().emailsOf(c || {}))}
       </div>
       <div class="field-row">
         <div class="field-group"><label class="lbl">Contact type</label>
@@ -739,11 +797,15 @@ window.RWG = window.RWG || {};
     onInput(e) {
       if (e.target.id === 'hh-q') { st.q = e.target.value; refreshList(); }
       if (e.target.id === 'hh-convert-q') { st.convertQ = e.target.value; convertPickerModal(); const i = document.getElementById('hh-convert-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
-      if (e.target.id === 'p-phone' || e.target.id === 'p-email') {
-        const dup = H().findDupContact(g('p-phone'), g('p-email'), null);
+      // Any row in either stack can be the one that gives a duplicate away.
+      if (e.target.classList && e.target.classList.contains('way-v')) {
+        const ph = readWays('p-phones'), em = readWays('p-emails');
+        let dup = null, onPhone = false;
+        for (let i = 0; i < ph.length && !dup; i++) { dup = H().findDupContact(ph[i].v, '', null); onPhone = !!dup; }
+        for (let i = 0; i < em.length && !dup; i++) { dup = H().findDupContact('', em[i].v, null); }
         const el = document.getElementById('p-dup');
-        if (el) el.textContent = dup ? `Heads up: ${H().contactName(dup)} already has this ${phoneMatches(dup) ? 'phone' : 'email'} — same person?` : '';
-        function phoneMatches(d) { return String(d.phone || '').replace(/\D/g, '').slice(-10) === String(g('p-phone')).replace(/\D/g, '').slice(-10) && g('p-phone'); }
+        if (el) el.textContent = dup
+          ? `Heads up: ${H().contactName(dup)} already has this ${onPhone ? 'phone' : 'email'} — same person?` : '';
       }
     },
 
@@ -814,8 +876,9 @@ window.RWG = window.RWG || {};
           firstName: g('p-first').trim(), lastName: g('p-last').trim(),
           preferredName: g('p-pref').trim(),
           contactType: g('p-ctype'),
-          relationship: g('p-rel'), dob: g('p-dob'), phone: g('p-phone').trim(),
-          email: g('p-email').trim(), employer: g('p-employer').trim(),
+          relationship: g('p-rel'), dob: g('p-dob'),
+          phones: readWays('p-phones'), emails: readWays('p-emails'),
+          employer: g('p-employer').trim(),
           planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc'),
           tags: H().parseTags(g('p-tags'))
         };
@@ -857,6 +920,10 @@ window.RWG = window.RWG || {};
         RWG.app.renderMain();
         U().toast('Saved', true);
       },
+      'hh-ph-add': () => addWayRow('p-phones', 'phone'),
+      'hh-em-add': () => addWayRow('p-emails', 'email'),
+      'hh-ph-del': (el) => dropWayRow(el, 'p-phones', 'phone'),
+      'hh-em-del': (el) => dropWayRow(el, 'p-emails', 'email'),
       'hh-person-remove': (el) => {
         const c = H().contact(el.dataset.id); if (!c) return;
         if (!confirm(`Remove ${H().contactName(c)} from this household?`)) return;
