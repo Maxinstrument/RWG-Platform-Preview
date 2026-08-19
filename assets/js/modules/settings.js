@@ -177,6 +177,12 @@ window.RWG = window.RWG || {};
         <option value="advisor" ${s.owner === 'advisor' ? 'selected' : ''}>Advisor</option>
         <option value="casemanager" ${s.owner !== 'advisor' ? 'selected' : ''}>Case manager</option>
       </select>
+      <select data-set="wfstep" data-sid="${esc(s.id)}" data-sf="after" style="flex:none;width:118px;font-size:12px;padding:4px 7px"
+        title="Chained: this step cannot be checked off until the one it waits for is done">
+        <option value="" ${!s.after ? 'selected' : ''}>no chain</option>
+        ${tpl.steps.filter(x => x.id !== s.id).map(x =>
+          `<option value="${esc(x.id)}" ${s.after === x.id ? 'selected' : ''}>after: ${esc(x.title.length > 22 ? x.title.slice(0, 21) + '…' : x.title)}</option>`).join('')}
+      </select>
       <span class="cell-sub" style="flex:none;font-size:11px">day +</span>
       <input type="number" min="0" value="${esc(s.dueDays == null ? 0 : s.dueDays)}" data-set="wfstep" data-sid="${esc(s.id)}" data-sf="dueDays"
         style="flex:none;width:52px;font-size:12.5px;padding:4px 6px;text-align:right">
@@ -230,6 +236,7 @@ window.RWG = window.RWG || {};
       <p class="muted" style="font-size:12px;margin:10px 2px 0">
         Owners are roles, resolved when the workflow launches — reassignable after. Due dates count
         from the launch day. <b>Required</b> steps hold the push to Won until they are checked off.
+        A <b>chained</b> step cannot be checked off until the step it waits for is done.
         Edits here touch future launches only; checklists already running keep their course.
       </p>`;
 
@@ -459,6 +466,16 @@ window.RWG = window.RWG || {};
       if (el.dataset.sf === 'required') {
         s.required = !!el.checked;
         if (s.required) s.gate = 'Closed'; else delete s.gate;
+      }
+      if (el.dataset.sf === 'after') {
+        // A chain may not loop back on itself — walk it before accepting.
+        let p = el.value, loops = false, hops = 0;
+        while (p && hops++ < 50) {
+          if (p === s.id) { loops = true; break; }
+          p = (tpl.steps.find(x => x.id === p) || {}).after;
+        }
+        if (loops) { RWG.ui.toast('That would chain the step to itself — pick another'); el.value = s.after || ''; return; }
+        s.after = el.value || null;
       }
       markDirty('w');
     }

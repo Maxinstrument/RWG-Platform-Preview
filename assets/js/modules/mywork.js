@@ -219,6 +219,9 @@ window.RWG = window.RWG || {};
           ${t.kind === 'service' ? `<span class="chip" style="font-size:10.5px;background:rgba(62,92,130,.10);color:#3E5C82;border:1px solid rgba(62,92,130,.35)">${U().icon('service','ic-inline')} ${esc(t.serviceType || 'Service')}</span>` : ''}
           ${t.kind === 'service' && t.waiting && t.status !== 'done' ? '<span class="chip tier-medium" style="font-size:10.5px">⏸ waiting</span>' : ''}
           ${t.required ? '<span class="chip tier-medium" style="font-size:10.5px" title="A required step — the case cannot be pushed to Won until this is done">required</span>' : ''}
+          ${(() => { const b = t.status !== 'done' && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
+            return b ? `<span class="chip" style="font-size:10.5px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)"
+              title="Chained: this step opens when “${esc(b.title)}” is checked off">⛓ after: ${esc(b.title.length > 34 ? b.title.slice(0, 33) + '…' : b.title)}</span>` : ''; })()}
           ${t.repeat && t.repeat !== 'none' ? '<span class="cell-sub" style="font-size:11px" title="Repeats">↻</span>' : ''}
           ${priorityFlag(t)}
           ${showAssignee ? `<span class="pill-soft" style="font-size:11px">${esc((t.assigneeName || '').split(' ')[0])}</span>` : ''}
@@ -544,6 +547,12 @@ window.RWG = window.RWG || {};
       },
       'tk-done': (el) => {
         const t = T().task(el.dataset.id);
+        // A chained step stays shut until the one it waits for is done —
+        // no CMI without a signed application. Un-ticking is always free.
+        if (t && t.status !== 'done' && RWG.wf && RWG.wf.waitingOn) {
+          const b = RWG.wf.waitingOn(t);
+          if (b) { U().toast('First: ' + (b.title || 'the step before it')); RWG.app.renderMain(); return; }
+        }
         const willRepeat = !!(t && t.repeat && t.repeat !== 'none' && t.status !== 'done' && !t.spawnedNext);
         const p = T().toggleDone(el.dataset.id);
         RWG.app.renderMain();   // the cache already moved; paint now, confirm later

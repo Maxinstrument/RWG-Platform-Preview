@@ -54,11 +54,14 @@ RWG.wf = (function () {
         trigger: { bucket: 'Submitted', products: ['wl', 'term', 'di', 'ltc'] },
         related: 'case',
         steps: [
+          // `after` chains a step to another: it cannot be checked off
+          // until the step it waits for is done. No signed application, no
+          // medical; underwriting still open, no closing presentation.
           { id: 'carrier',   title: 'Enter the application in the carrier portal — confirm in good order', owner: 'casemanager', dueDays: 1 },
-          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 3 },
+          { id: 'medical',   title: 'Order and schedule the medical exam',                                  owner: 'casemanager', dueDays: 3,  after: 'carrier' },
           { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10 },
           { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21 },
-          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 24 },
+          { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 24, after: 'chase-uw' },
           // Premium and signature are two different clocks. The premium is
           // what pays us and is the door to Delivery Requirements; it gates
           // the close. The signature chase lives in the Policy Delivery
@@ -115,8 +118,9 @@ RWG.wf = (function () {
         related: 'case',
         steps: [
           { id: 'send',    title: 'Send the delivery requirements to the client',                          owner: 'casemanager', dueDays: 2 },
-          { id: 'chase',   title: 'Chase the signed delivery receipt — call, do not wait',                  owner: 'casemanager', dueDays: 21 },
-          { id: 'receipt', title: 'Signed receipt on file, case moved to Close/Won — chargeback lands at day 90', owner: 'casemanager', dueDays: 60 }
+          { id: 'chase',   title: 'Chase the signed delivery receipt — call, do not wait',                  owner: 'casemanager', dueDays: 21, after: 'send' },
+          { id: 'receipt', title: 'Signed receipt on file, case moved to Close/Won — chargeback lands at day 90', owner: 'casemanager', dueDays: 60, after: 'send' },
+          { id: 'upload',  title: 'Upload the signed delivery receipt to A360',                             owner: 'casemanager', dueDays: 62, after: 'receipt' }
         ]
       },
       {
@@ -158,6 +162,15 @@ RWG.wf = (function () {
         st.id = 'premium';
         st.title = 'Collect the initial premium — we are not paid until it is in';
       }
+    });
+    (c.templates || []).forEach(t => {
+      const dt = DEFAULTS.templates.find(x => x.id === t.id);
+      if (!dt) return;
+      (t.steps || []).forEach(st => {
+        if (st.after !== undefined) return;
+        const ds = dt.steps.find(x => x.id === st.id);
+        if (ds && ds.after) st.after = ds.after;
+      });
     });
     if (!(c.templates || []).some(t => t.id === 'policy-delivery')) {
       const tpl = DEFAULTS.templates.find(t => t.id === 'policy-delivery');
@@ -276,7 +289,8 @@ RWG.wf = (function () {
         clientName: (c && c.clientName) || '',
         required: !!s.required, gate: s.gate || null,
         workflowId: wfId, workflowTemplate: tplId, workflowName: tpl.name,
-        workflowKey: key, workflowStep: i
+        workflowKey: key, workflowStep: i,
+        workflowStepId: s.id, awaitsStep: s.after || null
       });
     });
     return { id: wfId, name: tpl.name, count: tpl.steps.length };
@@ -298,6 +312,16 @@ RWG.wf = (function () {
       if (launch(tpl.id, { caseRecord: c })) started.push(tpl.name);
     });
     return started;
+  }
+
+  /* The chain, asked from the task side: the sibling step this one waits
+     for, or null when it is free to be done. A prerequisite that was
+     deleted or never launched does not hold anything hostage. */
+  function waitingOn(t) {
+    if (!t || !t.awaitsStep || !t.workflowId || !T() || !T().isStarted()) return null;
+    const prereq = T().all().find(x =>
+      x.workflowId === t.workflowId && x.workflowStepId === t.awaitsStep);
+    return (prereq && prereq.status !== 'done') ? prereq : null;
   }
 
   // Open required steps that hold the door to Won shut for this case.
@@ -337,7 +361,7 @@ RWG.wf = (function () {
   return {
     DEFAULTS, init,
     templates, template, resolveOwner,
-    launch, autoLaunch, hasRun, blockers, instancesFor,
+    launch, autoLaunch, hasRun, blockers, waitingOn, instancesFor,
     current: () => cfg   // the whole live config, for the settings editor's draft
   };
 })();
