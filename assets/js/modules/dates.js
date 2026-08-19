@@ -153,7 +153,18 @@ window.RWG = window.RWG || {};
   function remind(e) {
     const t = T();
     if (!t.isStarted()) t.init(RWG.auth.currentUser(), RWG.app.renderMain);
-    if (t.open().some(x => x.title === e.remindTitle)) { U().toast('Already on the list'); return; }
+    /* Already made. The dedupe looks across the WHOLE firm's open tasks,
+       not just yours — a birthday reminder belongs to the household's
+       advisor, who is often somebody else. "Already on the list" then sent
+       people hunting through their own Tasks for something that was never
+       going to be there, so say whose list it is on and when it is due. */
+    const dupe = t.open().find(x => x.title === e.remindTitle);
+    if (dupe) {
+      const who = dupe.assigneeName ? dupe.assigneeName.split(' ')[0] + '’s' : 'someone’s';
+      U().toast('Already made — it is on ' + who + ' Tasks'
+        + (dupe.dueDate ? ', due ' + dupe.dueDate : '') + '.');
+      return;
+    }
     const me = RWG.auth.currentUser();
     const hh = e.hhId && H().isStarted() ? H().household(e.hhId) : null;
     const due = Math.max(e.when.getTime() - 3 * dayMs, Date.now());
