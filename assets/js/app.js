@@ -1220,8 +1220,24 @@ RWG.app = (function () {
         if (box) { e.preventDefault(); box.focus(); box.select(); }
       }
     });
-    // a fixed popover can't follow a scroll, so close it instead
-    window.addEventListener('scroll', () => document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true), true);
+    /* A fixed popover during a scroll. Two very different scrolls arrive
+       here: the wheel turning INSIDE the panel's own value list (that is
+       just the list scrolling - leave the menu alone), and the page or
+       table scrolling UNDER the panel (which would leave it floating
+       detached, so it follows its trigger button instead, and only closes
+       once the button itself leaves the viewport). */
+    window.addEventListener('scroll', (e) => {
+      const t = e.target;
+      if (t && t.nodeType === 1 && t.closest('.pop-panel')) return;
+      document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => {
+        const btn = p.parentElement && p.parentElement.querySelector('[data-action="popmenu"]');
+        if (!btn) { p.hidden = true; return; }
+        const r = btn.getBoundingClientRect();
+        const gone = r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth;
+        if (gone) { p.hidden = true; return; }
+        positionPanel(btn, p);
+      });
+    }, true);
 
     // ── drag & drop: move lead cards between pipeline columns (My Board) ──
     document.addEventListener('dragstart', e => {
