@@ -312,7 +312,10 @@ window.RWG = window.RWG || {};
               ${bookLive ? U().pickerHtml({ id: 'op2-rel', type: relType, recordId: relId, disabled: !editable,
                 placeholder: 'Search a contact or household…' })
                 : `<input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
-              ${hh ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button></div>` : ''}
+              ${ctc
+                ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-ctc" data-id="${esc(ctcId)}">View contact</button></div>`
+                : hh
+                  ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button></div>` : ''}
               <div class="hint">${bookLive
                 ? 'Who this is for. Naming the contact is what puts the opportunity — and its tasks — on their record; name the household when it is the family’s rather than one member’s. Not in the book yet? Type the name and make it here.'
                 : 'The book is still loading — type the client name for now.'}</div></div>
@@ -700,6 +703,16 @@ window.RWG = window.RWG || {};
         const pm = RWG.modules.get('pipeline');
         if (pm && el.dataset.pl) pm.state.pl = el.dataset.pl;
         RWG.app.nav('pipeline');
+      },
+      /* Through to the person this opportunity is for. The contact is the
+         anchor, so that is the record worth one click; an opportunity
+         written against a household with no contact keeps the household
+         button below rather than losing its way through to the book. */
+      'cs-view-ctc': (el) => {
+        const m1 = document.getElementById('modal-mount'); if (m1) m1.innerHTML = '';
+        const m2 = document.getElementById('modal-mount-2'); if (m2) m2.innerHTML = '';
+        const cm = RWG.modules.get('contacts');
+        if (cm) cm.actions['ct-open'](el, null);
       },
       'cs-view-hh': (el) => {
         document.getElementById('modal-mount').innerHTML = '';
