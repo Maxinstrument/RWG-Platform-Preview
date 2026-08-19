@@ -280,26 +280,56 @@ window.RWG = window.RWG || {};
     return funnelReach(c, cols);
   }
   /* The pool the funnel is drawn from, factored out so the chart and the
-     drill-down can never disagree: both read the same model. */
+     drill-down can never disagree: both read the same model.
+
+     TWO pools, because this card asks two questions that want different
+     denominators — and answering both from one pool is what hid three
+     funded cases from Delivery Requirements in August '26:
+
+       LIVE  · where work is sitting right now. Period-independent: a case
+               opened in June and stuck since is exactly the pile-up this
+               card exists to surface, and hiding it under "this week" made
+               the bars lie. The one exception is finished business — the
+               final Won stage is not work sitting anywhere, so it counts
+               what CLOSED in the period, the same basis as the leaderboard
+               and the weekly pace row.
+       COHORT· of everything OPENED in the period, how far it got. A close
+               rate is only meaningful against a fixed group, so this keeps
+               the opened-week filter, and the footer names it out loud. */
   function funnelModel(plId) {
     const pl = (plId && P().pipeline(plId)) || P().pipelines()[0];
     const cols = P().boardStages(pl);
     const start = periodStartKey();
-    const pool = SD().cases().filter(c =>
-      P().pipelineForProduct(c.product).id === pl.id && (!start || (c.openedWeek || '') >= start));
-    const reach = pool.map(c => ({ c, i: funnelReach(c, cols), p: funnelSpot(c, cols) }));
+    const onTrack = SD().cases().filter(c => P().pipelineForProduct(c.product).id === pl.id);
+    const inPeriod = (stamp) => !start || (!!stamp && SC().weekEndingFor(stamp) >= start);
+
+    // ── the cohort: close rate only ──
+    const pool = onTrack.filter(c => !start || (c.openedWeek || '') >= start);
+    const cohortReach = pool.map(c => funnelReach(c, cols));
     // reached[i]: got at least this far — that is what a funnel measures, and
     // it is why one case appears on several bars.
-    // here[i]:    is sitting there NOW. A case rests in exactly one stage, so
-    //             these add up to the live pipeline and never double-count.
-    const live = (r) => r.c.state !== 'Lost';
-    const reached = cols.map((s, i) => reach.filter(r => r.i >= i).length);   // close rate only
-    const at = cols.map((s, i) => reach.filter(r => r.p === i && live(r)).map(r => r.c));
+    const reached = cols.map((s, i) => cohortReach.filter(x => x >= i).length);
+
+    // ── the live book: where every case is sitting NOW ──
+    // finalIdx is the resting place of finished business (Close / Won).
+    // Delivery Requirements is a Closed stage too, but the receipt is still
+    // outstanding there — that is live work, and it stays on the board.
+    const finalIdx = cols.length && cols[cols.length - 1].bucket === 'Closed' ? cols.length - 1 : -1;
+    const spot = onTrack.filter(c => c.state !== 'Lost').map(c => ({ c, p: funnelSpot(c, cols) }));
+    // here[i]: a case rests in exactly one stage, so these add up to the
+    //          live pipeline and never double-count.
+    const at = cols.map((s, i) => spot
+      .filter(r => r.p === i && (i !== finalIdx || inPeriod(r.c.closedAt)))
+      .map(r => r.c));
     const here = at.map(list => list.length);
     const hereMoney = at.map(list => list.reduce((n, c) => n + headlineMoney(c), 0));
     const oldest = at.map(list => list.reduce((n, c) => Math.max(n, stuckDays(c)), 0));
-    const lost = reach.filter(r => !live(r)).map(r => r.c);
-    // at[] + lost is the whole pool, with nothing counted twice.
+    // Lost is a completion too, not a pile: scoped to what was lost in the
+    // period (falling back to its opened week on old rows with no stamp).
+    const lost = onTrack.filter(c => c.state === 'Lost'
+      && (c.lostAt ? inPeriod(c.lostAt) : (!start || (c.openedWeek || '') >= start)));
+    // at[] + lost is the whole live book, with nothing counted twice.
+    const reach = spot;   // kept for callers that only read .c
 
     // The bottleneck: the fullest stage, ties broken by whoever has been
     // waiting longest. Closed business is not a jam, so Won never wins.
@@ -308,7 +338,7 @@ window.RWG = window.RWG || {};
       if (s.bucket === 'Closed' || !here[i]) return;
       if (jam < 0 || here[i] > here[jam] || (here[i] === here[jam] && oldest[i] > oldest[jam])) jam = i;
     });
-    return { pl, cols, pool, reach, reached, at, here, hereMoney, oldest, lost, jam };
+    return { pl, cols, pool, reach, reached, at, here, hereMoney, oldest, lost, jam, finalIdx };
   }
 
   /* One question, asked the way it gets asked at the Monday meeting:
@@ -322,9 +352,10 @@ window.RWG = window.RWG || {};
   function funnelCard(plId) {
     const m = funnelModel(plId);
     const cols = m.cols;
-    if (!m.pool.length) return `<div class="card flush fn-card">
+    const anyLive = m.here.reduce((n, x) => n + x, 0) + m.lost.length;
+    if (!anyLive && !m.pool.length) return `<div class="card flush fn-card">
       <div class="list-head"><span class="t">${esc(m.pl.name)}</span><span class="s">quiet</span></div>
-      <p class="list-empty" style="margin:auto 0">Nothing opened ${esc(PERIOD_LABEL[st.period])} on this track.</p>
+      <p class="list-empty" style="margin:auto 0">Nothing open on this track, and nothing opened ${esc(PERIOD_LABEL[st.period])}.</p>
     </div>`;
 
     const base = Math.max.apply(null, m.here.concat([1]));
@@ -377,14 +408,21 @@ window.RWG = window.RWG || {};
           m.hereMoney[jam] ? ' · ' + fmtMoney(m.hereMoney[jam]) : ''}</span>
       </div>` : '';
 
+    // The close rate reads the cohort, and says so — '25% of 4 closed' with
+    // no denominator named is the line that made the bars look wrong.
     const wonPct = m.reached[0] ? Math.round(100 * m.reached[m.reached.length - 1] / m.reached[0]) : 0;
-    const live = m.here.reduce((n, x) => n + x, 0);
+    // 'In play' is outstanding work: everything on the board plus the
+    // delivery receipts still owed. Finished business is not in play.
+    const inPlay = m.here.reduce((n, x, i) => i === m.finalIdx ? n : n + x, 0);
     return `<div class="card flush fn-card">
       <div class="list-head"><span class="t">${esc(m.pl.name)}</span>
-        <span class="s">${live} in play</span></div>
+        <span class="s">${inPlay} in play</span></div>
       ${banner}
       <div class="fn-body">${rows}${lostRow}</div>
-      <div class="fn-foot"><b>${wonPct}%</b> of ${m.reached[0]} closed</div>
+      <div class="fn-foot" title="Bars show where every case is sitting right now. This line is a cohort: of what was opened ${esc(PERIOD_LABEL[st.period])}, how much has closed.">${
+        m.reached[0]
+          ? `<b>${wonPct}%</b> of ${m.reached[0]} opened ${esc(PERIOD_LABEL[st.period])} closed`
+          : `nothing opened ${esc(PERIOD_LABEL[st.period])}`}</div>
     </div>`;
   }
 
@@ -947,7 +985,7 @@ window.RWG = window.RWG || {};
 
         const m = funnelModel(el.dataset.pl);
         if (kind === 'fn-lost') {
-          openDrill(m.pl.name + ' · lost', 'opened ' + sinceLabel(), m.lost,
+          openDrill(m.pl.name + ' · lost', 'lost ' + sinceLabel(), m.lost,
             'These left the board. Each row carries the reason it was marked lost.');
           return;
         }
@@ -958,8 +996,11 @@ window.RWG = window.RWG || {};
           // is the conversation, not the bottom.
           const list = m.at[i].slice().sort((a, b) => stuckDays(b) - stuckDays(a));
           openDrill(m.pl.name + ' · ' + s.label,
-            list.length + (list.length === 1 ? ' opportunity' : ' opportunities'), list,
-            'Everything parked in this stage right now, longest wait first. A case sits in one stage only, so nothing here is counted twice.');
+            list.length + (list.length === 1 ? ' opportunity' : ' opportunities')
+              + (i === m.finalIdx ? ' · closed ' + PERIOD_LABEL[st.period] : ''), list,
+            i === m.finalIdx
+              ? 'Confirmed closes ' + PERIOD_LABEL[st.period] + ', longest first.'
+              : 'Everything parked in this stage right now, whenever it was opened, longest wait first. A case sits in one stage only, so nothing here is counted twice.');
         }
       },
       'hm-drill-export': () => {
