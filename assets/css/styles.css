@@ -526,8 +526,11 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* ============================================================
    Kanban board
    ============================================================ */
-.board{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 14px;align-items:flex-start;}
-.board-col{flex:0 0 290px;background:rgba(14,36,64,.035);border:1px solid var(--line);border-radius:13px;display:flex;flex-direction:column;max-height:calc(100vh - 220px);}
+/* stretch, not flex-start: every column stands as tall as the tallest, so
+   the whole column strip is a drop target — not just the header of a
+   near-empty one. The floor keeps even an empty board droppable. */
+.board{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 14px;align-items:stretch;}
+.board-col{flex:0 0 290px;background:rgba(14,36,64,.035);border:1px solid var(--line);border-radius:13px;display:flex;flex-direction:column;min-height:280px;max-height:calc(100vh - 220px);}
 .board-col-head{padding:12px var(--pad-cell);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);position:sticky;top:0;}
 .board-col-head .ttl{font-weight:700;font-size:13px;}
 .board-col-head .cnt{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:11.5px;font-weight:700;padding:1px 9px;color:var(--muted);}

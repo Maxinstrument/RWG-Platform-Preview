@@ -232,11 +232,29 @@ window.RWG = window.RWG || {};
     try { e.dataTransfer.setData('text/plain', dragId); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
   });
   document.addEventListener('dragend', () => { dragId = null; clearHighlights(); });
+  /* Where a drop lands. closest() answers when the pointer is over a
+     column; the fallback answers for the dead space between and below
+     short columns — still inside the board, still clearly "this column"
+     to the person holding the card, so it resolves by the pointer's X.
+     Above or below the board entirely stays a non-drop. */
+  function colUnder(e, t) {
+    const direct = t && t.closest('.board-col[data-plstage]');
+    if (direct) return direct;
+    const cols = document.querySelectorAll('.board-col[data-plstage]');
+    for (let i = 0; i < cols.length; i++) {
+      const r = cols[i].getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right) continue;
+      const b = cols[i].closest('.board');
+      const br = b ? b.getBoundingClientRect() : r;
+      return (e.clientY >= br.top && e.clientY <= br.bottom + 30) ? cols[i] : null;
+    }
+    return null;
+  }
   document.addEventListener('dragover', e => {
     if (!dragId) return;
     const t = (e.target && e.target.nodeType === 1) ? e.target : e.target && e.target.parentElement;
-    const col = t && t.closest('.board-col[data-plstage]');
-    if (!col) return;
+    const col = colUnder(e, t);
+    if (!col) { clearHighlights(); return; }
     e.preventDefault();
     try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
     clearHighlights();
@@ -245,7 +263,7 @@ window.RWG = window.RWG || {};
   document.addEventListener('drop', e => {
     if (!dragId) return;
     const t = (e.target && e.target.nodeType === 1) ? e.target : e.target && e.target.parentElement;
-    const col = t && t.closest('.board-col[data-plstage]');
+    const col = colUnder(e, t);
     const id = dragId; dragId = null; clearHighlights();
     if (!col) return;
     e.preventDefault();

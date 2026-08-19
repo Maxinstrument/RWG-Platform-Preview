@@ -310,7 +310,31 @@ RWG.app = (function () {
       ? mod.render(state.view, user, ctx)
       : `<div class="empty" style="padding:60px 16px"><div class="ec">🧭</div><h3>Nothing here yet</h3><p>Choose an area from the menu.</p></div>`;
     const c = $('#main-content');
-    if (c) { c.innerHTML = html; c.scrollTop = 0; }
+    if (c) {
+      /* A repaint is not a navigation. Only landing on a DIFFERENT view
+         resets the scroll; a same-view repaint (a card moved, a task
+         ticked, a Firestore ack) puts the reader back exactly where they
+         were — page, board strip, and each column's own scroll. */
+      const same = state._painted === state.view;
+      const keep = { top: same ? c.scrollTop : 0, boards: [], cols: {} };
+      if (same) {
+        c.querySelectorAll('.board').forEach((b, i) => { keep.boards[i] = b.scrollLeft || 0; });
+        c.querySelectorAll('.board-col-body').forEach(b => {
+          const col = b.closest('.board-col');
+          const k = col && (col.dataset.plstage || col.dataset.stage);
+          if (k && b.scrollTop) keep.cols[k] = b.scrollTop;
+        });
+      }
+      c.innerHTML = html;
+      c.scrollTop = keep.top;
+      c.querySelectorAll('.board').forEach((b, i) => { if (keep.boards[i]) b.scrollLeft = keep.boards[i]; });
+      c.querySelectorAll('.board-col-body').forEach(b => {
+        const col = b.closest('.board-col');
+        const k = col && (col.dataset.plstage || col.dataset.stage);
+        if (k && keep.cols[k]) b.scrollTop = keep.cols[k];
+      });
+      state._painted = state.view;
+    }
     if (mod && mod.onEnter) mod.onEnter(state.view, ctx);
 
     // ── Legacy Leads wiring. Only reachable while the Leads module is enabled. ──
