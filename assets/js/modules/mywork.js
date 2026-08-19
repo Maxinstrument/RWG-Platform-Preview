@@ -138,6 +138,8 @@ window.RWG = window.RWG || {};
             ${U().pickerHtml({ id: 'tk-rel', type: relType, recordId: relId,
               placeholder: 'Search a contact, opportunity or household…' })}
             <input type="hidden" id="tk-relcontact" value="${esc(v('contactId', '') || '')}">
+            <div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="tk-view-ctc"
+              title="Look up their phone and email beside this window — you keep everything you have typed">View contact</button></div>
             <div class="hint">Who or what this is for. Not in the book yet? Type the name and
               make it from the same box. It stays attached after the task is done, so it shows
               in that record's history.</div></div>
@@ -571,6 +573,15 @@ window.RWG = window.RWG || {};
         if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast(el.dataset.id ? 'Saved' : 'Task added — it is on ' + (fields.assigneeName || 'their') + "'s list", true);
+      },
+      /* The person this task is about, beside the window instead of
+         instead of it. Read from the picker at CLICK time, not at render
+         time, so it follows whatever is in the box right now — including
+         a record chosen a second ago on a task that has never been saved. */
+      'tk-view-ctc': () => {
+        const v = U().pickerValue ? U().pickerValue('tk-rel') : null;
+        if (!v || !v.id) { U().toast('Pick who this is for first'); return; }
+        if (RWG.contactPanel) RWG.contactPanel(v.type, v.id);
       },
       'tk-done': (el) => {
         const t = T().task(el.dataset.id);

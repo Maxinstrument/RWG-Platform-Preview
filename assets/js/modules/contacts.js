@@ -550,6 +550,123 @@ window.RWG = window.RWG || {};
     return (m && m.t) || 'Back';
   }
 
+  /* ── the contact as a side panel ──────────────────────────
+     Raised beside whatever you were doing rather than instead of it: the
+     number you need to dial is three lines of data, and going to fetch it
+     used to cost you the task or opportunity you were in the middle of
+     writing. Read-only on purpose — this is a lookup, not an edit.
+
+     `over` lifts it above an open modal. It is not the default because a
+     panel raised from a page must still sit UNDER a modal opened on top
+     of it (converting a lead, for one), and z-index is not reversible
+     after the fact. */
+  function contactPanelHtml(c, over) {
+    const h = hhOf(c);
+    const adv = advisorOf(c);
+    const sd = RWG.scorecardData, sc = RWG.scorecard;
+    const cases = (sd && sd.isStarted())
+      ? sd.cases().filter(x => x.contactId === c.id || (h && x.householdId === h.id && !x.contactId))
+          .sort((a, b) => String(b.openedWeek || '').localeCompare(String(a.openedWeek || '')))
+      : [];
+    const line = (label, value) => `<div class="list-row mid"><span class="grow">
+        <span class="cell-sub" style="display:block">${esc(label)}</span>
+        <span style="font-size:var(--fs-dense);color:var(--ink)">${value}</span></span></div>`;
+    const block = (title, count, body) => `<div class="section-title">${esc(title)}${
+      count != null ? ` <span class="muted" style="font-weight:400">${count}</span>` : ''}</div>${body}`;
+
+    // The reason this panel exists: how to reach them, first and biggest.
+    const tel = c.phone ? String(c.phone).replace(/[^\d+]/g, '') : '';
+    const reach = (c.phone || c.email)
+      ? (c.phone ? `<div class="list-row mid"><span class="grow">
+            <span class="cell-sub" style="display:block">Phone</span>
+            <a href="tel:${esc(tel)}" style="font-size:16px;font-weight:600">${esc(fmtPhone(c.phone))}</a></span>
+          </div>` : '')
+        + (c.email ? `<div class="list-row mid"><span class="grow" style="min-width:0">
+            <span class="cell-sub" style="display:block">Email</span>
+            <a href="mailto:${esc(c.email)}" style="font-size:var(--fs-dense);word-break:break-all">${esc(c.email)}</a></span>
+          </div>` : '')
+      : '<p class="list-empty">No phone or email on file.</p>';
+
+    const caseRows = cases.length ? cases.map(x => `<div class="list-row mid"
+        style="cursor:pointer" data-action="cs-open" data-id="${esc(x.recordId)}">
+        <span class="grow" style="min-width:0">
+          <span style="font-size:var(--fs-dense);color:var(--navy);font-weight:600">${esc(x.title || (sc ? sc.productName(x.product) : ''))}</span>
+          <span class="cell-sub" style="display:block">${esc(sc ? sc.productName(x.product) : '')}${x.closedAt ? ' · closed' : (x.state ? ' · ' + esc(x.state) : '')}</span>
+        </span></div>`).join('')
+      : '<p class="list-empty">Nothing open for this person.</p>';
+
+    const tags = (c.tags || []).length
+      ? `<div class="tag-row" style="padding:var(--pad-cell);display:flex;flex-wrap:wrap;gap:7px">${
+          (c.tags || []).map(t => `<span class="pill-soft">${esc(t)}</span>`).join('')}</div>` : '';
+
+    return `
+      <div class="scrim${over ? ' scrim-top' : ''}" data-action="close-drawer"></div>
+      <aside class="drawer${over ? ' drawer-top' : ''}" role="dialog" aria-label="${esc(fullName(c))}">
+        <div class="drawer-head">
+          <div class="dh-top">
+            <div style="min-width:0">
+              <div class="tag-row mb-8">${c.contactType
+                ? `<span class="chip tier-high">${esc(c.contactType)}</span>`
+                : `<span class="chip tier-low">${U().icon('person', 'ic-inline')} Contact</span>`}</div>
+              <h2>${esc(fullName(c))}</h2>
+              <div class="dh-sub">${esc([
+                c.preferredName && c.preferredName.trim() !== (c.firstName || '').trim() ? 'Goes by ' + c.preferredName : '',
+                [c.title, c.employer].filter(Boolean).join(' at '),
+                c.relationship || ''
+              ].filter(Boolean).join(' · ') || 'No details on file')}</div>
+            </div>
+            <div class="flex" style="gap:8px;flex:none">
+              <button class="drawer-edit" data-action="ct-panel-open" data-id="${esc(c.id)}"
+                title="Leave this window and open the full record">Open →</button>
+              <button class="drawer-close" data-action="close-drawer" aria-label="Close">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-body">
+          ${block('Reach them', null, reach)}
+          ${block('Opportunities', cases.length, caseRows)}
+          ${block('Details', null,
+            line('Household', h ? `<button class="btn-link" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')
+            + line('Advisor', esc(adv || '—'))
+            + line('Contact type', esc(c.contactType || '—'))
+            + line('Relationship', esc(c.relationship || '—'))
+            + line('Date of birth', esc(c.dob ? U().fmtDate(c.dob) : '—')))}
+          ${tags ? block('Tags', null, tags) : ''}
+          ${c.notes ? block('Notes', null, `<div class="hm-note-body" style="padding:var(--pad-cell)">${U().noteHtml(c.notes)}</div>`) : ''}
+        </div>
+      </aside>`;
+  }
+
+  /* Everything that offers "View contact" resolves the person the same
+     way: the contact on the record, else the household's primary client.
+     Most of the migrated book is pointed at a household, so without the
+     fallback the button would be missing exactly where it is needed. */
+  function contactFor(kind, id) {
+    if (!H().isStarted()) return null;
+    if (kind === 'contact') return H().contact(id);
+    if (kind === 'household') return H().primaryContact(id);
+    if (kind === 'case') {
+      const sd = RWG.scorecardData;
+      const x = sd && sd.isStarted() ? sd.caseById(id) : null;
+      if (!x) return null;
+      return (x.contactId && H().contact(x.contactId))
+        || (x.householdId && H().primaryContact(x.householdId)) || null;
+    }
+    return null;
+  }
+  // One door, so a panel raised from a task and one raised from an
+  // opportunity are the same panel with the same behaviour.
+  RWG.contactPanel = function (kind, id) {
+    const c = contactFor(kind, id);
+    if (!c) { U().toast('No contact on this record yet'); return false; }
+    if (!RWG.app.openPanel) { RWG.app.nav('contact'); return false; }
+    const m1 = document.getElementById('modal-mount');
+    const m2 = document.getElementById('modal-mount-2');
+    const over = !!((m1 && m1.firstElementChild) || (m2 && m2.firstElementChild));
+    RWG.app.openPanel(contactPanelHtml(c, over));
+    return true;
+  };
+
   function contactHtml(c, user, ctx) {
     const h = hhOf(c);
     const phone = c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(fmtPhone(c.phone))}</a>` : '';
@@ -741,6 +858,14 @@ window.RWG = window.RWG || {};
         st.tab = 'note';
         const m = document.getElementById('modal-mount'); if (m) m.innerHTML = '';
         RWG.app.nav('contact');
+      },
+      // Raise the panel from anywhere: a task, an opportunity, a list row.
+      'ct-panel': (el) => { RWG.contactPanel(el.dataset.kind || 'contact', el.dataset.id); },
+      // ...and leave for the full record when the lookup is not enough.
+      'ct-panel-open': (el) => {
+        const m2 = document.getElementById('modal-mount-2'); if (m2) m2.innerHTML = '';
+        const own = RWG.modules.get('contacts');
+        if (own) own.actions['ct-open'](el, null);
       },
       'ct-back': () => {
         const to = backView() || 'contacts';

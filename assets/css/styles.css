@@ -656,6 +656,11 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
    Its scrim dims the window below; its card sits above everything. */
 #modal-mount-2 .scrim{z-index:150;}
 #modal-mount-2 .modal-card{z-index:160;}
+/* A side panel raised OVER a modal — the contact looked up from inside a
+   task or opportunity window. Only this variant outranks the modal: a
+   panel opened from a page must still sit under a modal opened on top. */
+.scrim.scrim-top{z-index:165;}
+.drawer.drawer-top{z-index:170;}
 .modal-card.modal-sm{--modal-w:460px;}
 @keyframes modal-in{from{opacity:0;transform:translateY(-10px) scale(.985);}}
 .modal-card.leaving{

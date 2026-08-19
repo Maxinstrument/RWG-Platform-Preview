@@ -1211,7 +1211,12 @@ RWG.app = (function () {
     });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        closeDrawer(); closeModal(); closeOmni(); closeUserMenu();
+        // Peel one layer. A contact panel raised over a task window is the
+        // top thing on screen; Escape should put the number away and leave
+        // you in the window you were typing in.
+        const dm = $('#drawer-mount');
+        if (dm && dm.firstElementChild) { closeDrawer(); return; }
+        closeModal(); closeOmni(); closeUserMenu();
         document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true);
       }
       // ⌘K / Ctrl-K puts the cursor in the search box from anywhere.

@@ -321,7 +321,7 @@ window.RWG = window.RWG || {};
                 : `<input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
               ${viewCtc
                 ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-ctc" data-id="${esc(viewCtc.id)}"
-                     title="Open ${esc(HH.contactName(viewCtc))}${ctc ? '' : ' — primary client of ' + esc((hh && hh.name) || 'this household')}">View contact</button></div>`
+                     title="Look up ${esc(HH.contactName(viewCtc))}${ctc ? '' : ' — primary client of ' + esc((hh && hh.name) || 'this household')} beside this window">View contact</button></div>`
                 : hh
                   ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}"
                      title="Nobody is on this household yet — open the family record">View household</button></div>` : ''}
@@ -718,8 +718,10 @@ window.RWG = window.RWG || {};
          written against a household with no contact keeps the household
          button below rather than losing its way through to the book. */
       'cs-view-ctc': (el) => {
+        // Beside the window, not instead of it — half-typed money fields
+        // and a chosen stage survive a look at someone's phone number.
+        if (RWG.contactPanel) { RWG.contactPanel('contact', el.dataset.id); return; }
         const m1 = document.getElementById('modal-mount'); if (m1) m1.innerHTML = '';
-        const m2 = document.getElementById('modal-mount-2'); if (m2) m2.innerHTML = '';
         const cm = RWG.modules.get('contacts');
         if (cm) cm.actions['ct-open'](el, null);
       },
