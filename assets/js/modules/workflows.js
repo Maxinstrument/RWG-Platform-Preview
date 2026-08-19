@@ -98,7 +98,7 @@ window.RWG = window.RWG || {};
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card" style="max-width:640px">
         <div class="modal-head"><h2>Start a workflow</h2>
-          <p>On ${esc(h.name)}. Every step becomes a task on someone's My Work — reassign any of them below before launching.</p></div>
+          <p>On ${esc(h.name)}. Every step becomes a task on someone's Tasks list — reassign any of them below before launching.</p></div>
         <div class="modal-body">
           <div class="field-row">
             <div class="field-group"><label class="lbl">Workflow</label>
@@ -151,7 +151,7 @@ window.RWG = window.RWG || {};
         });
         mount().innerHTML = '';
         RWG.app.renderMain();
-        if (r) U().toast(r.name + ' started — ' + r.count + ' steps are on My Work', true);
+        if (r) U().toast(r.name + ' started — ' + r.count + ' steps are on Tasks', true);
       }
     },
 

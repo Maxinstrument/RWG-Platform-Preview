@@ -53,7 +53,7 @@ window.RWG = window.RWG || {};
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card">
         <div class="modal-head"><h2>New service request</h2>
-          <p>Post-close work — it lands on someone's My Work like everything else.</p></div>
+          <p>Post-close work — it lands on someone's Tasks list like everything else.</p></div>
         <div class="modal-body">
           <div class="field-row">
             <div class="field-group"><label class="lbl">Household</label><select id="sv-hh">${hhOpts}</select></div>
@@ -131,7 +131,7 @@ window.RWG = window.RWG || {};
       </div>
       <div class="card flush">
         ${list.map(row).join('') || `<div class="empty" style="padding:44px 16px"><div class="ec">${U().icon('service','ic-lg')}</div><h3>${empty}</h3>
-          <p>Service requests are tasks with a type — they show on My Work and on the household, same as everything.</p></div>`}
+          <p>Service requests are tasks with a type — they show on Tasks and on the household, same as everything.</p></div>`}
       </div>
       <p class="muted" style="font-size:12px;margin:10px 2px 0">
         ⏸ parks a request that is waiting on a carrier or the client — it leaves the working queue but
@@ -186,7 +186,7 @@ window.RWG = window.RWG || {};
         });
         mount().innerHTML = '';
         RWG.app.renderMain();
-        U().toast('Open — it is on ' + (u.name || 'the').split(' ')[0] + '’s My Work', true);
+        U().toast('Open — it is on ' + (u.name || 'the').split(' ')[0] + '’s Tasks', true);
       },
       'sv-wait': (el) => {
         const t = T().task(el.dataset.id); if (!t) return;

@@ -354,7 +354,7 @@ window.RWG = window.RWG || {};
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card">
         <div class="modal-head"><h2>Not ready to close</h2>
-          <p>Required workflow steps are still open on this case. Finish them — they are on My Work — then push to Won.</p></div>
+          <p>Required workflow steps are still open on this case. Finish them — they are on Tasks — then push to Won.</p></div>
         <div class="modal-body">
           ${blocks.map(t => `<div class="flex" style="gap:10px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
             <span style="flex:none">⛔</span>

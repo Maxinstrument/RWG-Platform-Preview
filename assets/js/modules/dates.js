@@ -167,7 +167,10 @@ window.RWG = window.RWG || {};
       relatedId: hh ? hh.id : null,
       relatedLabel: hh ? hh.name : ''
     });
-    U().toast('Reminder set — it is on ' + esc((hh && hh.advisorName) ? hh.advisorName.split(' ')[0] : 'your') + (hh && hh.advisorName ? '’s' : '') + ' My Work', true);
+    // Name the task and the list it landed on. "Reminder set" alone left
+    // people wondering whether anything had actually been created.
+    const whose = (hh && hh.advisorName) ? hh.advisorName.split(' ')[0] + '’s' : 'your';
+    U().toast('“' + e.remindTitle + '” is on ' + whose + ' Tasks, due ' + t.todayKey(due), true);
   }
 
   // ── custom-date modal (from here or a household's card) ───
@@ -307,7 +310,7 @@ window.RWG = window.RWG || {};
               <p>Dates appear as births, closes and custom dates land in the book.</p></div>`}
       </div>
       <p class="muted" style="font-size:12px;margin:10px 2px 0">
-        ⏰ turns a date into a task on the advisor's My Work, due three days ahead — set it once, it will not duplicate.
+        ⏰ turns a date into a task on the advisor's Tasks list, due three days ahead — set it once, it will not duplicate.
         Anniversaries come from confirmed closes; year one is the first annual review.
       </p>`;
   }
