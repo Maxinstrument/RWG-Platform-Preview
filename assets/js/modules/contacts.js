@@ -706,7 +706,9 @@ window.RWG = window.RWG || {};
       <div class="rec-shell">
         <div style="min-width:0">${composer(c, user)}${feedCard(c, user)}</div>
         <div class="rec-rail">
-          ${oppsCard(c)}${detailsCard(c)}${upcomingCard(c)}${wfCard(c)}${peopleCard(c)}${historyCard(c)}
+          <!-- What is open, then what is owed on it: Upcoming Activity reads
+               as the follow-through on the opportunities right above it. -->
+          ${oppsCard(c)}${upcomingCard(c)}${detailsCard(c)}${wfCard(c)}${peopleCard(c)}${historyCard(c)}
         </div>
       </div>`;
   }
