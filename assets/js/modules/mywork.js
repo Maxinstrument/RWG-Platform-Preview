@@ -96,8 +96,14 @@ window.RWG = window.RWG || {};
     const assigneeOpts = list.map(u => `<option value="${esc(u.id)}" ${u.id === selUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
     const relType = v('relatedType', null), relId = v('relatedId', null);
     const selCat = v('category', '');
-    const catOpts = ['<option value="">— none —</option>'].concat(
-      T().categories().map(c => `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
+    // A task filed under a category that has since left the list keeps its
+    // word: the option is carried so opening and saving the task cannot
+    // quietly erase what it was filed under.
+    const cats = T().categories();
+    const catOpts = ['<option value="">— none —</option>']
+      .concat(selCat && cats.indexOf(selCat) < 0
+        ? [`<option value="${esc(selCat)}" selected>${esc(selCat)} (retired)</option>`] : [])
+      .concat(cats.map(c => `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
     const selPri = v('priority', 'none');
     const priOpts = T().PRIORITIES.map(p =>
       `<option value="${p.id}" ${p.id === selPri ? 'selected' : ''}>${esc(p.label)}</option>`).join('');

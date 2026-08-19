@@ -32,7 +32,23 @@ RWG.tasks = (function () {
   // defaults live here so the app works before anyone opens Settings,
   // and config/taskcategories overrides them the moment it exists.
   const DEFAULT_CATEGORIES = ['Phone call', 'Email', 'Follow-up', 'Meeting prep',
-    'Paperwork', 'Underwriting', 'Service', 'Compliance'];
+    'Paperwork', 'Underwriting', 'Service', 'Closing Meeting'];
+  /* Compliance came out and Closing Meeting went in (Carlos, Aug '26).
+     Editing the defaults alone would change nothing for a firm that has
+     already saved its own list in Settings, so a stored list carrying the
+     retired word is brought forward too — but only while it has not been
+     told otherwise. Once Closing Meeting is on the saved list, whatever
+     else is on it is a deliberate choice and is left alone. */
+  const RETIRED_CATEGORIES = { 'Compliance': 'Closing Meeting' };
+  function repairCategories(list) {
+    if (!Array.isArray(list) || list.indexOf('Closing Meeting') >= 0) return list;
+    const out = [];
+    list.forEach(name => {
+      const to = RETIRED_CATEGORIES[name] || name;
+      if (out.indexOf(to) < 0) out.push(to);
+    });
+    return out;
+  }
   let CATEGORY_OVERRIDE = null;
   const categories = () =>
     (CATEGORY_OVERRIDE && CATEGORY_OVERRIDE.length) ? CATEGORY_OVERRIDE.slice() : DEFAULT_CATEGORIES.slice();
@@ -95,7 +111,7 @@ RWG.tasks = (function () {
         // Settings writes {value, updatedAt, updatedBy} — the same envelope
         // pipelines, workflows and rates use.
         const v = d.exists ? (d.data() || {}).value : null;
-        CATEGORY_OVERRIDE = Array.isArray(v) ? v.map(String).filter(Boolean) : null;
+        CATEGORY_OVERRIDE = Array.isArray(v) ? repairCategories(v.map(String).filter(Boolean)) : null;
         onChange();
       },
       e => console.error('task categories listener:', e && e.message)));
@@ -237,6 +253,7 @@ RWG.tasks = (function () {
     all, task, open, openFor, groupByDue, dueCount, doneThisWeek, todayKey,
     addTask, saveTask, toggleDone, removeTask,
     categories, nextDue, DEFAULT_CATEGORIES, PRIORITIES, REPEATS,
+    repairCategories,   // the retired-word migration, exposed so it can be pinned
     _cache: cache
   };
 })();
