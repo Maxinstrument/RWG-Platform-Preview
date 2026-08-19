@@ -308,7 +308,14 @@ window.RWG = window.RWG || {};
     if (RWG.data) {
       const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-      const mine = (l) => isAdmin || l.assignedTo === user.id;
+      /* YOUR leads — the card says so, and it has to mean it. A partner
+         sees the whole leads table, so `isAdmin ||` here quietly turned a
+         personal to-do list into the firm's backlog: five overdue
+         callbacks belonging to agents, on the screen of somebody who works
+         no leads at all. The morning list only carries work that is
+         actually yours; the firm's view of the same thing is the Leads
+         screen, where it can be reassigned. */
+      const mine = (l) => !!l.assignedTo && l.assignedTo === user.id;
       const calls = D().leadsRaw().filter(l => mine(l) && l.callbackAt && l.callbackAt <= endOfToday.getTime());
       const appts = D().leadsRaw().filter(l => mine(l) && l.apptDate && l.apptDate >= startOfToday.getTime() && l.apptDate <= endOfToday.getTime());
       if (calls.length || appts.length) {
