@@ -226,6 +226,13 @@ window.RWG = window.RWG || {};
     // Regarding: the person, or — when an opportunity is genuinely the
     // family's rather than one member's — the household. One search box over
     // both, and the name that is not in the book yet can be made from it.
+    /* The button below opens a PERSON. Most of the migrated book is
+       pointed at a household rather than a contact (the Sheet had no
+       people on it), so falling back to "View household" there meant
+       Carlos almost never saw the contact he asked for. Resolve the
+       household's primary client instead; only a household with nobody
+       in it keeps the household button. */
+    const viewCtc = ctc || (hhId && bookLive ? HH.primaryContact(hhId) : null);
     const relType = ctcId ? 'contact' : (hhId ? 'household' : null);
     const relId = ctcId || hhId || null;
     const product = c ? c.product : 'wl';
@@ -312,10 +319,12 @@ window.RWG = window.RWG || {};
               ${bookLive ? U().pickerHtml({ id: 'op2-rel', type: relType, recordId: relId, disabled: !editable,
                 placeholder: 'Search a contact or household…' })
                 : `<input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
-              ${ctc
-                ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-ctc" data-id="${esc(ctcId)}">View contact</button></div>`
+              ${viewCtc
+                ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-ctc" data-id="${esc(viewCtc.id)}"
+                     title="Open ${esc(HH.contactName(viewCtc))}${ctc ? '' : ' — primary client of ' + esc((hh && hh.name) || 'this household')}">View contact</button></div>`
                 : hh
-                  ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}">View household</button></div>` : ''}
+                  ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-hh" data-id="${esc(hhId)}"
+                     title="Nobody is on this household yet — open the family record">View household</button></div>` : ''}
               <div class="hint">${bookLive
                 ? 'Who this is for. Naming the contact is what puts the opportunity — and its tasks — on their record; name the household when it is the family’s rather than one member’s. Not in the book yet? Type the name and make it here.'
                 : 'The book is still loading — type the client name for now.'}</div></div>
