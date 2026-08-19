@@ -244,7 +244,7 @@ window.RWG = window.RWG || {};
       <div class="table-wrap"><table class="data">
         <thead><tr><th>Client</th><th>Product</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th></tr></thead>
         <tbody>${list.map(c => `<tr><td>${esc(c.clientName || '(no name)')}</td><td>${esc(sc.productName(c.product))}</td>
-          <td class="num">${money(sc.usesAum(c.product) ? c.aum : c.amount)}</td>
+          <td class="num">${sc.placed(c) == null ? '—' : money(sc.placed(c))}</td>
           <td class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</td>
           <td class="num">${money(sc.deriveCase(c).revenue)}</td></tr>`).join('')}</tbody>
       </table></div>` : '';

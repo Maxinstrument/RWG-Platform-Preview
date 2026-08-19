@@ -206,7 +206,10 @@ window.RWG = window.RWG || {};
   function caseRow(c) {
     const sc = S(), P = RWG.pipelines;
     const d = sc.deriveCase(c);
-    const money1 = sc.usesAum(c.product) ? money(c.aum) : money(c.amount);
+    // Insurance and planning fees are revenue, not money placed — the
+    // column to the right already says the number, so this one says so.
+    const put = sc.placed(c);
+    const money1 = put == null ? '—' : money(put);
     const sid = P.stageForCase(c);
     const bucket = P.bucketOf(c.product, sid) || c.state;
     const cls = bucket === 'Closed' ? 'tier-high' : bucket === 'Submitted' ? 'tier-gold' : bucket === 'Lost' ? 'tier-low' : '';

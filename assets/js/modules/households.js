@@ -726,7 +726,7 @@ window.RWG = window.RWG || {};
       .sort((a, b) => String(b.openedWeek).localeCompare(String(a.openedWeek)));
     const open = opps.filter(c => c.state === 'Opened' || c.state === 'Submitted').length;
     const rows = opps.map(c => {
-      const money = SC.usesAum(c.product) ? c.aum : c.amount;
+      const put = SC.placed(c);
       return `<tr class="cs-row" data-action="cs-open" data-id="${esc(c.recordId)}">
         <td><div class="cell-name">${esc(c.title || SC.productName(c.product) || c.product)}</div>
             <div class="cell-sub">${c.title ? esc(SC.productName(c.product)) + ' · ' : ''}${esc(SC.sourceLabel(c.source) || '')}</div></td>
@@ -734,7 +734,7 @@ window.RWG = window.RWG || {};
           (c.contactId && mine[c.contactId] ? H().contactName(mine[c.contactId]) : '')
           || c.clientName || h.name)}</span></td>
         <td>${stageChip2(c)}</td>
-        <td class="num">${U().money(money)}</td>
+        <td class="num">${put == null ? '—' : U().money(put)}</td>
         <td class="num">${U().money(Math.round(SC.deriveCase(c).revenue))}</td>
         <td><span class="cell-sub">${esc((c.agentName || '').split(' ')[0])}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span></td>
         <td><span class="cell-sub">${esc(c.openedWeek || '')}</span></td>

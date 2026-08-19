@@ -133,12 +133,29 @@ RWG.scorecard = (function () {
     term:    { field: 'amount', label: 'First-year commission (FYC)', hint: 'Annualized premium = FYC x 2' },
     di:      { field: 'amount', label: 'First-year commission (FYC)', hint: 'Annualized premium = FYC x 2' },
     ltc:     { field: 'amount', label: 'Commission earned',           hint: 'No premium credit. Not in the Club.' },
-    annuity: { field: 'amount', label: 'Deposit placed',              hint: 'Revenue = 4.8% of the deposit' },
-    inv:     { field: 'aum',    label: 'Assets brought in (AUM)',     hint: 'Revenue = 0.70% of assets' },
+    annuity: { field: 'amount', label: 'Deposit placed',              hint: 'Revenue = 4.8% of the deposit', placed: true },
+    inv:     { field: 'aum',    label: 'Assets brought in (AUM)',     hint: 'Revenue = 0.70% of assets',    placed: true },
     plan:    { field: 'amount', label: 'Planning fee earned',         hint: 'No premium credit' }
   };
   const inputFor = (prodId) => INPUTS[prodId] || { field: 'amount', label: '$ Amount', hint: '' };
   const usesAum  = (prodId) => inputFor(prodId).field === 'aum';
+
+  /* ── Money the CLIENT placed, which is not money WE earned ────
+     Only two products have one: a deposit into an annuity and assets
+     brought into an investment account. On a life case or a planning
+     engagement the number typed IS the commission or the fee — so every
+     "Amount / AUM" column was printing the revenue figure a second time,
+     one column to its left, where it read as a separate and much larger
+     piece of business. There is no amount placed on a life case; the
+     column now says so instead of repeating what Revenue already says.
+     `placed` is declared per product, so a new one states its own case
+     rather than inheriting a guess. Returns null for "no such thing",
+     and 0 only when a deposit really is zero. */
+  const placedOn = (prodId) => !!inputFor(prodId).placed;
+  function placed(c) {
+    if (!c || !placedOn(c.product)) return null;
+    return usesAum(c.product) ? n(c.aum) : n(c.amount);
+  }
 
   /* ── Per-case rates (phase 2) ─────────────────────────────
      Carlos's rule: you override the RATE, never the revenue. A case may
@@ -400,6 +417,7 @@ RWG.scorecard = (function () {
     CHAIRMAN, FYC_PER_WEEK_AT_TARGET, ANNUALIZED_PREMIUM_PER_WEEK_AT_TARGET,
     ACTIVITY_POINTS, WEEKLY_MIN, WEEKLY_MIN_PARTNER,
     AGENT_GOALS, goalsFor, firmShare, scorecardRole, weeklyFloor,
+    placed, placedOn,
     weekEndingFor, currentWeekEnding, fridaysOfYear,
     easternDateKey, todayKey, weekDays,
     deriveWeeks, bucketForWeek, activeInWeek, coCredit

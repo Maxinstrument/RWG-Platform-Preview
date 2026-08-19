@@ -159,12 +159,12 @@ window.RWG = window.RWG || {};
 
   function caseRow(c) {
     const sc = SC();
-    const money = sc.usesAum(c.product) ? c.aum : c.amount;
+    const put = sc.placed(c);
     return `<tr>
       <td><span class="cell-sub" style="color:var(--ink)">${esc(c.clientName || '(no name)')}</span></td>
       <td>${esc(sc.productName(c.product) || c.product || '')}</td>
       <td><span class="pill-soft">${esc(c.state || '')}</span></td>
-      <td class="num">${U().money(money)}</td>
+      <td class="num">${put == null ? '—' : U().money(put)}</td>
       <td><span class="cell-sub">${esc(c.agentName || '')}</span></td>
       <td><span class="cell-sub">${esc(c.openedWeek || '')}</span></td>
     </tr>`;
