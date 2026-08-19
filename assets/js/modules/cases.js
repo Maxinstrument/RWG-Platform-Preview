@@ -32,8 +32,8 @@ window.RWG = window.RWG || {};
       { key: 'ann', label: 'Ann. premium', num: true, val: c => sc.deriveCase(c).annualizedPremium, cell: c => `<span class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</span>` },
       { key: 'rev', label: 'Revenue', num: true, val: c => sc.deriveCase(c).revenue, cell: c => `<span class="num">${money(sc.deriveCase(c).revenue)}</span>` },
       { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', filter: true },
-      { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '' },
-      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '' }
+      { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', filter: true },
+      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', filter: true }
     ];
   }
   const COL = (key) => columns().filter(c => c.key === key)[0];
@@ -53,9 +53,13 @@ window.RWG = window.RWG || {};
       const q = st.search.toLowerCase();
       rows = rows.filter(c => String(c.clientName || '').toLowerCase().indexOf(q) >= 0 || String(c.agentName || '').toLowerCase().indexOf(q) >= 0);
     }
-    ['agent', 'product', 'source', 'state', 'openedWeek'].forEach(k => {
-      const want = st.f[k];
-      if (want) { const col = COL(k); rows = rows.filter(c => col.val(c) === want); }
+    // Header checklists: a column with values ticked keeps only those rows;
+    // a column with nothing ticked filters nothing.
+    Object.keys(st.colf || {}).forEach(k => {
+      const want = st.colf[k];
+      if (!want || !want.length) return;
+      const col = COL(k); if (!col) return;
+      rows = rows.filter(c => want.indexOf(String(col.val(c))) >= 0);
     });
     const col = COL(st.sortKey) || COL('openedWeek');
     rows.sort((a, b) => {
@@ -566,7 +570,7 @@ window.RWG = window.RWG || {};
     views: ['cases'],
     meta: { cases: { t: 'All Cases', s: 'The whole team\'s book' } },
 
-    state: { search: '', f: { agent: '', product: '', source: '', state: '', openedWeek: '' }, viewAll: true, week: null, sortKey: 'openedWeek', sortDir: 'desc' },
+    state: { search: '', colf: {}, viewAll: true, week: null, sortKey: 'openedWeek', sortDir: 'desc' },
 
     home: { tile: () => ({ icon: 'cases', title: 'All Cases', desc: 'Browse, search, and filter the whole team\'s book.', view: 'cases' }) },
 
@@ -582,14 +586,43 @@ window.RWG = window.RWG || {};
     onChange(e, st) {
       const id = e.target.id;
       if (id === 'cs-week') { st.week = e.target.value; RWG.app.renderMain(); return; }
-      if (id && id.indexOf('csf-') === 0) { st.f[id.slice(4)] = e.target.value; refreshBody(); return; }
+      // A tick in a header checklist narrows the rows immediately, popover
+      // still open — picking three agents is three ticks, not three trips.
+      if (e.target.dataset && e.target.dataset.csfilter) {
+        const k = e.target.dataset.csfilter, v = e.target.dataset.val;
+        const arr = st.colf[k] = st.colf[k] || [];
+        const i = arr.indexOf(v);
+        if (e.target.checked) { if (i < 0) arr.push(v); } else if (i >= 0) arr.splice(i, 1);
+        if (!arr.length) delete st.colf[k];
+        const th = document.querySelector('.th-filter[data-col="' + k + '"]');
+        if (th && th.classList) th.classList.toggle('on', !!(st.colf[k] || []).length);
+        refreshBody();
+        return;
+      }
       // (the opportunity window wires its own listeners — it opens over any view)
     },
 
     actions: {
       'cs-sort': (el, e, st) => { const k = el.dataset.key; if (st.sortKey === k) st.sortDir = st.sortDir === 'asc' ? 'desc' : 'asc'; else { st.sortKey = k; st.sortDir = COL(k).num ? 'desc' : 'asc'; } RWG.app.renderMain(); },
       'cs-toggle-all': (el, e, st) => { st.viewAll = !st.viewAll; RWG.app.renderMain(); },
-      'cs-clear': (el, e, st) => { st.search = ''; st.f = { agent: '', product: '', source: '', state: '', openedWeek: '' }; RWG.app.renderMain(); },
+      'cs-clear': (el, e, st) => { st.search = ''; st.colf = {}; RWG.app.renderMain(); },
+      'cs-popsort': (el, e, st) => { st.sortKey = el.dataset.key; st.sortDir = el.dataset.dir; RWG.app.renderMain(); },
+      'cs-colf-all': (el, e, st) => {
+        const k = el.dataset.col;
+        st.colf[k] = distinct(D().cases(), k).map(String);
+        document.querySelectorAll('input[data-csfilter="' + k + '"]').forEach(cb => { cb.checked = true; });
+        const th = document.querySelector('.th-filter[data-col="' + k + '"]');
+        if (th && th.classList) th.classList.add('on');
+        refreshBody();
+      },
+      'cs-colf-clear': (el, e, st) => {
+        const k = el.dataset.col;
+        delete st.colf[k];
+        document.querySelectorAll('input[data-csfilter="' + k + '"]').forEach(cb => { cb.checked = false; });
+        const th = document.querySelector('.th-filter[data-col="' + k + '"]');
+        if (th && th.classList) th.classList.remove('on');
+        refreshBody();
+      },
       'cs-export': (el, e, st) => {
         const csv = toCSV(filtered(st)); const blob = new Blob([csv], { type: 'text/csv' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -644,7 +677,6 @@ window.RWG = window.RWG || {};
       const st = this.state;
       const all = D().cases();
       const rows = filtered(st);
-      const sel = (id, cur, opts) => `<select id="csf-${id}" class="fbar-select"><option value="">All ${id}</option>${opts.map(o => `<option value="${esc(o)}" ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
       const weekOpts = recentWeeks(20).map(w => `<option value="${w}" ${w === st.week ? 'selected' : ''}>Week ending ${w}${w === S().currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
 
       // The same header the board wears, so the two read as one area with
@@ -665,10 +697,8 @@ window.RWG = window.RWG || {};
           ${st.viewAll ? '' : `<select id="cs-week" class="fbar-select">${weekOpts}</select>`}
         </div>
         <div class="cs-bar-row">
-          ${sel('agent', st.f.agent, distinct(all, 'agent'))}
-          ${sel('product', st.f.product, distinct(all, 'product'))}
-          ${sel('state', st.f.state, distinct(all, 'state'))}
-          ${sel('source', st.f.source, distinct(all, 'source'))}
+          <span class="cell-sub" style="flex:none">Filter from the column headers (▾) — pick as many values as you like.</span>
+          <span id="cs-chips" class="flex" style="gap:6px;flex-wrap:wrap;min-width:0">${csChips(st)}</span>
           <span class="topbar-spacer"></span>
           <button class="btn btn-quiet btn-sm" data-action="cs-clear">Clear</button>
           <button class="btn btn-ghost btn-sm" data-action="cs-export">⬇ Export</button>
@@ -683,22 +713,53 @@ window.RWG = window.RWG || {};
     }
   });
 
+  /* Excel-style AutoFilter on the headers: ▾ opens a popover with sort and
+     a multi-select checklist of the column's values across the whole book.
+     The popover shell (positioning, outside-click, the value search) is the
+     same machinery the leads table wears — .pop-wrap/.pop-panel/.pop-search
+     are handled once, globally. */
+  function csFilterMenu(c, st) {
+    const selVals = st.colf[c.key] || [];
+    const vals = distinct(D().cases(), c.key);
+    const list = vals.map(v => `<label class="pop-row"><input type="checkbox" data-csfilter="${esc(c.key)}" data-val="${esc(String(v))}" ${selVals.indexOf(String(v)) >= 0 ? 'checked' : ''}> ${esc(String(v))}</label>`).join('');
+    return `<button class="th-filter ${selVals.length ? 'on' : ''}" data-action="popmenu" data-col="${esc(c.key)}" type="button" aria-label="Filter ${esc(c.label)}">▾</button>
+      <div class="pop-panel" hidden>
+        <button class="pop-sort" data-action="cs-popsort" data-key="${esc(c.key)}" data-dir="asc">↑ Sort ${c.num ? 'low → high' : 'A → Z'}</button>
+        <button class="pop-sort" data-action="cs-popsort" data-key="${esc(c.key)}" data-dir="desc">↓ Sort ${c.num ? 'high → low' : 'Z → A'}</button>
+        <div class="pop-sep"></div>
+        <input class="pop-search" type="search" placeholder="Search ${esc(c.label)}…">
+        <div class="pop-actions"><button data-action="cs-colf-all" data-col="${esc(c.key)}">Select all</button><button data-action="cs-colf-clear" data-col="${esc(c.key)}">Clear</button></div>
+        <div class="pop-list">${list || '<div class="muted" style="padding:8px;font-size:12.5px">No values</div>'}</div>
+      </div>`;
+  }
+  function csBodyRows(rows, cols) {
+    if (!rows.length) return `<tr class="no-rows"><td colspan="${cols.length}"><div class="empty" style="padding:34px 10px"><div class="ec">🔍</div><h3>No cases match</h3><p>Open a header's ▾ to widen a filter, or Clear.</p></div></td></tr>`;
+    return rows.map(c => `<tr data-action="cs-open" data-id="${esc(c.recordId)}" class="cs-row">${cols.map(col => `<td class="${col.num ? 'num' : ''}">${col.cell ? col.cell(c) : esc(col.val(c))}</td>`).join('')}</tr>`).join('');
+  }
+  function csChips(st) {
+    return Object.keys(st.colf || {}).filter(k => (st.colf[k] || []).length).map(k => {
+      const col = COL(k), vals = st.colf[k];
+      const txt = vals.length === 1 ? vals[0] : vals.length + ' selected';
+      return `<span class="filter-chip">${esc(col ? col.label : k)}: <b>${esc(String(txt))}</b><button class="chip-x" data-action="cs-colf-clear" data-col="${esc(k)}" title="Clear">✕</button></span>`;
+    }).join('');
+  }
   function tableHtml(rows, st, user) {
     const cols = columns();
     const head = cols.map(c => {
       const arrow = st.sortKey === c.key ? (st.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
-      return `<th class="${c.num ? 'num' : ''}"><span class="cs-th" data-action="cs-sort" data-key="${c.key}">${esc(c.label)}${arrow}</span></th>`;
+      return `<th class="${c.num ? 'num' : ''}${c.filter ? ' pop-wrap' : ''}"><span class="cs-th" data-action="cs-sort" data-key="${c.key}">${esc(c.label)}${arrow}</span>${c.filter ? csFilterMenu(c, st) : ''}</th>`;
     }).join('');
-    if (!rows.length) return `<div class="empty" style="padding:40px"><div class="ec">🔍</div><h3>No cases match</h3><p>Adjust the filters or Clear.</p></div>`;
-    const body = rows.map(c => `<tr data-action="cs-open" data-id="${esc(c.recordId)}" class="cs-row">${cols.map(col => `<td class="${col.num ? 'num' : ''}">${col.cell ? col.cell(c) : esc(col.val(c))}</td>`).join('')}</tr>`).join('');
-    return `<div class="table-wrap"><table class="data cs-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="data cs-table"><thead><tr>${head}</tr></thead><tbody id="cs-tbody">${csBodyRows(rows, cols)}</tbody></table></div>`;
   }
 
   function refreshBody() {
-    const st = RWG.modules.get('cases').state, user = RWG.auth.currentUser();
+    const st = RWG.modules.get('cases').state;
     const rows = filtered(st);
-    const body = document.getElementById('cs-body'); if (body) body.innerHTML = tableHtml(rows, st, user);
+    const tbody = document.getElementById('cs-tbody');
+    if (tbody) tbody.innerHTML = csBodyRows(rows, columns());
+    else { const body = document.getElementById('cs-body'); if (body) body.innerHTML = tableHtml(rows, st, RWG.auth.currentUser()); }
     const cnt = document.getElementById('cs-count'); if (cnt) cnt.textContent = rows.length + ' of ' + D().cases().length;
+    const chips = document.getElementById('cs-chips'); if (chips) chips.innerHTML = csChips(st);
   }
 
   RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, _form: () => form };
