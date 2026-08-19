@@ -190,14 +190,25 @@ RWG.wf = (function () {
   }
   function resolveOwner(role, c) {
     if (role === 'casemanager') {
+      /* An agent's session holds a roster of ONE — themselves (data.js
+         loads the full team for admins only). Workflows fire from agent
+         sessions constantly — moving your own case to Submitted is the
+         trigger — so the pinned case manager must be trusted AS CONFIG,
+         not looked up in a roster the agent does not have. This is the
+         bug where every step of a workflow landed on the agent and
+         Kathy got nothing: the lookup failed quietly and fell through.
+         The roster, when present, only improves the display name. */
       const us = activeUsers();
-      let u = cfg.caseManagerUid ? us.find(x => x.id === cfg.caseManagerUid) : null;
-      if (!u) {
-        const key = (cfg.caseManagerName || '').toLowerCase();
-        u = key ? us.find(x => (x.name || '').toLowerCase().indexOf(key) >= 0) : null;
+      if (cfg.caseManagerUid) {
+        const u = us.find(x => x.id === cfg.caseManagerUid);
+        return { uid: cfg.caseManagerUid, name: (u && u.name) || cfg.caseManagerName || '' };
       }
-      if (u) return { uid: u.id, name: u.name || '' };
-      // No case manager on the roster yet — fall through to the advisor.
+      const key = (cfg.caseManagerName || '').toLowerCase();
+      const byName = key ? us.find(x => (x.name || '').toLowerCase().indexOf(key) >= 0) : null;
+      if (byName) return { uid: byName.id, name: byName.name || '' };
+      // Unpinned AND not on the visible roster — the advisor keeps the
+      // step rather than it landing on nobody. Pinning in Settings →
+      // Workflows is what makes this resolve from every session.
     }
     if (c && c.agentUid) return { uid: c.agentUid, name: c.agentName || '' };
     const me = RWG.auth && RWG.auth.currentUser && RWG.auth.currentUser();
