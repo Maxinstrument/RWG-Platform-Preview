@@ -802,7 +802,7 @@ window.RWG = window.RWG || {};
       <span style="color:var(--muted);font-size:12px;${isOn ? '' : 'opacity:.3'}">⠿</span>
       <input type="checkbox" data-action="hm-w" data-id="${esc(w.id)}" ${isOn ? 'checked' : ''}>
       <span>${esc(w.title)}</span></div>`;
-    return `<div class="card flush" style="position:sticky;top:14px">
+    return `<div class="card flush" style="position:sticky;top:88px">
       <div style="padding:12px 13px;border-bottom:1px solid var(--line)"><span class="t">Customize home</span>
         <div class="cell-sub" style="margin-top:2px">Drag to reorder · per person</div></div>
       <div style="padding:9px 13px 3px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700">On your home</div>

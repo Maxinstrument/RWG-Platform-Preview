@@ -324,7 +324,16 @@ input[type=checkbox]:disabled,input[type=radio]:disabled{cursor:not-allowed;}
 .sidebar .spacer + .nav-item{margin-top:6px;}
 .side-foot{padding:9px 12px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:rgba(255,255,255,.4);}
 
-.main{grid-area:main;padding:var(--s5) var(--gutter) 72px;overflow-x:hidden;}
+/* overflow-x:hidden here was quietly costing a column of white space.
+   `hidden` on one axis makes the OTHER axis compute to auto, which makes
+   .main a scroll container — so every position:sticky inside it anchored
+   to .main instead of the window. The scorecard's rail was pushed 88px
+   down the page and, since .main never actually scrolls, it never stuck
+   to anything either: dead space at the top, no stickiness at the bottom.
+   `clip` guards against sideways overflow exactly the same way WITHOUT
+   creating a scrollport. `hidden` stays first as the fallback for a
+   browser too old to know `clip`. */
+.main{grid-area:main;padding:var(--s5) var(--gutter) 72px;overflow-x:hidden;overflow-x:clip;}
 
 /* admin "view as agent" banner */
 .viewas-banner{
@@ -1066,7 +1075,10 @@ button.list-group:hover{background:rgba(14,36,64,.05);}
 .sc-derived b{color:var(--navy);}
 .sc-derived .sub{color:var(--muted);font-size:12px;margin-left:4px;}
 
-.sc-rail{display:flex;flex-direction:column;gap:16px;position:sticky;top:88px;}
+/* 88px = the 68px topbar plus air. Now that .main is not a scrollport,
+   this is measured against the window, so the rail starts level with the
+   first card and follows you down the page instead of scrolling away. */
+.sc-rail{display:flex;flex-direction:column;gap:16px;position:sticky;top:88px;align-self:start;}
 .sc-hero{text-align:left;}
 .sc-big{font-family:'Fraunces',serif;font-size:38px;color:var(--navy);line-height:1.05;margin:6px 0 10px;}
 .sc-bar{height:8px;border-radius:999px;background:rgba(14,36,64,.08);overflow:hidden;}
