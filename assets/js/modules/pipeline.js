@@ -413,16 +413,16 @@ window.RWG = window.RWG || {};
 
   RWG.modules.register({
     id: 'pipeline',
-    title: 'Pipeline',
+    title: 'Opportunity',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'pipeline', label: 'Pipeline', icon: 'board', also: ['cases'] }],
-    meta: { pipeline: { t: 'Pipeline', s: 'Every open opportunity, stage by stage' } },
+    nav: [{ view: 'pipeline', label: 'Opportunity', icon: 'board', also: ['cases'] }],
+    meta: { pipeline: { t: 'Opportunity', s: 'Every open opportunity, stage by stage' } },
     state: st,
 
     home: {
       tile: () => ({
-        icon: 'board', title: 'Pipeline',
+        icon: 'board', title: 'Opportunity',
         desc: 'The book as a board: drag opportunities through their real stages.',
         view: 'pipeline'
       })
