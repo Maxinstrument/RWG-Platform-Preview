@@ -59,7 +59,11 @@ RWG.wf = (function () {
           { id: 'chase-uw',  title: 'Chase underwriting requirements (APS, labs) — check weekly',           owner: 'casemanager', dueDays: 10 },
           { id: 'offer',     title: 'Review the offer / rating with the client',                            owner: 'advisor',     dueDays: 21 },
           { id: 'closing',   title: 'Book the closing presentation',                                        owner: 'advisor',     dueDays: 24 },
-          { id: 'delivery',  title: 'Delivery requirements signed and initial premium collected',           owner: 'casemanager', dueDays: 30, required: true, gate: 'Closed' },
+          // Premium and signature are two different clocks. The premium is
+          // what pays us and is the door to Delivery Requirements; it gates
+          // the close. The signature chase lives in the Policy Delivery
+          // workflow, which starts when a partner confirms the close.
+          { id: 'premium',   title: 'Collect the initial premium — we are not paid until it is in',          owner: 'casemanager', dueDays: 28, required: true, gate: 'Closed' },
           { id: 'a360',      title: 'Upload the signed policy file to A360',                                owner: 'casemanager', dueDays: 31 }
         ]
       },
@@ -105,6 +109,17 @@ RWG.wf = (function () {
         ]
       },
       {
+        id: 'policy-delivery', name: 'Policy Delivery',
+        desc: 'Starts when a partner confirms an insurance close. The signed receipt is due inside policy month 3 — after that the commission charges back.',
+        trigger: { bucket: 'Closed', products: ['wl', 'term', 'di', 'ltc'] },
+        related: 'case',
+        steps: [
+          { id: 'send',    title: 'Send the delivery requirements to the client',                          owner: 'casemanager', dueDays: 2 },
+          { id: 'chase',   title: 'Chase the signed delivery receipt — call, do not wait',                  owner: 'casemanager', dueDays: 21 },
+          { id: 'receipt', title: 'Signed receipt on file, case moved to Close/Won — chargeback lands at day 90', owner: 'casemanager', dueDays: 60 }
+        ]
+      },
+      {
         id: 'onboarding', name: 'New Client Onboarding',
         desc: 'Starts by itself when a partner confirms a close.',
         trigger: { bucket: 'Closed' },
@@ -133,7 +148,26 @@ RWG.wf = (function () {
     ]
   };
 
-  let cfg = DEFAULTS;
+  /* Schema repair for configs saved before the premium/signature split:
+     the old combined step becomes the premium step, and the Policy Delivery
+     chase is added when missing. Deliberate edits to other steps survive. */
+  function repair(c) {
+    const life = (c.templates || []).find(t => t.id === 'life-new');
+    if (life) (life.steps || []).forEach(st => {
+      if (st.id === 'delivery') {
+        st.id = 'premium';
+        st.title = 'Collect the initial premium — we are not paid until it is in';
+      }
+    });
+    if (!(c.templates || []).some(t => t.id === 'policy-delivery')) {
+      const tpl = DEFAULTS.templates.find(t => t.id === 'policy-delivery');
+      const at = (c.templates || []).findIndex(t => t.id === 'onboarding');
+      if (tpl) c.templates.splice(at >= 0 ? at : c.templates.length, 0, JSON.parse(JSON.stringify(tpl)));
+    }
+    return c;
+  }
+
+  let cfg = repair(DEFAULTS);
   let unsub = null;
 
   // Reads config/workflows when the future editor writes it; defaults until then.
@@ -141,7 +175,7 @@ RWG.wf = (function () {
     if (unsub || !RWG.fb) return;
     unsub = RWG.fb.db.collection('config').doc('workflows').onSnapshot(
       d => {
-        cfg = (d.exists && d.data() && d.data().value) ? d.data().value : DEFAULTS;
+        cfg = repair((d.exists && d.data() && d.data().value) ? d.data().value : DEFAULTS);
         if (RWG.app && RWG.app.renderMain) RWG.app.renderMain();
       },
       e => console.error('workflows config listener:', e && e.message));

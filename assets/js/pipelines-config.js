@@ -155,8 +155,23 @@ RWG.pipelines = (function () {
     return cols[j];
   }
 
+  /* The chargeback clock. An insurance policy whose delivery receipt is
+     not signed by policy month 3 charges the commission back. The clock
+     starts when we are paid — the confirmed close — and falls back to when
+     the case entered its closed stage for the window between push and
+     confirm. Null for anything not sitting in Delivery Requirements. */
+  const INS = { wl: 1, term: 1, di: 1, ltc: 1 };
+  function receiptClock(c) {
+    if (!c || !INS[c.product]) return null;
+    if (stageForCase(c) !== 'delivery-signed') return null;
+    const t = Date.parse(c.closedAt || c.stageAt || '') || null;
+    if (!t) return null;
+    const since = Math.max(0, Math.floor((Date.now() - t) / 86400000));
+    return { since: since, left: 90 - since };
+  }
+
   return {
-    DEFAULTS, init,
+    DEFAULTS, init, receiptClock,
     pipelines, pipeline, pipelineForProduct, lostReasons,
     stageOf, bucketOf, stageLabel, boardStages, stageForCase, neighborStage,
     current: () => cfg   // the whole live config, for the settings editor's draft

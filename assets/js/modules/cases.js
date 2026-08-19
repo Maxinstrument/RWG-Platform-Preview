@@ -220,8 +220,14 @@ window.RWG = window.RWG || {};
       const P = RWG.pipelines;
       const pl = P.pipelineForProduct(prodId);
       const cur = c ? P.stageForCase(c) : 'uncovered';
-      return P.boardStages(pl).filter(s => s.bucket !== 'Closed').map(s =>
+      const working = P.boardStages(pl).filter(s => s.bucket !== 'Closed').map(s =>
         `<option value="${esc(s.id)}" ${s.id === cur ? 'selected' : ''}>${esc(s.label)}${s.bucket === 'Submitted' ? ' ●' : ''}</option>`).join('');
+      // Delivery Requirements is pickable here too — choosing it means the
+      // premium is in, so the save routes through the push-to-Won door
+      // (premium question, then a partner verifies) instead of a bare move.
+      const door = pl.stages.find(s => s.bucket === 'Closed' && s.id !== 'won');
+      return working + (door && c
+        ? `<option value="${esc(door.id)}">${esc(door.label)} — premium in, counts once a partner confirms</option>` : '');
     }
     // A closed case can still owe its delivery receipt: closed for the
     // scorecard, unfinished as a file. The chip says which, and the signed
@@ -230,8 +236,12 @@ window.RWG = window.RWG || {};
     const doneCols = c ? RWG.pipelines.pipelineForProduct(c.product).stages.filter(x => x.bucket === 'Closed') : [];
     const doneAt = c && closed ? doneCols.findIndex(x => x.id === RWG.pipelines.stageForCase(c)) : -1;
     const nextDone = doneAt >= 0 ? doneCols[doneAt + 1] : null;
+    const kclock = c && closed ? (RWG.pipelines.receiptClock ? RWG.pipelines.receiptClock(c) : null) : null;
+    const clockTxt = kclock ? (kclock.left < 0
+        ? ` <span class="chip tier-low" style="background:rgba(178,58,72,.14);color:var(--bad);border-color:rgba(178,58,72,.4)">CHARGEBACK — ${kclock.left * -1}d past the month-3 line</span>`
+        : ` <span class="chip tier-low" ${kclock.left <= 21 ? 'style="color:var(--bad)"' : ''}>receipt due in ${kclock.left}d</span>`) : '';
     const stageChip = closed ? (nextDone
-        ? `<span class="chip tier-high">Closed ✓ — counted; delivery receipt outstanding</span>
+        ? `<span class="chip tier-high">Closed ✓ — counted; delivery receipt outstanding</span>${clockTxt}
            <button class="btn btn-gold btn-sm" style="margin-left:8px" data-action="cs-signed"
              data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}"
              title="The client signed the delivery receipt — nothing else owed">Receipt signed ✓</button>`
@@ -464,6 +474,14 @@ window.RWG = window.RWG || {};
       const sel = g('op2-stage');
       const P = RWG.pipelines;
       if (sel && sel !== P.stageForCase(row)) {
+        // Picking Delivery Requirements is a claim that the premium is in —
+        // that is the close's door, so it walks the same path as the board's
+        // push: blockers, the premium question, then the partner.
+        if (P.bucketOf(row.product, sel) === 'Closed' && !row.closedAt && !row.pendingClose) {
+          const owner = RWG.modules.actionOwner('pl-won');
+          if (owner) setTimeout(() => owner.actions['pl-won']({ dataset: { id: row.recordId } }), 0);
+          return row;
+        }
         return D().setPipelineStage(row.recordId, sel).then(() => row);
       }
       return row;

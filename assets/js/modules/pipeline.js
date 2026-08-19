@@ -47,6 +47,23 @@ window.RWG = window.RWG || {};
     return rows.length;
   }
 
+  const firstClosedIsDelivery = (c) => {
+    const first = P().pipelineForProduct(c.product).stages.find(x => x.bucket === 'Closed');
+    return !!first && first.id === 'delivery-signed';
+  };
+  // The month-3 line, counted down out loud. Amber once half the runway is
+  // gone, red inside three weeks, and past zero it says the word nobody
+  // wants on a Monday: chargeback.
+  function clockChip(c) {
+    const k = P().receiptClock ? P().receiptClock(c) : null;
+    if (!k) return '';
+    if (k.left < 0) return `<span class="chip tier-low" style="font-size:10.5px;background:rgba(178,58,72,.14);color:var(--bad);border-color:rgba(178,58,72,.4)" title="Unsigned past policy month 3 — the commission charges back">CHARGEBACK · ${k.left * -1}d over</span>`;
+    const cls = k.left <= 21 ? 'style="font-size:10.5px;background:rgba(178,58,72,.10);color:var(--bad);border-color:rgba(178,58,72,.32)"'
+      : k.left <= 45 ? 'style="font-size:10.5px;background:rgba(176,105,31,.10);color:var(--warn);border-color:rgba(176,105,31,.3)"'
+      : 'style="font-size:10.5px"';
+    return `<span class="chip tier-low" ${cls} title="Signed delivery receipt due inside policy month 3 (day 90) or the commission charges back">receipt · ${k.left}d left</span>`;
+  }
+
   function card(c, stage, isAdmin) {
     const sc = SC();
     const money = sc.usesAum(c.product) ? c.aum : c.amount;
@@ -79,7 +96,7 @@ window.RWG = window.RWG || {};
       <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
         ${closed ? (stage.bucket === 'Closed' && stage.id !== 'won'
-              ? '<span class="chip tier-high" style="font-size:10.5px" title="Closed and counted — the delivery receipt is still out">Closed ✓ · receipt out</span>'
+              ? '<span class="chip tier-high" style="font-size:10.5px" title="Closed and counted — the delivery receipt is still out">Closed ✓</span>' + clockChip(c)
               : '<span class="chip tier-high" style="font-size:10.5px">Confirmed ✓</span>')
           : (stage.bucket === 'Closed'
               ? (isAdmin
@@ -90,7 +107,9 @@ window.RWG = window.RWG || {};
         ${canMove ? `
           ${prev ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Back to ${esc(prev.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(prev.id)}">‹</button>` : ''}
           ${next ? `<button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Advance to ${esc(next.label)}" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(next.id)}">›</button>` : ''}
-          ${lastStop ? `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Push to Won — a partner verifies before it counts" data-action="pl-won" data-id="${esc(c.recordId)}">Won ✓</button>` : ''}
+          ${lastStop ? (firstClosedIsDelivery(c)
+            ? `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Initial premium collected — move to Delivery Requirements. A partner verifies before it counts." data-action="pl-won" data-id="${esc(c.recordId)}">Delivery ›</button>`
+            : `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Push to Won — a partner verifies before it counts" data-action="pl-won" data-id="${esc(c.recordId)}">Won ✓</button>`) : ''}
           <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Mark lost…" data-action="pl-lost" data-id="${esc(c.recordId)}">✕</button>`
         : closed && nextDone ? `
           <button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Delivery receipt signed — nothing else owed on this one" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}">Signed ✓</button>`
@@ -276,9 +295,16 @@ window.RWG = window.RWG || {};
 
   // Push to Won. A partner lands straight in the close review — confirming
   // their own case is one motion. An advisor's case waits in the inbox.
+  const INS_FAM = { wl: 1, term: 1, di: 1, ltc: 1 };
   function toWon(id) {
     const blocks = RWG.wf ? RWG.wf.blockers(id) : [];
     if (blocks.length) { blockedModal(blocks); return; }
+    // The door to Delivery Requirements is the premium, not the paperwork:
+    // no premium, no pay, and nothing to send the client. Asked on every
+    // path in — drag, button, or the window's stage picker.
+    const c0 = SD().caseById(id);
+    if (c0 && INS_FAM[c0.product] &&
+        !confirm('Has the initial premium been collected?' + String.fromCharCode(10, 10) + 'The premium is what pays us, and the delivery requirements cannot go to the client until it is in. If it is not collected yet, keep the case in Funding.')) return;
     SD().pushWon(id).then(() => {
       if (RWG.app.effectiveRole() === 'admin') {
         const inbox = RWG.modules.get('inbox');
