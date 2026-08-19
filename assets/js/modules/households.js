@@ -99,6 +99,8 @@ window.RWG = window.RWG || {};
     const v = (k) => c && c[k] != null ? c[k] : '';
     const relOpts = H().RELATIONSHIPS.map(r =>
       `<option ${c && c.relationship === r ? 'selected' : ''}>${r}</option>`).join('');
+    const typeOpts = [''].concat(H().CONTACT_TYPES).map(t =>
+      `<option value="${esc(t)}" ${c && c.contactType === t ? 'selected' : ''}>${esc(t || '—')}</option>`).join('');
     const planOpts = ['', ...D().PLAN_TYPES].map(p =>
       `<option value="${esc(p)}" ${c && c.planType === p ? 'selected' : ''}>${esc(p || '—')}</option>`).join('');
 
@@ -139,10 +141,15 @@ window.RWG = window.RWG || {};
         <div class="field-group"><label class="lbl">Phone</label><input id="p-phone" type="tel" value="${esc(v('phone'))}"></div>
         <div class="field-group"><label class="lbl">Email</label><input id="p-email" type="email" value="${esc(v('email'))}"></div>
       </div>
-      <div class="field-group"><label class="lbl">Tags</label>
-        <input id="p-tags" value="${esc((v('tags') || []).join(', '))}" placeholder="Client, FRS, March review">
-        <div class="hint">Separate with commas. Click one below to add it.</div>
-        ${tagChips}</div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Contact type</label>
+          <select id="p-ctype">${typeOpts}</select>
+          <div class="hint">What they are to the firm. Relationship above is what they are to their family.</div></div>
+        <div class="field-group"><label class="lbl">Tags</label>
+          <input id="p-tags" value="${esc((v('tags') || []).join(', '))}" placeholder="FRS, March review, Miami-Dade">
+          <div class="hint">Separate with commas. Click one below to add it.</div>
+          ${tagChips}</div>
+      </div>
       <div class="section-title">FRS profile <span class="pill-soft" style="font-size:11px">optional</span></div>
       <div class="field-row">
         <div class="field-group"><label class="lbl">Employer</label><input id="p-employer" value="${esc(v('employer'))}"></div>
@@ -805,6 +812,7 @@ window.RWG = window.RWG || {};
         const fields = {
           firstName: g('p-first').trim(), lastName: g('p-last').trim(),
           preferredName: g('p-pref').trim(),
+          contactType: g('p-ctype'),
           relationship: g('p-rel'), dob: g('p-dob'), phone: g('p-phone').trim(),
           email: g('p-email').trim(), employer: g('p-employer').trim(),
           planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc'),

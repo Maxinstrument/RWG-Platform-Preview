@@ -400,6 +400,7 @@ window.RWG = window.RWG || {};
     // action is two places to look and one of them is always the wrong one.
     return `<div class="card flush">
       <div class="list-head"><span class="t">Details</span></div>
+      ${rowLine('Contact type', esc(c.contactType || '—'))}
       ${rowLine('Preferred name', esc(c.preferredName || '—'))}
       ${rowLine('Relationship', esc(c.relationship || '—'))}
       ${rowLine('Advisor', esc(adv || '—'))}
@@ -566,6 +567,7 @@ window.RWG = window.RWG || {};
             <div class="tag-row" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
               ${h ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-panel" data-id="${esc(h.id)}"
                 title="See the household beside this record">${U().icon('household', 'ic-inline')} ${esc(h.name)}</button>` : ''}
+              ${c.contactType ? `<span class="chip tier-high" style="font-weight:700">${esc(c.contactType)}</span>` : ''}
               ${c.relationship ? `<span class="pill-soft">${esc(c.relationship)}</span>` : ''}
               ${c.leadId ? `<button class="pill-soft" style="cursor:pointer" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record they came from — full call history">Came from a lead</button>` : ''}
             </div>
@@ -771,11 +773,11 @@ window.RWG = window.RWG || {};
         if (st.scope === 'households') { exportHouseholds(); return; }
         const list = rows();
         if (!list.length) { U().toast('Nothing to export'); return; }
-        const head = ['First name', 'Last name', 'Preferred name', 'Relationship', 'Phone', 'Email', 'Date of birth',
+        const head = ['First name', 'Last name', 'Preferred name', 'Contact type', 'Relationship', 'Phone', 'Email', 'Date of birth',
           'Employer', 'Plan type', 'Years of service', 'AFC', 'Tags', 'Household', 'Advisor', 'AdvisorStream'];
         const data = list.map(c => {
           const h = hhOf(c);
-          return [c.firstName || '', c.lastName || '', c.preferredName || '', c.relationship || '', c.phone || '', c.email || '',
+          return [c.firstName || '', c.lastName || '', c.preferredName || '', c.contactType || '', c.relationship || '', c.phone || '', c.email || '',
             c.dob || '', c.employer || '', c.planType || '', c.yos == null ? '' : c.yos,
             c.afc == null ? '' : c.afc, (c.tags || []).join('; '), h ? h.name : '',
             advisorOf(c) || '', c.advisorstream ? 'yes' : 'no'];

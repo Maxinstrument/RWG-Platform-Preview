@@ -25,6 +25,10 @@ RWG.hh = (function () {
   const now = () => Date.now();
 
   const RELATIONSHIPS = ['Primary client', 'Spouse', 'Child', 'Parent', 'Sibling', 'Other'];
+  /* What this person is to the FIRM — which is a different question from
+     what they are to their family (RELATIONSHIPS, above). A spouse can be
+     a client; a client's brother can be a COI. */
+  const CONTACT_TYPES = ['Client', 'Past Client', 'Prospect', 'COI'];
   // How two households connect. Stored one entry per side, so each
   // household's card can say what the other one is to it.
   const LINK_KINDS = [
@@ -191,6 +195,7 @@ RWG.hh = (function () {
     const c = Object.assign({
       id: ref.id, householdId: null, firstName: '', lastName: '',
       preferredName: '',               // what they actually go by — Bob for Robert
+      contactType: '',                 // Client | Past Client | Prospect | COI
       relationship: 'Other', email: '', phone: '', dob: '', employer: '',
       planType: '', memberClass: '', yos: null, afc: null, age: null,
       tags: [],                        // free-form labels; the tag list is derived from use
@@ -427,7 +432,7 @@ RWG.hh = (function () {
   }
 
   return {
-    RELATIONSHIPS, LINK_KINDS, linkLabel,
+    RELATIONSHIPS, CONTACT_TYPES, LINK_KINDS, linkLabel,
     init, teardown, isStarted,
     households, household, contacts, contact, contactsFor, primaryContact, contactName,
     callName, spokenName,
