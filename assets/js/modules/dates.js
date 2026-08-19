@@ -28,6 +28,7 @@ window.RWG = window.RWG || {};
   const SD = () => RWG.scorecardData;
   const SC = () => RWG.scorecard;
   const T  = () => RWG.tasks;
+  const D  = () => RWG.data;          // the roster, for "who does it"
   const U  = () => RWG.ui;
   const esc = (s) => U().esc(s);
   const dayMs = 86400000;
@@ -150,15 +151,21 @@ window.RWG = window.RWG || {};
   }
 
   // ── reminders: a date becomes a task, once ────────────────
+  /* ⏰ opens a small window rather than firing a task off on its own.
+     The household's advisor is the sensible default, not the only answer:
+     a birthday might be a call from the advisor, a postcard from the
+     office, or a gift somebody else is arranging. What it is, who does
+     it and when are all a click away before anything is written. */
   function remind(e) {
     const t = T();
     if (!t.isStarted()) t.init(RWG.auth.currentUser(), RWG.app.renderMain);
-    /* Already made. The dedupe looks across the WHOLE firm's open tasks,
-       not just yours — a birthday reminder belongs to the household's
-       advisor, who is often somebody else. "Already on the list" then sent
-       people hunting through their own Tasks for something that was never
-       going to be there, so say whose list it is on and when it is due. */
-    const dupe = t.open().find(x => x.title === e.remindTitle);
+    /* Dedupe on the date this came FROM, not on the title: the window
+       lets you rename it ("Send a card" rather than "Call"), and matching
+       titles would then happily make a second reminder for the same
+       birthday. The title match stays as a fallback for reminders written
+       before the stamp existed. */
+    const dupe = t.open().find(x => x.keyDateKey === e.key)
+      || t.open().find(x => x.title === e.remindTitle);
     if (dupe) {
       const who = dupe.assigneeName ? dupe.assigneeName.split(' ')[0] + '’s' : 'someone’s';
       U().toast('Already made — it is on ' + who + ' Tasks'
@@ -167,21 +174,77 @@ window.RWG = window.RWG || {};
     }
     const me = RWG.auth.currentUser();
     const hh = e.hhId && H().isStarted() ? H().household(e.hhId) : null;
-    const due = Math.max(e.when.getTime() - 3 * dayMs, Date.now());
+    const due = t.todayKey(Math.max(e.when.getTime() - 3 * dayMs, Date.now()));
+    const ownerUid = (hh && hh.advisorUid) || me.id;
+    const users = D().users().filter(u => u.status === 'active');
+    const whoOpts = users.map(u =>
+      `<option value="${esc(u.id)}" ${u.id === ownerUid ? 'selected' : ''}>${esc(u.name)}${
+        u.id === ((hh && hh.advisorUid) || '') ? ' — advisor on this household' : ''}</option>`).join('');
+    const catOpts = ['<option value="">— none —</option>'].concat(
+      t.categories().map(c => `<option value="${esc(c)}">${esc(c)}</option>`)).join('');
+
+    mount().innerHTML = `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card modal-sm">
+        <div class="modal-head"><h2>Set a reminder</h2>
+          <p>${esc(fmtShort(e.when))}${hh ? ' · ' + esc(hh.name) : ''}</p></div>
+        <div class="modal-body">
+          <div class="field-group"><label class="lbl">What needs doing</label>
+            <input id="rm-title" value="${esc(e.remindTitle)}">
+            <div class="hint">Change it if this is a card or a gift rather than a call.</div></div>
+          <div class="field-row">
+            <div class="field-group"><label class="lbl">Who does it</label>
+              <select id="rm-who">${whoOpts}</select></div>
+            <div class="field-group"><label class="lbl">Due</label>
+              <input id="rm-due" type="date" value="${esc(due)}"></div>
+          </div>
+          <div class="field-group"><label class="lbl">Category <span class="pill-soft" style="font-size:10.5px">optional</span></label>
+            <select id="rm-cat">${catOpts}</select></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+          <button class="btn btn-gold" data-action="kd-remind-save"
+            data-hh="${esc((hh && hh.id) || '')}" data-when="${esc(fmtShort(e.when))}"
+            data-key="${esc(e.key || '')}">Add the task</button>
+        </div>
+      </div>`;
+    const inp = document.getElementById('rm-title');
+    if (inp && inp.focus) inp.focus();
+  }
+
+  // Write the reminder the window describes.
+  function remindSave(el) {
+    const t = T();
+    const title = (g('rm-title') || '').trim();
+    if (!title) { U().toast('Give the reminder a name'); return; }
+    if (t.open().some(x => x.title === title)) {
+      U().toast('A task with that name is already open — rename it or leave it be');
+      return;
+    }
+    if (el.dataset.key && t.open().some(x => x.keyDateKey === el.dataset.key)) {
+      U().toast('This date already has a reminder');
+      return;
+    }
+    const uid = g('rm-who');
+    const u = D().user(uid);
+    const hh = el.dataset.hh && H().isStarted() ? H().household(el.dataset.hh) : null;
     t.addTask({
-      title: e.remindTitle,
-      note: 'from Key dates · ' + fmtShort(e.when),
-      assigneeUid: (hh && hh.advisorUid) || me.id,
-      assigneeName: (hh && hh.advisorName) || me.name || '',
-      dueDate: t.todayKey(due),
+      title: title,
+      note: 'from Key dates · ' + (el.dataset.when || ''),
+      keyDateKey: el.dataset.key || null,   // what makes "already reminded" answerable
+      assigneeUid: uid,
+      assigneeName: (u && u.name) || '',
+      dueDate: g('rm-due') || t.todayKey(),
+      category: g('rm-cat') || '',
       relatedType: hh ? 'household' : null,
       relatedId: hh ? hh.id : null,
       relatedLabel: hh ? hh.name : ''
     });
-    // Name the task and the list it landed on. "Reminder set" alone left
-    // people wondering whether anything had actually been created.
-    const whose = (hh && hh.advisorName) ? hh.advisorName.split(' ')[0] + '’s' : 'your';
-    U().toast('“' + e.remindTitle + '” is on ' + whose + ' Tasks, due ' + t.todayKey(due), true);
+    mount().innerHTML = '';
+    RWG.app.renderMain();
+    const me = RWG.auth.currentUser();
+    const whose = (uid === (me && me.id)) ? 'your' : (((u && u.name) || 'their').split(' ')[0] + '’s');
+    U().toast('“' + title + '” is on ' + whose + ' Tasks, due ' + (g('rm-due') || 'today'), true);
   }
 
   // ── custom-date modal (from here or a household's card) ───
@@ -321,7 +384,7 @@ window.RWG = window.RWG || {};
               <p>Dates appear as births, closes and custom dates land in the book.</p></div>`}
       </div>
       <p class="muted" style="font-size:12px;margin:10px 2px 0">
-        ⏰ turns a date into a task on the advisor's Tasks list, due three days ahead — set it once, it will not duplicate.
+        ⏰ turns a date into a task — say what it is, who does it and when. It defaults to the household's advisor, three days ahead.
         Anniversaries come from confirmed closes; year one is the first annual review.
       </p>`;
   }
@@ -395,6 +458,7 @@ window.RWG = window.RWG || {};
       'kd-tab': (el) => { st.tab = el.dataset.tab; RWG.app.renderMain(); },
       'kd-kind': (el) => { st.kind = el.dataset.kind; RWG.app.renderMain(); },
       'kd-remind': (el) => { const e = st.entries[el.dataset.key]; if (e) remind(e); },
+      'kd-remind-save': (el) => remindSave(el),
       // data-contact preselects a person; data-hh (from a household screen)
       // preselects that household's primary client.
       'kd-add': (el) => {
