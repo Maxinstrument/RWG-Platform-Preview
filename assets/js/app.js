@@ -476,6 +476,51 @@ RWG.app = (function () {
   }
   function refreshDrawer() { if (state.leadId) openLead(state.leadId, state.editing); }
 
+  /* Close the topmost thing on screen, one layer at a time, and say
+     whether there was anything to close. Escape and the phone's Back
+     button both mean "put this away", so they ask the same question. */
+  function peelTop() {
+    const dm = $('#drawer-mount');
+    if (dm && dm.firstElementChild) { closeDrawer(); return true; }
+    const m2 = $('#modal-mount-2');
+    if (m2 && m2.firstElementChild) { closeModal(); return true; }
+    const m1 = $('#modal-mount');
+    if (m1 && m1.firstElementChild) { closeModal(); return true; }
+    const open = document.querySelectorAll('.pop-panel:not([hidden])');
+    if (open.length) { open.forEach(p => p.hidden = true); return true; }
+    let had = false;
+    const om = $('#omni-panel');
+    if (om && !om.hidden) { closeOmni(); had = true; }
+    const um = $('#user-menu');
+    if (um && !um.hidden) { closeUserMenu(); had = true; }
+    return had;
+  }
+
+  /* The phone's Back button. On a single-page app it means "leave the
+     site", which is a brutal answer to someone who only wanted to shut a
+     task window — Carlos lost his place to whatever tab he had been on
+     before. So: one spare history entry is kept parked ahead of the app,
+     Back spends it closing the top layer, and the entry is put straight
+     back. With nothing left to close, leaving is a real intention and
+     gets asked about once rather than happening by accident. */
+  function guardHistory() {
+    if (typeof history === 'undefined' || !history.pushState) return;
+    try {
+      history.replaceState({ rwg: 'root' }, '');
+      history.pushState({ rwg: 'guard' }, '');
+    } catch (e) { return; }               // some embedded browsers refuse
+    const repark = () => { try { history.pushState({ rwg: 'guard' }, ''); } catch (e) {} };
+    window.addEventListener('popstate', () => {
+      if (peelTop()) { repark(); return; }
+      if (confirm('Leave the Resilient CRM?' + String.fromCharCode(10, 10)
+          + 'Nothing is lost — anything saved stays saved.')) {
+        history.back();                   // spend the entry underneath us
+        return;
+      }
+      repark();
+    });
+  }
+
   // ────────────────────────── modal (Add lead)
   function openModal(html) { const m = $('#modal-mount'); if (m) m.innerHTML = html; }
   /* Modals stack two deep: a task opened from inside the opportunity
@@ -1210,15 +1255,7 @@ RWG.app = (function () {
       if (cm && cm.onChange) cm.onChange(e, cm.state);
     });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        // Peel one layer. A contact panel raised over a task window is the
-        // top thing on screen; Escape should put the number away and leave
-        // you in the window you were typing in.
-        const dm = $('#drawer-mount');
-        if (dm && dm.firstElementChild) { closeDrawer(); return; }
-        closeModal(); closeOmni(); closeUserMenu();
-        document.querySelectorAll('.pop-panel:not([hidden])').forEach(p => p.hidden = true);
-      }
+      if (e.key === 'Escape') peelTop();
       // ⌘K / Ctrl-K puts the cursor in the search box from anywhere.
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         const box = $('#global-search');
@@ -1348,7 +1385,8 @@ RWG.app = (function () {
   // The kernel's public surface. Modules use nav() to move around and icons for their tiles.
   // effectiveUser/effectiveRole + viewAs let a module honour admin "view as" for its own reads/writes.
   return { boot, bind, state, nav, renderMain, openPanel, closeDrawer,
+    peelTop, guardHistory,
     icons: ICONS, effectiveUser, effectiveRole, viewAs: setViewAs };
 })();
 
-document.addEventListener('DOMContentLoaded', () => { RWG.app.bind(); RWG.app.boot(); });
+document.addEventListener('DOMContentLoaded', () => { RWG.app.bind(); RWG.app.guardHistory(); RWG.app.boot(); });

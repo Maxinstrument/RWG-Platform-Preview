@@ -28,7 +28,38 @@ window.RWG = window.RWG || {};
   // here rather than a separate place to remember to look.
   // `from` is the screen the record was opened from, so the back link goes
   // where you came from instead of always dumping you in the full list.
-  const st = { q: '', sort: 'az', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note', from: null };
+  const st = { q: '', sort: 'seen', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note', from: null };
+
+  /* Who you were just working with, at the top. A book of clients is not
+     really browsed alphabetically — you come back to the same handful all
+     week — so the list opens on the people you have actually opened,
+     most recent first, with everyone else behind them in A-Z.
+
+     It is kept per person in this browser rather than on the record: it
+     is a memory of what YOU looked at, and writing to Firestore on every
+     click would put a write behind reading a name. Private browsing and
+     a wiped cache simply fall back to A-Z, which is why the store never
+     throws. */
+  const seenKey = () => {
+    const me = RWG.auth && RWG.auth.currentUser && RWG.auth.currentUser();
+    return 'rwg.seen.contacts.' + ((me && me.id) || 'anon');
+  };
+  function seenList() {
+    try {
+      if (typeof localStorage === 'undefined') return [];
+      const raw = localStorage.getItem(seenKey());
+      const v = raw ? JSON.parse(raw) : [];
+      return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+  }
+  function markSeen(id) {
+    if (!id) return;
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const next = [id].concat(seenList().filter(x => x !== id)).slice(0, 200);
+      localStorage.setItem(seenKey(), JSON.stringify(next));
+    } catch (e) { /* a full or blocked store just means no memory */ }
+  }
 
   const hhOf = (c) => (c.householdId ? H().household(c.householdId) : null);
   function advisorOf(c) {
@@ -65,13 +96,23 @@ window.RWG = window.RWG || {};
     // of clients — falling back to the first name for a family.
     const name = (c) => `${c.lastName || ''} ${c.firstName || ''}`.trim().toLowerCase()
       || H().contactName(c).toLowerCase();
+    // rank: 0 is the last person opened. Anyone never opened sorts behind
+    // the whole memory, and ties there fall back to A-Z.
+    const seen = seenList();
+    const rank = {};
+    seen.forEach((id, i) => { rank[id] = i; });
     const sorters = {
       az: (a, b) => name(a).localeCompare(name(b)),
       za: (a, b) => name(b).localeCompare(name(a)),
+      seen: (a, b) => {
+        const ra = rank[a.id] == null ? Infinity : rank[a.id];
+        const rb = rank[b.id] == null ? Infinity : rank[b.id];
+        return ra === rb ? name(a).localeCompare(name(b)) : ra - rb;
+      },
       recent: (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0),
       created: (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
     };
-    return list.sort(sorters[st.sort] || sorters.az);
+    return list.sort(sorters[st.sort] || sorters.seen);
   }
 
   // ── cells ─────────────────────────────────────────────────
@@ -769,7 +810,7 @@ window.RWG = window.RWG || {};
           <span class="topbar-spacer"></span>
           <div class="flex" style="gap:6px;align-items:center">
             <span class="cell-sub" style="margin-right:2px">Order</span>
-            ${sortBtn('az', 'A–Z')}${sortBtn('za', 'Z–A')}${sortBtn('recent', 'Recent')}${sortBtn('created', 'Newest')}
+            ${sortBtn('seen', 'Last opened')}${sortBtn('az', 'A–Z')}${sortBtn('za', 'Z–A')}${sortBtn('recent', 'Edited')}${sortBtn('created', 'Newest')}
             <button class="btn btn-ghost btn-sm" data-action="ct-export"
               title="Exports exactly what the filters are showing, in the order shown">⤓ Export</button>
             ${isHH
@@ -859,6 +900,7 @@ window.RWG = window.RWG || {};
         if (!c) return;
         const at = RWG.app.state && RWG.app.state.view;
         if (at && at !== 'contact') st.from = at;
+        markSeen(c.id);
         st.currentId = c.id;
         st.tab = 'note';
         const m = document.getElementById('modal-mount'); if (m) m.innerHTML = '';

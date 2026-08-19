@@ -574,7 +574,7 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .scrim.no-enter{animation:none;}
 
 .drawer{
-  position:fixed;top:0;right:0;height:100vh;width:480px;max-width:94vw;z-index:130;
+  position:fixed;top:0;right:0;height:100vh;height:100dvh;width:480px;max-width:94vw;z-index:130;
   background:var(--paper);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;
   animation:drawer-in .26s cubic-bezier(.2,.7,.3,1) backwards;
   will-change:transform;
@@ -641,7 +641,12 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .modal-card{
   --modal-w:560px;
   position:fixed;top:24px;left:0;right:0;margin:0 auto;z-index:130;
-  width:min(var(--modal-w),94vw);max-height:calc(100vh - 48px);
+  width:min(var(--modal-w),94vw);
+  /* 100vh on a phone is the viewport WITHOUT the browser chrome, so the
+     foot of a tall window sat under the address bar and its buttons could
+     not be tapped. dvh is the height actually on screen; the vh line
+     stays first as the fallback for browsers that lack it. */
+  max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);
   display:flex;flex-direction:column;                 /* head/foot pinned, body scrolls */
   background:var(--paper);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);
   border-top:3px solid var(--gold);
@@ -700,10 +705,17 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 }
 .modal-foot .topbar-spacer{flex:1;min-width:0;}
 @media (max-width:600px){
-  .modal-card{top:12px;max-height:calc(100vh - 24px);}
+  .modal-card{top:12px;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);}
   .modal-head{padding:var(--s4) var(--s4) var(--s2);}
   .modal-body{padding:var(--s3) var(--s4);}
-  .modal-foot{padding:var(--s3) var(--s4) var(--s4);}
+  /* Clear of the home indicator, and never squeezed to nothing: the row
+     that holds Save and Delete is the one that must always be tappable. */
+  .modal-foot{
+    padding:var(--s3) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom, 0px));
+    position:sticky;bottom:0;background:var(--paper);
+    border-radius:0 0 var(--radius-lg) var(--radius-lg);
+  }
+  .modal-foot .btn{min-height:42px;}
 }
 
 /* ============================================================
