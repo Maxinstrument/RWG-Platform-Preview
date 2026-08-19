@@ -53,7 +53,15 @@ window.RWG = window.RWG || {};
   ];
 
   // ── the task modal (add + edit) ───────────────────────────
-  const mount = () => document.getElementById('modal-mount');
+  // A task opened while another window is up (the opportunity window,
+  // mostly) stacks on layer 2 instead of replacing it: close or save the
+  // task and the window underneath is still there, edits and all.
+  const mount = () => {
+    const m1 = document.getElementById('modal-mount');
+    const m2 = document.getElementById('modal-mount-2');
+    if (m2 && m1 && m1.firstElementChild) return m2;
+    return m1;
+  };
   const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
   /* ── "Related to": one box, three kinds of record ─────────
@@ -506,6 +514,7 @@ window.RWG = window.RWG || {};
         if (!confirm('Move “' + (t.title || 'this task') + '” to the Trash?')) return;
         T().removeTask(el.dataset.id);
         mount().innerHTML = '';
+        if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast('Moved to the Trash — restorable from there', true);
       },
@@ -542,6 +551,7 @@ window.RWG = window.RWG || {};
         if (el.dataset.id) T().saveTask(Object.assign({ id: el.dataset.id }, fields));
         else T().addTask(fields);
         mount().innerHTML = '';
+        if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast(el.dataset.id ? 'Saved' : 'Task added — it is on ' + (fields.assigneeName || 'their') + "'s list", true);
       },

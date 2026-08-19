@@ -547,6 +547,14 @@ window.RWG = window.RWG || {};
     }).catch(err => U().toast('Could not save: ' + err.message));
   }
 
+  /* Repaint just the steps block of an open opportunity window — called
+     after a stacked task closes, so a retitle, reassign or delete shows
+     through without the window (and its half-typed fields) re-rendering. */
+  RWG.refreshOppSteps = function () {
+    const wrap = document.getElementById('op2-stepswrap');
+    if (wrap) wrap.outerHTML = stepsBlock(wrap.dataset.rec, wrap.dataset.ctc || null);
+  };
+
   RWG.modules.register({
     id: 'cases',
     title: 'All Cases',

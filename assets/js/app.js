@@ -241,7 +241,8 @@ RWG.app = (function () {
         <main class="main">${banner}<div id="main-content"></div></main>
       </div>
       <div id="drawer-mount"></div>
-      <div id="modal-mount"></div>`;
+      <div id="modal-mount"></div>
+      <div id="modal-mount-2"></div>`;
     document.body.classList.add('in-app');
     renderMain();
   }
@@ -477,7 +478,15 @@ RWG.app = (function () {
 
   // ────────────────────────── modal (Add lead)
   function openModal(html) { const m = $('#modal-mount'); if (m) m.innerHTML = html; }
-  function closeModal() { dismiss('#modal-mount', 150); }
+  /* Modals stack two deep: a task opened from inside the opportunity
+     window lives on layer 2, over it. Closing — the ✕, the scrim, or
+     Escape — peels the TOP layer only, so the window underneath (and
+     whatever is half-typed in it) survives until its own close. */
+  function closeModal() {
+    const m2 = $('#modal-mount-2');
+    if (m2 && m2.firstElementChild) { dismiss('#modal-mount-2', 150); return; }
+    dismiss('#modal-mount', 150);
+  }
 
   function buildAddLeadModal() {
     const u = RWG.auth.currentUser();
