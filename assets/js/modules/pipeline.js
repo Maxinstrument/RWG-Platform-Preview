@@ -267,7 +267,13 @@ window.RWG = window.RWG || {};
     const id = dragId; dragId = null; clearHighlights();
     if (!col) return;
     e.preventDefault();
-    if (col.hasAttribute('data-plwon')) { toWon(id); return; }
+    if (col.hasAttribute('data-plwon')) {
+      const cd = SD().caseById(id);
+      // a closed stray dropped on a specific closed column parks THERE
+      if (cd && cd.closedAt) parkClosed(id, col.dataset.plstage);
+      else toWon(id);
+      return;
+    }
     SD().setPipelineStage(id, col.dataset.plstage)
       .then(() => { RWG.app.renderMain(); fireWorkflows(id); })
       .catch(err => U().toast('Could not move: ' + err.message));
@@ -360,7 +366,25 @@ window.RWG = window.RWG || {};
   // Push to Won. A partner lands straight in the close review — confirming
   // their own case is one motion. An advisor's case waits in the inbox.
   const INS_FAM = { wl: 1, term: 1, di: 1, ltc: 1 };
+  /* A closed case that sits in a WORKING column is a stray — mostly from
+     the stage-triage window before the closed stages existed. Pushing it
+     is not a close (it already closed, counted, partner-stamped); it is
+     parking. So the same gesture just moves it: no review, no premium
+     question, no stamp touched. */
+  function parkClosed(id, stageId) {
+    const c = SD().caseById(id); if (!c) return;
+    const pl = P().pipelineForProduct(c.product);
+    const target = (stageId && pl.stages.find(x => x.id === stageId && x.bucket === 'Closed'))
+      || pl.stages.find(x => x.bucket === 'Closed');
+    if (!target) return;
+    SD().setPipelineStage(id, target.id)
+      .then(() => { RWG.app.renderMain();
+        U().toast('Moved to ' + target.label + ' — already closed and counted; nothing re-opens', true); })
+      .catch(err => U().toast('Could not move: ' + err.message));
+  }
   function toWon(id) {
+    const c1 = SD().caseById(id);
+    if (c1 && c1.closedAt) { parkClosed(id); return; }
     const blocks = RWG.wf ? RWG.wf.blockers(id) : [];
     if (blocks.length) { blockedModal(blocks); return; }
     // The door to Delivery Requirements is the premium, not the paperwork:
