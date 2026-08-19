@@ -101,6 +101,7 @@ window.RWG = window.RWG || {};
     contacts: () => [
       { k: 'lastName',  label: 'Last name',   type: 'text', get: c => c.lastName || '' },
       { k: 'firstName', label: 'First name',  type: 'text', get: c => c.firstName || '' },
+      { k: 'preferredName', label: 'Preferred name', type: 'text', get: c => c.preferredName || '' },
       { k: 'email',     label: 'Email',       type: 'text', get: c => c.email || '' },
       { k: 'phone',     label: 'Phone',       type: 'text', get: c => c.phone || '' },
       { k: 'relationship', label: 'Relationship', type: 'enum', get: c => c.relationship || '',

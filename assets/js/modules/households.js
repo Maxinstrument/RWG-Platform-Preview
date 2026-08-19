@@ -127,6 +127,9 @@ window.RWG = window.RWG || {};
         <div class="field-group"><label class="lbl">First name</label><input id="p-first" value="${esc(v('firstName'))}"></div>
         <div class="field-group"><label class="lbl">Last name</label><input id="p-last" value="${esc(v('lastName'))}"></div>
       </div>
+      <div class="field-group"><label class="lbl">Preferred name <span class="pill-soft" style="font-size:11px">optional</span></label>
+        <input id="p-pref" value="${esc(v('preferredName'))}" placeholder="What they go by — Bob for Robert">
+        <div class="hint">How we address them. The legal names above are what still go on applications.</div></div>
       ${hhBlock}
       <div class="field-row">
         <div class="field-group"><label class="lbl">Relationship</label><select id="p-rel">${relOpts}</select></div>
@@ -801,6 +804,7 @@ window.RWG = window.RWG || {};
       'hh-person-save': (el) => {
         const fields = {
           firstName: g('p-first').trim(), lastName: g('p-last').trim(),
+          preferredName: g('p-pref').trim(),
           relationship: g('p-rel'), dob: g('p-dob'), phone: g('p-phone').trim(),
           email: g('p-email').trim(), employer: g('p-employer').trim(),
           planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc'),

@@ -76,6 +76,13 @@ RWG.hh = (function () {
   const primaryContact = (hhId) =>
     contactsFor(hhId).find(c => c.relationship === 'Primary client') || contactsFor(hhId)[0] || null;
   const contactName = (c) => `${(c && c.firstName) || ''} ${(c && c.lastName) || ''}`.trim();
+  /* What to call them out loud. A preferred name is how a person wants to
+     be addressed — Bob for Robert, a middle name, an anglicised name — so
+     it wins for greetings and first-name displays. The legal first and
+     last names are untouched: applications and carrier paperwork need the
+     name on the driver's licence, not the one on the birthday card. */
+  const callName = (c) => ((c && c.preferredName) || '').trim() || ((c && c.firstName) || '').trim();
+  const spokenName = (c) => `${callName(c)} ${(c && c.lastName) || ''}`.trim();
 
   // ── duplicate matching (same normalisation the leads import uses) ──
   const digits = (s) => String(s == null ? '' : s).replace(/\D/g, '');
@@ -183,6 +190,7 @@ RWG.hh = (function () {
     const ref = db().collection('contacts').doc();
     const c = Object.assign({
       id: ref.id, householdId: null, firstName: '', lastName: '',
+      preferredName: '',               // what they actually go by — Bob for Robert
       relationship: 'Other', email: '', phone: '', dob: '', employer: '',
       planType: '', memberClass: '', yos: null, afc: null, age: null,
       tags: [],                        // free-form labels; the tag list is derived from use
@@ -422,6 +430,7 @@ RWG.hh = (function () {
     RELATIONSHIPS, LINK_KINDS, linkLabel,
     init, teardown, isStarted,
     households, household, contacts, contact, contactsFor, primaryContact, contactName,
+    callName, spokenName,
     findDupContact, upcomingBirthdays,
     parseTags, allTags, hasTag,
     addHousehold, saveHousehold, setA360, deleteHousehold,

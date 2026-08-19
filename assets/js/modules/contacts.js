@@ -48,6 +48,7 @@ window.RWG = window.RWG || {};
       list = list.filter(c => {
         const h = hhOf(c);
         return H().contactName(c).toLowerCase().indexOf(q) >= 0
+          || String(c.preferredName || '').toLowerCase().indexOf(q) >= 0
           || String(c.email || '').toLowerCase().indexOf(q) >= 0
           || String(c.phone || '').replace(/\D/g, '').indexOf(q.replace(/\D/g, '')) >= 0 && /\d/.test(q)
           || String(c.employer || '').toLowerCase().indexOf(q) >= 0
@@ -399,6 +400,7 @@ window.RWG = window.RWG || {};
     // action is two places to look and one of them is always the wrong one.
     return `<div class="card flush">
       <div class="list-head"><span class="t">Details</span></div>
+      ${rowLine('Preferred name', esc(c.preferredName || '—'))}
       ${rowLine('Relationship', esc(c.relationship || '—'))}
       ${rowLine('Advisor', esc(adv || '—'))}
       ${rowLine('Household', h ? `<button class="btn-link" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')}
@@ -558,6 +560,8 @@ window.RWG = window.RWG || {};
           ${U().avatar({ name: fullName(c) }, 54)}
           <div style="min-width:0">
             <h3 style="font-size:var(--fs-title)">${esc(fullName(c))}</h3>
+            ${c.preferredName && c.preferredName.trim() !== (c.firstName || '').trim()
+              ? `<div class="cell-sub" style="color:var(--gold);font-weight:600">Goes by ${esc(c.preferredName)}</div>` : ''}
             <div class="cell-sub">${esc([c.title, c.employer].filter(Boolean).join(' at ') || c.relationship || '')}</div>
             <div class="tag-row" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
               ${h ? `<button class="pill-soft" style="cursor:pointer" data-action="hh-panel" data-id="${esc(h.id)}"
@@ -767,11 +771,11 @@ window.RWG = window.RWG || {};
         if (st.scope === 'households') { exportHouseholds(); return; }
         const list = rows();
         if (!list.length) { U().toast('Nothing to export'); return; }
-        const head = ['First name', 'Last name', 'Relationship', 'Phone', 'Email', 'Date of birth',
+        const head = ['First name', 'Last name', 'Preferred name', 'Relationship', 'Phone', 'Email', 'Date of birth',
           'Employer', 'Plan type', 'Years of service', 'AFC', 'Tags', 'Household', 'Advisor', 'AdvisorStream'];
         const data = list.map(c => {
           const h = hhOf(c);
-          return [c.firstName || '', c.lastName || '', c.relationship || '', c.phone || '', c.email || '',
+          return [c.firstName || '', c.lastName || '', c.preferredName || '', c.relationship || '', c.phone || '', c.email || '',
             c.dob || '', c.employer || '', c.planType || '', c.yos == null ? '' : c.yos,
             c.afc == null ? '' : c.afc, (c.tags || []).join('; '), h ? h.name : '',
             advisorOf(c) || '', c.advisorstream ? 'yes' : 'no'];
