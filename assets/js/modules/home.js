@@ -215,10 +215,13 @@ window.RWG = window.RWG || {};
 
   /* ══ the widgets ══════════════════════════════════════════ */
 
-  // 1 · Weekly pace — written this week, against the one target that exists.
+  // 1 · Weekly pace — CLOSED this week, against the one target that exists.
+  // Closed is what counts: a case written in July that closes today belongs
+  // to this week's number. (Written-week production still lives on the
+  // scorecard; this row is the money that actually landed.)
   function wPace(ctx) {
     const cur = SC().currentWeekEnding();
-    const wk = scoped(SD().cases(), ctx).filter(c => c.submittedAt && SC().weekEndingFor(c.submittedAt) === cur);
+    const wk = scoped(SD().cases(), ctx).filter(c => c.closedAt && SC().weekEndingFor(c.closedAt) === cur);
     const fycSum = wk.reduce((n, c) => n + SC().deriveCase(c).fyc, 0);
     const annSum = wk.filter(c => c.product === 'annuity').reduce((n, c) => n + (Number(c.amount) || 0), 0);
     const aumSum = wk.filter(c => SC().usesAum(c.product)).reduce((n, c) => n + (Number(c.aum) || 0), 0);
@@ -232,14 +235,14 @@ window.RWG = window.RWG || {};
       <div class="cell-sub" style="margin-top:5px;font-size:10.5px">${note}</div>
     </div>`;
     return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s4)">
-      ${tile('FYC written this week', U().money(Math.round(fycSum)),
+      ${tile('FYC closed this week', U().money(Math.round(fycSum)),
         ctx.isAdmin ? pct + '% of the $' + (goal / 1000) + 'k pace · ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left'
           : 'counts toward the team’s ' + U().money(SC().FYC_PER_WEEK_AT_TARGET) + '/week pace',
         ctx.isAdmin ? pct : null, pct >= 100 ? 'var(--good)' : (pct >= 60 ? 'var(--gold)' : 'var(--bad)'))}
-      ${tile('Annuity deposits this week', U().money(Math.round(annSum)),
-        wk.filter(c => c.product === 'annuity').length + ' written · no weekly target set', null, '')}
-      ${tile('AUM net new this week', U().money(Math.round(aumSum)),
-        wk.filter(c => SC().usesAum(c.product)).length + ' written · no weekly target set', null, '')}
+      ${tile('Annuity deposits closed this week', U().money(Math.round(annSum)),
+        wk.filter(c => c.product === 'annuity').length + ' closed · no weekly target set', null, '')}
+      ${tile('AUM closed this week', U().money(Math.round(aumSum)),
+        wk.filter(c => SC().usesAum(c.product)).length + ' closed · no weekly target set', null, '')}
     </div>`;
   }
 
