@@ -236,6 +236,24 @@ RWG.wf = (function () {
     return me ? { uid: me.id, name: me.name || '' } : { uid: null, name: '' };
   }
 
+  /* Pin who case management is, by uid. The name match this falls back on
+     is brittle in exactly the way that bit us: a config reading "Kathy"
+     never matches an account named "Katherine Martinez", the lookup fails
+     silently, and every case-manager step lands on the advisor. Any screen
+     that discovers the right person can write it down once and be done. */
+  function pinCaseManager(uid, name) {
+    if (!uid) return Promise.resolve(false);
+    cfg.caseManagerUid = uid;
+    if (name) cfg.caseManagerName = name;
+    if (!RWG.fb || !RWG.fb.db) return Promise.resolve(false);
+    const me = RWG.auth && RWG.auth.currentUser && RWG.auth.currentUser();
+    return RWG.fb.db.collection('config').doc('workflows')
+      .set({ value: cfg, updatedAt: new Date().toISOString(), updatedBy: (me && me.id) || null })
+      .then(() => true)
+      .catch(e => { console.error('pin case manager:', e && e.message); return false; });
+  }
+  const caseManager = () => ({ uid: cfg.caseManagerUid || null, name: cfg.caseManagerName || '' });
+
   // ── what a launch points at, and its dedupe key ───────────
   function keyFor(tpl, c, hhId) {
     if (tpl.related === 'household' && hhId) return 'hh:' + hhId;
@@ -419,7 +437,7 @@ RWG.wf = (function () {
 
   return {
     DEFAULTS, init,
-    templates, template, resolveOwner,
+    templates, template, resolveOwner, pinCaseManager, caseManager,
     launch, autoLaunch, candidates, hasRun, blockers, waitingOn, rebaseChains, instancesFor,
     current: () => cfg   // the whole live config, for the settings editor's draft
   };

@@ -84,16 +84,21 @@ window.RWG = window.RWG || {};
     if (caseWrap) caseWrap.style.display = tpl.related === 'household' ? 'none' : '';
   }
 
-  function launchModal(hhId) {
+  function launchModal(hhId, preCase) {
     const h = H().household(hhId); if (!h) return;
     const me = RWG.auth.currentUser();
     if (T() && !T().isStarted()) T().init(me, RWG.app.renderMain);
     const tpls = W().templates();
     const tplOpts = tpls.map((t, i) =>
       `<option value="${esc(t.id)}" ${i === 0 ? 'selected' : ''}>${esc(t.name)}${t.trigger ? '' : ' (manual)'}</option>`).join('');
-    const cases = openCasesOf(hhId);
+    // Opened from an opportunity: that one leads and is already chosen.
+    let cases = openCasesOf(hhId);
+    if (preCase && !cases.some(c => c.recordId === preCase)) {
+      const extra = SD() && SD().isStarted() ? SD().caseById(preCase) : null;
+      if (extra) cases = [extra].concat(cases);
+    }
     const caseOpts = cases.map(c =>
-      `<option value="${esc(c.recordId)}">${esc(c.clientName || '(no name)')} · ${esc(SC().productName(c.product))}</option>`).join('');
+      `<option value="${esc(c.recordId)}" ${c.recordId === preCase ? 'selected' : ''}>${esc(c.clientName || '(no name)')} · ${esc(SC().productName(c.product))}</option>`).join('');
     mount().innerHTML = `
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card" style="max-width:640px">
@@ -132,7 +137,7 @@ window.RWG = window.RWG || {};
     nav: [],
 
     actions: {
-      'wf-launch': (el) => launchModal(el.dataset.hh),
+      'wf-launch': (el) => launchModal(el.dataset.hh, el.dataset.case || null),
       'wf-launch-save': (el) => {
         const tpl = W().template(val('wf-tpl')); if (!tpl) return;
         const c = val('wf-case') ? SD().caseById(val('wf-case')) : null;

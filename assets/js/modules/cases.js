@@ -119,13 +119,18 @@ window.RWG = window.RWG || {};
     const addBtn = `<button class="btn btn-quiet btn-sm" data-action="tk-new"
         data-case="${esc(recordId)}" ${contactId ? `data-contact="${esc(contactId)}"` : ''}
         title="Opens the task window — save any edits here first">＋ Task</button>`;
+    /* Starting a workflow by hand used to live only on the household page,
+       which is nowhere near where the work is. An opportunity is the thing
+       a workflow usually runs on, so the button belongs here too. */
+    const wfBtn = `<button class="btn btn-quiet btn-sm" data-action="cs-wf-launch"
+        data-id="${esc(recordId)}" title="Start a workflow on this opportunity">▶ Workflow</button>`;
     return `<div class="cs-correct" style="margin-top:var(--s3)" id="op2-stepswrap"
         data-rec="${esc(recordId)}" ${contactId ? `data-ctc="${esc(contactId)}"` : ''}>
       <div class="cs-correct-h" style="display:flex;align-items:center;gap:8px">Work on this opportunity
         <span class="muted">${steps.length
           ? (open ? open + ' open of ' + steps.length : 'all ' + steps.length + ' done') + (wfName ? ' · ' + esc(wfName) : '')
           : 'nothing yet'}</span>
-        <span class="topbar-spacer"></span>${addBtn}</div>
+        <span class="topbar-spacer"></span>${wfBtn}${addBtn}</div>
       ${steps.map(t => {
         const late = t.status !== 'done' && t.dueDate && t.dueDate < today;
         const waitFor = t.status !== 'done' && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
@@ -695,6 +700,16 @@ window.RWG = window.RWG || {};
          only the steps block repaints. The chain guard and the chained
          re-dating both live in the shared task engine, so a tick here
          behaves exactly like a tick on the Tasks screen. */
+      /* Into the manual launcher from the opportunity. It runs on the
+         household (workflows attach there), with this case preselected so
+         the steps point at the right opportunity. */
+      'cs-wf-launch': (el) => {
+        const c = D().caseById(el.dataset.id); if (!c) return;
+        const wm = RWG.modules.get('workflows');
+        if (!wm || !wm.actions['wf-launch']) { U().toast('Workflows are still loading'); return; }
+        if (!c.householdId) { U().toast('Point this opportunity at a household first — workflows hang off the family'); return; }
+        wm.actions['wf-launch']({ dataset: { hh: c.householdId, case: c.recordId } });
+      },
       'cs-step-done': (el) => {
         const T = RWG.tasks; if (!T || !T.isStarted()) return;
         const t = T.task(el.dataset.id); if (!t) return;

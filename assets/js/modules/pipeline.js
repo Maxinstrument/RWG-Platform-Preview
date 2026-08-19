@@ -321,6 +321,24 @@ window.RWG = window.RWG || {};
         <input type="checkbox" id="plwf-t-${esc(t.id)}" checked style="accent-color:var(--gold);margin-top:2px">
         <span><b>${esc(t.name)}</b>${t.desc ? `<span class="cell-sub" style="display:block">${esc(t.desc)}</span>` : ''}</span>
       </label>`).join('');
+    /* Case-manager steps were the quiet failure here. resolveOwner falls
+       back to the advisor when it cannot place the case manager, and this
+       prompt never showed it — so a whole checklist landed on one person
+       with nothing on screen to say so. Ask for the case manager the same
+       way the agent is asked for, whenever a candidate template has steps
+       that belong to one. */
+    const cmSteps = cands.some(t => (t.steps || []).some(s2 => s2.owner === 'casemanager'));
+    const cmNow = RWG.wf.resolveOwner ? RWG.wf.resolveOwner('casemanager', c) : { uid: null };
+    const cmBlock = !cmSteps ? '' : `
+      <div class="field-group"><label class="lbl">Case manager on these steps</label>
+        ${users.length > 1
+          ? `<select id="plwf-cm">${users.map(u =>
+              `<option value="${esc(u.id)}" ${u.id === cmNow.uid ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`
+          : `<input value="${esc(cmNow.name || '')}" disabled>`}
+        ${cmNow.fellBack
+          ? `<div class="hint" style="color:var(--bad);font-weight:600">No case manager is set for the firm, so these
+              steps would go to the advisor. Pick the right person — it is remembered for every workflow after this.</div>`
+          : '<div class="hint">Ordering, chasing and paperwork steps go here.</div>'}</div>`;
     // An agent's roster is themselves; the verify collapses to a statement.
     const agentSel = users.length > 1
       ? `<select id="plwf-agent">${users.map(u =>
@@ -339,6 +357,7 @@ window.RWG = window.RWG || {};
           <div class="field-group"><label class="lbl">Main agent on this case</label>
             ${agentSel}
             <div class="hint">The advisor steps go to whoever is named here. Changing it makes them the case owner.</div></div>
+          ${cmBlock}
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" data-action="close-modal">Not now</button>
@@ -459,6 +478,19 @@ window.RWG = window.RWG || {};
         });
         const uid = g('plwf-agent') || c.agentUid;
         const u = RWG.data.user(uid);
+        /* Whoever the prompt named is the case manager — for this launch
+           and for every one after it. Pinning here is the difference
+           between fixing a symptom once and fixing the config: the name
+           match that failed silently never has to be trusted again. */
+        const cmUid = g('plwf-cm');
+        if (cmUid && RWG.wf.pinCaseManager) {
+          const cu = RWG.data.user(cmUid);
+          const known = RWG.wf.caseManager ? RWG.wf.caseManager() : {};
+          if (cmUid !== known.uid) {
+            RWG.wf.pinCaseManager(cmUid, (cu && cu.name) || '')
+              .then(ok => { if (ok) U().toast(((cu && cu.name) || 'They') + ' is the case manager from now on', true); });
+          }
+        }
         const proceed = (row) => {
           const names = [];
           let pre = 0;
