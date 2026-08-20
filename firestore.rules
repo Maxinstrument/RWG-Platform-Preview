@@ -56,23 +56,25 @@ service cloud.firestore {
 
     // ── Scorecard: opportunities ────────────────────────────────
     // Team-readable (client names visible to all, matching today's Team Cases).
-    // An agent may write only their own cases; admins may write any.
-    // openedWeek is immutable and the lifecycle stamps are write-once, so each
-    // week's numbers are permanent. Admins can still correct a case.
+    //
+    // Anyone signed in may work any opportunity (2026-08-20). Two people are
+    // often on the same file, and an agent who could not move a colleague's
+    // case simply stopped using the board. Ownership says whose scorecard a
+    // case counts on; it is not a lock.
+    //
+    // What is guarded is the NUMBERS, and it is guarded here rather than in
+    // the UI because this is the half an agent cannot get around: openedWeek
+    // never moves, submittedAt is written once, and only a partner may ever
+    // write closedAt. Every week's totals stay permanent, and a close stays
+    // a partner's confirmation. Admins can still correct a case.
     match /cases/{id} {
       allow read:   if signedIn();
-      allow create: if signedIn() && (
-        isAdmin() || request.resource.data.agentUid == request.auth.uid
-      );
+      allow create: if signedIn();
       allow update: if signedIn() && (
         isAdmin() || (
-          resource.data.agentUid == request.auth.uid
-          && request.resource.data.agentUid == resource.data.agentUid
-          && request.resource.data.get('openedWeek', '') == resource.data.get('openedWeek', '')
+          request.resource.data.get('openedWeek', '') == resource.data.get('openedWeek', '')
           && (resource.data.get('submittedAt', null) == null
               || request.resource.data.get('submittedAt', null) == resource.data.get('submittedAt', null))
-          // Closing is a partner's confirmation (2026-08-13): an advisor can
-          // push a case to Won, but only an admin may ever WRITE closedAt.
           && request.resource.data.get('closedAt', null) == resource.data.get('closedAt', null)
         )
       );

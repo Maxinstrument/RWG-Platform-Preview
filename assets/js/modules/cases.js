@@ -2,9 +2,10 @@
    RWG Platform — All Cases (the old "Team Cases", carried over)
 
    The whole team's book in one filterable, sortable, exportable table.
-   Everyone can browse and search (read-only); the case owner and admins
-   can edit; admins can delete and correct the weeks. This is what "see
-   all the cases we have" was asking for.
+   Everyone can browse, search and edit — a case belongs to the firm, and
+   the owner field says whose week it counts on, not who may touch it.
+   Admins can delete, correct the weeks and confirm a close. This is what
+   "see all the cases we have" was asking for.
 
    Money + week rules come from RWG.scorecard. Data from RWG.scorecardData.
    ============================================================ */
@@ -93,7 +94,18 @@ window.RWG = window.RWG || {};
      contribution, FYC/compensation, renewals), source + description,
      and rich-text details. The money keeps the locked rule — typing
      FYC back-solves the RATE; a revenue number is never stored raw. */
-  function canEdit(c, user) { return user.role === 'admin' || c.agentUid === user.id; }
+  /* Anyone on the team may work anyone's opportunity (Carlos, Aug '26,
+     after an agent could not move a case he was working on with someone
+     else). Ownership decides whose scorecard a case lands on, not who is
+     allowed to touch it — this is a four-person firm where two people are
+     often on the same file.
+
+     What stays guarded is the NUMBERS, not the people: the opened week
+     never moves, the submitted stamp is written once, and only a partner
+     may write closedAt — a close is still a partner's confirmation. Those
+     three live in firestore.rules as well as here, because a rule is the
+     only one of the two an agent cannot get around. */
+  function canEdit(c, user) { return true; }
   const FAM = (p) => (p === 'wl' || p === 'term' || p === 'di') ? 'ins' : (p === 'annuity' ? 'ann' : (p === 'inv' ? 'inv' : 'flat'));
 
   // The note editor and its scrubber are shared (ui.js) — the opportunity
@@ -395,7 +407,7 @@ window.RWG = window.RWG || {};
 
           ${stepsBlock(c ? c.recordId : null, ctcId)}
           ${correct}
-          ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only — only the case owner or a partner can edit.</p>'}
+          ${editable ? '' : '<p class="muted" style="font-size:12.5px;margin-top:8px">Read-only.</p>'}
         </div>
         <div class="modal-foot">
           ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
