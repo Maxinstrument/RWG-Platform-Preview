@@ -431,23 +431,33 @@ window.RWG = window.RWG || {};
 
     const doneWk = T().doneThisWeek().filter(t => st.who === 'all' || t.assigneeUid === (st.who === 'me' ? uid : st.who));
 
-    // The filter bar reads as a sentence.
+    /* The bar used to read as one long sentence — "Filtering by [x]
+       assigned to [y] in category [z]" — pinned to a single line that
+       scrolled sideways when it ran out of room. A sentence you have to
+       scroll is not a sentence. The when-slice is the choice people make
+       twenty times a day, so it becomes a row of pills you can hit, in the
+       same visual language as the board's track selector; the three rarer
+       narrowings stay as selects, pushed to the right, each one already
+       naming itself. Nothing is pinned to a line any more, so it wraps
+       instead of scrolling. */
     const sel = (id, opts) => `<select id="${id}">${opts}</select>`;
-    const whenOpts = WHEN.map(w => `<option value="${w.id}" ${st.when === w.id ? 'selected' : ''}>${esc(w.label)}</option>`).join('');
+    const slices = WHEN.map(w =>
+      `<button class="btn btn-sm ${st.when === w.id ? 'btn-navy' : 'btn-ghost'}" data-action="tk-when" data-when="${w.id}">${esc(w.label)}</button>`).join('');
     const kindOpts = KINDS.map(k => `<option value="${k.id}" ${st.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('');
     const users = D().users().filter(u => u.status === 'active');
-    const whoOpts = [`<option value="me" ${st.who === 'me' ? 'selected' : ''}>me</option>`,
-      `<option value="all" ${st.who === 'all' ? 'selected' : ''}>anyone</option>`]
+    const whoOpts = [`<option value="me" ${st.who === 'me' ? 'selected' : ''}>Assigned to me</option>`,
+      `<option value="all" ${st.who === 'all' ? 'selected' : ''}>Anyone</option>`]
       .concat(users.filter(u => u.id !== uid).map(u =>
         `<option value="${esc(u.id)}" ${st.who === u.id ? 'selected' : ''}>${esc(u.name)}</option>`)).join('');
-    const catOpts = [`<option value="" ${!st.cat ? 'selected' : ''}>all categories</option>`]
+    const catOpts = [`<option value="" ${!st.cat ? 'selected' : ''}>All categories</option>`]
       .concat(T().categories().map(c =>
         `<option value="${esc(c)}" ${st.cat === c ? 'selected' : ''}>${esc(c)}</option>`)).join('');
 
     const count = st.when === 'completed' ? list.length
       : Object.keys(gps).reduce((n, k) => n + gps[k].length, 0);
 
-    return `<div class="mw-grid">
+    return `<div class="mw-stack">
+      ${rail ? `<div class="mw-top">${rail}</div>` : ''}
       <div class="card flush">
         <div class="list-head">
           <span class="t">Tasks</span>
@@ -462,22 +472,19 @@ window.RWG = window.RWG || {};
           : `${canDelete() ? '<button class="btn btn-quiet btn-sm" data-action="tk-sel-on" title="Pick several tasks to move to the Trash at once">Select</button>' : ''}
             <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>`}
         </div>
-        <div class="list-toolbar tb-inline">
-          <span class="tb-word">Filtering by</span>
-          ${sel('tk-f-when', whenOpts)}
+        <div class="list-toolbar tb-slices">
+          <span class="mw-slices">${slices}</span>
+          <span class="topbar-spacer"></span>
           ${sel('tk-f-kind', kindOpts)}
-          <span class="tb-word">assigned to</span>
           ${sel('tk-f-who', whoOpts)}
-          <span class="tb-word">in category</span>
           ${sel('tk-f-cat', catOpts)}
-          ${narrowed ? '<button class="btn btn-quiet btn-sm" data-action="tk-reset">Reset</button>' : ''}
           ${heldN ? `<button class="btn btn-quiet btn-sm" data-action="tk-chain"
             title="Workflow steps that cannot be started until the step before them is checked off">⛓ ${st.chain ? 'Hide' : 'Show'} ${heldN} waiting on ${heldN === 1 ? 'an earlier step' : 'earlier steps'}</button>` : ''}
+          ${narrowed ? '<button class="btn btn-quiet btn-sm" data-action="tk-reset">Reset</button>' : ''}
         </div>
         ${body || empty}
         ${doneWk.length && st.when !== 'completed' ? `<div class="list-foot"><span class="cell-sub">✓ ${doneWk.length} done in the last 7 days</span></div>` : ''}
       </div>
-      <div style="display:flex;flex-direction:column;gap:16px">${rail || '<div class="card"><p class="muted" style="font-size:13px;margin:0">Follow-ups, birthdays and stale cases will appear here as the book fills in.</p></div>'}</div>
     </div>`;
   }
 
@@ -520,7 +527,7 @@ window.RWG = window.RWG || {};
     },
 
     onChange(e) {
-      const map = { 'tk-f-when': 'when', 'tk-f-kind': 'kind', 'tk-f-who': 'who', 'tk-f-cat': 'cat' };
+      const map = { 'tk-f-kind': 'kind', 'tk-f-who': 'who', 'tk-f-cat': 'cat' };
       const key = map[e.target.id];
       if (!key) return;
       st[key] = e.target.value;
@@ -529,6 +536,7 @@ window.RWG = window.RWG || {};
 
     actions: {
       'tk-who': (el) => { st.who = el.dataset.who; RWG.app.renderMain(); },
+      'tk-when': (el) => { st.when = el.dataset.when; RWG.app.renderMain(); },
       'tk-cat-pick': (el) => { st.cat = el.dataset.cat || ''; RWG.app.renderMain(); },
       'tk-reset': () => { st.who = 'me'; st.when = 'upcoming'; st.kind = 'all'; st.cat = ''; st.chain = false; RWG.app.renderMain(); },
       'tk-chain': () => { st.chain = !st.chain; RWG.app.renderMain(); },
