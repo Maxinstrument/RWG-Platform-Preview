@@ -29,6 +29,12 @@ RWG.hh = (function () {
      what they are to their family (RELATIONSHIPS, above). A spouse can be
      a client; a client's brother can be a COI. */
   const CONTACT_TYPES = ['Client', 'Past Client', 'Prospect', 'COI'];
+  /* States are a field, not a line of text. You can only write business
+     where a client resides and suitability asks for it, so "who do we have
+     in Georgia" has to be answerable without grepping a string. */
+  const STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA',
+    'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+    'OH','OK','OR','PA','PR','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
   const PHONE_LABELS = ['Work', 'Home', 'Mobile', 'Fax', 'Other'];
   const EMAIL_LABELS = ['Personal', 'Work', 'Other'];
 
@@ -43,6 +49,58 @@ RWG.hh = (function () {
      Legacy rows carry only the flat fields, so reading normalises them
      into a one-entry list — at read time, nothing written, no label
      invented for a number nobody labelled. */
+  /* ── Where we mail things ──────────────────────────────────
+     The HOUSEHOLD holds the address and a person may override it. Most
+     families share one, and an address typed twice is an address that
+     will disagree with itself by next year; the override is for the one
+     who lives somewhere else — a student, a parent in care, an ex-spouse
+     still on the file.
+
+     This is not the system of record. The carrier and A360 are. A stale
+     address is worse than a blank one because somebody will trust it, so
+     every save stamps when it was last confirmed and the screens say how
+     long ago that was. */
+  function normalizeAddr(a) {
+    if (!a) return null;
+    const t = (k) => String(a[k] == null ? '' : a[k]).trim();
+    const out = { line1: t('line1'), line2: t('line2'), city: t('city'),
+      state: t('state').toUpperCase().slice(0, 2), zip: t('zip') };
+    return (out.line1 || out.city || out.state || out.zip) ? out : null;
+  }
+  const hasAddress = (a) => !!normalizeAddr(a);
+  const sameAddr = (a, b) => JSON.stringify(normalizeAddr(a)) === JSON.stringify(normalizeAddr(b));
+  // One line, the way an envelope reads it.
+  function addrLine(a) {
+    a = normalizeAddr(a); if (!a) return '';
+    const street = [a.line1, a.line2].filter(Boolean).join(', ');
+    const town = [a.city, [a.state, a.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    return [street, town].filter(Boolean).join(', ');
+  }
+  /* The address to use for a person, and where it came from — the screens
+     say "from the household" so nobody edits the family's address thinking
+     they are correcting one person's. */
+  function addressFor(c) {
+    if (!c) return { addr: null, from: null, at: '' };
+    if (hasAddress(c.address)) return { addr: normalizeAddr(c.address), from: 'contact', at: c.addressAt || '' };
+    const h = c.householdId ? household(c.householdId) : null;
+    if (h && hasAddress(h.address)) return { addr: normalizeAddr(h.address), from: 'household', at: h.addressAt || '', householdId: h.id };
+    return { addr: null, from: null, at: '' };
+  }
+  /* Employers, counted. Carlos asked how many people we have from a given
+     company; the roll-up is the answer, and it doubles as a filter. Same
+     rule as tags — no registry, the list is what is in use. */
+  function allEmployers() {
+    const counts = {}, label = {};
+    cache.contacts.forEach(c => {
+      const raw = String(c.employer || '').trim(); if (!raw) return;
+      const k = raw.toLowerCase();
+      counts[k] = (counts[k] || 0) + 1; label[k] = label[k] || raw;
+    });
+    return Object.keys(counts)
+      .map(k => ({ employer: label[k], count: counts[k] }))
+      .sort((a, b) => b.count - a.count || a.employer.localeCompare(b.employer));
+  }
+
   function normalizeWays(list, flat) {
     const out = [];
     (Array.isArray(list) ? list : []).forEach(w => {
@@ -182,10 +240,13 @@ RWG.hh = (function () {
     const ref = db().collection('households').doc();
     const h = Object.assign({
       id: ref.id, name: '', advisorUid: null, advisorName: '',
+      address: null, addressAt: '',             // where the family lives
       source: '', sourceDetail: '', notes: '', links: [],
       a360Complete: null,                       // {by, byName, at} once checked
       createdAt: now(), createdBy: (me && me.id) || null, updatedAt: now()
     }, fields);
+    h.address = normalizeAddr(h.address);
+    if (h.address && !h.addressAt) h.addressAt = new Date().toISOString();
     cache.households.push(h); onChange();
     persistHousehold(h);
     return h;
@@ -193,7 +254,12 @@ RWG.hh = (function () {
 
   function saveHousehold(patch) {
     const h = household(patch.id); if (!h) return;
+    const sentAddr = patch && Object.prototype.hasOwnProperty.call(patch, 'address');
     Object.assign(h, patch, { updatedAt: now() });
+    if (sentAddr) {
+      h.address = normalizeAddr(h.address);
+      h.addressAt = h.address ? new Date().toISOString() : '';
+    }
     onChange();
     return persistHousehold(h);
   }
@@ -276,6 +342,8 @@ RWG.hh = (function () {
       contactType: '',                 // Client | Past Client | Prospect | COI
       phones: [], emails: [],          // [{v,label}] — phone/email mirror the first
       relationship: 'Other', email: '', phone: '', dob: '', employer: '',
+      address: null, addressAt: '',     // null = use the household's
+
       planType: '', memberClass: '', yos: null, afc: null, age: null,
       tags: [],                        // free-form labels; the tag list is derived from use
       title: '', notes: '',            // job title, and anything the team should know
@@ -285,6 +353,8 @@ RWG.hh = (function () {
       createdAt: now(), createdBy: (me && me.id) || null, updatedAt: now()
     }, fields);
     ['yos', 'afc', 'age'].forEach(k => { c[k] = (c[k] === '' || c[k] == null) ? null : Number(c[k]); });
+    c.address = normalizeAddr(c.address);
+    if (c.address && !c.addressAt) c.addressAt = new Date().toISOString();
     syncWays(c, fields);
     cache.contacts.push(c); onChange();
     persistContact(c);
@@ -293,8 +363,16 @@ RWG.hh = (function () {
 
   function saveContact(patch) {
     const c = contact(patch.id); if (!c) return;
+    // Re-confirming the same address still counts as confirming it — that
+    // is what the annual review is for — so the stamp moves on every save
+    // that carries one.
+    const sentAddr = patch && Object.prototype.hasOwnProperty.call(patch, 'address');
     Object.assign(c, patch, { updatedAt: now() });
     ['yos', 'afc', 'age'].forEach(k => { if (c[k] === '' || c[k] == null) c[k] = null; else c[k] = Number(c[k]); });
+    if (sentAddr) {
+      c.address = normalizeAddr(c.address);
+      c.addressAt = c.address ? new Date().toISOString() : '';
+    }
     syncWays(c, patch);
     onChange();
     return persistContact(c);
@@ -513,7 +591,8 @@ RWG.hh = (function () {
   }
 
   return {
-    RELATIONSHIPS, CONTACT_TYPES, PHONE_LABELS, EMAIL_LABELS,
+    RELATIONSHIPS, CONTACT_TYPES, PHONE_LABELS, EMAIL_LABELS, STATES,
+    normalizeAddr, hasAddress, sameAddr, addrLine, addressFor, allEmployers,
     phonesOf, emailsOf, LINK_KINDS, linkLabel,
     init, teardown, isStarted,
     households, household, contacts, contact, contactsFor, primaryContact, contactName,

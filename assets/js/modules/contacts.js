@@ -28,7 +28,7 @@ window.RWG = window.RWG || {};
   // here rather than a separate place to remember to look.
   // `from` is the screen the record was opened from, so the back link goes
   // where you came from instead of always dumping you in the full list.
-  const st = { q: '', sort: 'seen', tag: '', advisor: '', rel: '', scope: 'people', currentId: null, tab: 'note', from: null };
+  const st = { q: '', sort: 'seen', tag: '', advisor: '', rel: '', employer: '', scope: 'people', currentId: null, tab: 'note', from: null };
 
   /* Who you were just working with, at the top. A book of clients is not
      really browsed alphabetically — you come back to the same handful all
@@ -84,11 +84,16 @@ window.RWG = window.RWG || {};
           || (/\d/.test(q) && H().phonesOf(c).some(w =>
                w.v.replace(/\D/g, '').indexOf(q.replace(/\D/g, '')) >= 0))
           || String(c.employer || '').toLowerCase().indexOf(q) >= 0
+          // city, state or ZIP: "who do we have in Hialeah" is a question
+          // people ask out loud, so the one box has to answer it
+          || H().addrLine(H().addressFor(c).addr).toLowerCase().indexOf(q) >= 0
           || (h && h.name.toLowerCase().indexOf(q) >= 0)
           || (c.tags || []).some(t => String(t).toLowerCase().indexOf(q) >= 0);
       });
     }
     if (st.tag) list = list.filter(c => H().hasTag(c, st.tag));
+    if (st.employer) list = list.filter(c =>
+      String(c.employer || '').trim().toLowerCase() === st.employer.toLowerCase());
     if (st.rel) list = list.filter(c => (c.relationship || '') === st.rel);
     if (st.advisor) list = list.filter(c => { const h = hhOf(c); return h && h.advisorUid === st.advisor; });
 
@@ -448,7 +453,20 @@ window.RWG = window.RWG || {};
       ${rowLine('Advisor', esc(adv || '—'))}
       ${rowLine('Household', h ? `<button class="btn-link" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')}
       ${rowLine('Source', esc((h && h.source) || '—'))}
-      ${rowLine('Employer', esc(c.employer || '—'), c.title || '')}
+      ${(() => {
+        /* An address inherited from the family is labelled as inherited.
+           Without that, somebody edits this person to fix a typo and is
+           surprised when the spouse's record still says the old street. */
+        const a = H().addressFor(c);
+        if (!a.addr) return rowLine('Address', '—', 'Add it from Edit, or on the household');
+        const sub = [a.from === 'household' ? 'from the household' : '',
+          a.at ? 'confirmed ' + U().fmtRelative(Date.parse(a.at)) : ''].filter(Boolean).join(' · ');
+        return rowLine('Address', esc(H().addrLine(a.addr)), sub);
+      })()}
+      ${rowLine('Employer', c.employer
+        ? `<button class="btn-link" data-action="ct-employer" data-employer="${esc(c.employer)}"
+             title="Show everyone from ${esc(c.employer)}">${esc(c.employer)}</button>`
+        : '—', c.title || '')}
       ${rowLine('Plan type', esc(c.planType || '—'),
         [c.yos != null && c.yos !== '' ? c.yos + ' yrs service' : '', c.afc ? U().money(c.afc) + ' AFC' : ''].filter(Boolean).join(' · '))}
       ${rowLine('Date of birth', c.dob ? esc(fmtDobLocal(c.dob)) : '—')}
@@ -663,7 +681,14 @@ window.RWG = window.RWG || {};
           </div>
         </div>
         <div class="drawer-body">
-          ${block('Reach them', null, reach)}
+          ${block('Reach them', null, reach + (() => {
+            const a = H().addressFor(c);
+            if (!a.addr) return '';
+            return `<div class="list-row"><span class="grow" style="min-width:0">
+              <span class="cell-sub" style="display:block">Mailing address${
+                a.from === 'household' ? ' · from the household' : ''}</span>
+              <span style="font-size:var(--fs-dense);color:var(--ink)">${esc(H().addrLine(a.addr))}</span></span></div>`;
+          })())}
           ${block('Opportunities', cases.length, caseRows)}
           ${block('Details', null,
             line('Household', h ? `<button class="btn-link" data-action="hh-panel" data-id="${esc(h.id)}">${esc(h.name)}</button>` : '—')
@@ -774,6 +799,15 @@ window.RWG = window.RWG || {};
     if (st.tag && !tags.some(t => t.tag.toLowerCase() === st.tag.toLowerCase())) tags.push({ tag: st.tag, count: 0 });
     const tagOpts = tags.map(t =>
       `<option value="${esc(t.tag)}" ${st.tag.toLowerCase() === t.tag.toLowerCase() ? 'selected' : ''}>${esc(t.tag)} · ${t.count}</option>`).join('');
+    /* Employers, most-represented first, each carrying its count — the
+       answer to "how many people do we have at Miami-Dade County" is the
+       dropdown itself, and picking one narrows the book to them. */
+    const emps = H().allEmployers();
+    if (st.employer && !emps.some(e => e.employer.toLowerCase() === st.employer.toLowerCase())) {
+      emps.push({ employer: st.employer, count: 0 });
+    }
+    const empOpts = emps.map(e =>
+      `<option value="${esc(e.employer)}" ${st.employer.toLowerCase() === e.employer.toLowerCase() ? 'selected' : ''}>${esc(e.employer)} · ${e.count}</option>`).join('');
 
     const sortBtn = (id, label) =>
       `<button class="btn btn-sm ${st.sort === id ? 'btn-navy' : 'btn-ghost'}" data-action="ct-sort" data-sort="${id}">${label}</button>`;
@@ -794,7 +828,7 @@ window.RWG = window.RWG || {};
            <h3>${total ? 'Nobody matches' : 'No people yet'}</h3>
            <p>${total ? 'Loosen the search or clear the tag filter.' : 'People arrive when a lead converts, or add one by hand.'}</p></div>`;
 
-    const filtered = st.q || st.tag || st.advisor || (!isHH && st.rel);
+    const filtered = st.q || st.tag || st.advisor || st.employer || (!isHH && st.rel);
 
     // The one-time grouping pass, offered while any case still lacks a
     // household and gone the day the last one is attached.
@@ -825,6 +859,7 @@ window.RWG = window.RWG || {};
                  value="${esc(st.q)}">
           <select id="ct-advisor"><option value="">Any advisor</option>${advOpts}</select>
           ${isHH ? '' : `<select id="ct-rel"><option value="">Any relationship</option>${relOpts}</select>`}
+          ${isHH ? '' : `<select id="ct-employer" title="Employers in the book, with how many people each"><option value="">Any employer</option>${empOpts}</select>`}
           <select id="ct-tagsel" title="Tags in use"><option value="">Any tag</option>${tagOpts}</select>
           <span class="topbar-spacer"></span>
           ${isHH ? `<button class="btn btn-ghost btn-sm" data-action="hh-convert-pick">Convert a lead ${U().icon('spark','ic-inline')}</button>` : ''}
@@ -887,6 +922,7 @@ window.RWG = window.RWG || {};
       if (e.target.id === 'ct-scope') { st.scope = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-advisor') { st.advisor = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-rel') { st.rel = e.target.value; RWG.app.renderMain(); }
+      if (e.target.id === 'ct-employer') { st.employer = e.target.value; RWG.app.renderMain(); }
       if (e.target.id === 'ct-tagsel') { st.tag = e.target.value; RWG.app.renderMain(); }
     },
 
@@ -933,6 +969,12 @@ window.RWG = window.RWG || {};
         U().toast('Posted to ' + H().contactName(c), true);
       },
       'ct-sort': (el) => { st.sort = el.dataset.sort; RWG.app.renderMain(); },
+      'ct-employer': (el) => {
+        st.employer = el.dataset.employer || '';
+        st.scope = 'people';
+        st.currentId = null;
+        RWG.app.nav('contacts');
+      },
       'ct-tag': (el) => {
         const t = el.dataset.tag || '';
         // Clicking the tag you are already filtered on takes it off again.
@@ -946,13 +988,18 @@ window.RWG = window.RWG || {};
         const list = rows();
         if (!list.length) { U().toast('Nothing to export'); return; }
         const head = ['First name', 'Last name', 'Preferred name', 'Contact type', 'Relationship', 'Phones', 'Emails', 'Date of birth',
+          'Street', 'Apt / Unit', 'City', 'State', 'ZIP', 'Address from',
           'Employer', 'Plan type', 'Years of service', 'AFC', 'Tags', 'Household', 'Advisor', 'AdvisorStream'];
         const data = list.map(c => {
           const h = hhOf(c);
           const wayList = (ws) => ws.map(w => w.v + (w.label ? ' (' + w.label + ')' : '')).join('; ');
+          // Split into columns, not one string: a mail merge wants fields.
+          const a = H().addressFor(c), ad = a.addr || {};
           return [c.firstName || '', c.lastName || '', c.preferredName || '', c.contactType || '', c.relationship || '',
             wayList(H().phonesOf(c)), wayList(H().emailsOf(c)),
-            c.dob || '', c.employer || '', c.planType || '', c.yos == null ? '' : c.yos,
+            c.dob || '', ad.line1 || '', ad.line2 || '', ad.city || '', ad.state || '', ad.zip || '',
+            a.from === 'household' ? 'household' : (a.from || ''),
+            c.employer || '', c.planType || '', c.yos == null ? '' : c.yos,
             c.afc == null ? '' : c.afc, (c.tags || []).join('; '), h ? h.name : '',
             advisorOf(c) || '', c.advisorstream ? 'yes' : 'no'];
         });

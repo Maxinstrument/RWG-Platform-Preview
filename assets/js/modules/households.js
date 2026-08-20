@@ -80,6 +80,42 @@ window.RWG = window.RWG || {};
   // The row builder personModal closes over, kept reachable for add/remove.
   let lastWayRow = () => '';
 
+  /* Street, city, state, ZIP — the same five boxes wherever an address is
+     typed, so the household window and the person window cannot drift into
+     asking for it differently. `pfx` keeps two of them on one screen apart. */
+  function addrBlock(pfx, a, hint) {
+    a = H().normalizeAddr(a) || { line1: '', line2: '', city: '', state: '', zip: '' };
+    const stOpts = ['<option value="">—</option>'].concat(H().STATES.map(x =>
+      `<option value="${x}" ${x === a.state ? 'selected' : ''}>${x}</option>`)).join('');
+    return `
+      <div class="field-group"><label class="lbl">Street</label>
+        <input id="${pfx}-line1" value="${esc(a.line1)}" placeholder="1234 Ponce de Leon Blvd">
+        ${hint ? `<div class="hint">${hint}</div>` : ''}</div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">Apt / Unit <span class="pill-soft" style="font-size:10.5px">optional</span></label>
+          <input id="${pfx}-line2" value="${esc(a.line2)}" placeholder="Apt 4B"></div>
+        <div class="field-group"><label class="lbl">City</label>
+          <input id="${pfx}-city" value="${esc(a.city)}" placeholder="Coral Gables"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="lbl">State</label>
+          <select id="${pfx}-state">${stOpts}</select>
+          <div class="hint">We can only write where they live.</div></div>
+        <div class="field-group"><label class="lbl">ZIP</label>
+          <input id="${pfx}-zip" value="${esc(a.zip)}" placeholder="33134" inputmode="numeric"></div>
+      </div>`;
+  }
+  const readAddr = (pfx) => ({
+    line1: g(pfx + '-line1'), line2: g(pfx + '-line2'),
+    city: g(pfx + '-city'), state: g(pfx + '-state'), zip: g(pfx + '-zip')
+  });
+  // "confirmed 4 months ago" — an address nobody has checked since 2019 is
+  // a guess, and the screen should say which one it is looking at.
+  function addrStamp(at) {
+    if (!at) return '';
+    return `<span class="cell-sub" style="font-size:11px"> · confirmed ${esc(U().fmtRelative(Date.parse(at)))}</span>`;
+  }
+
   function newHouseholdModal() {
     const me = RWG.auth.currentUser();
     modal('New household', 'The account a client family lives under.', `
@@ -90,7 +126,9 @@ window.RWG = window.RWG || {};
           <select id="hh-advisor">${advisorOptions(me.id)}</select></div>
         <div class="field-group"><label class="lbl">Source</label>
           <input id="hh-source" placeholder="e.g. FRS Seminar, Referral"></div>
-      </div>`,
+      </div>
+      <div class="section-title">Where they live <span class="pill-soft" style="font-size:11px">optional</span></div>
+      ${addrBlock('hh-addr', null, 'Everyone in the family uses this unless their own record says otherwise.')}`,
       `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
        <button class="btn btn-gold" data-action="hh-save-new">Create household</button>`);
     const inp = document.getElementById('hh-name'); if (inp) inp.focus();
@@ -105,7 +143,9 @@ window.RWG = window.RWG || {};
           <select id="hh-advisor">${advisorOptions(h.advisorUid)}</select></div>
         <div class="field-group"><label class="lbl">Source</label>
           <input id="hh-source" value="${esc(h.source || '')}"></div>
-      </div>`,
+      </div>
+      <div class="section-title">Where they live${addrStamp(h.addressAt)}</div>
+      ${addrBlock('hh-addr', h.address, 'Everyone in the family uses this unless their own record says otherwise.')}`,
       `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
        <button class="btn btn-gold" data-action="hh-save-edit" data-id="${esc(h.id)}">Save</button>`);
   }
@@ -208,6 +248,18 @@ window.RWG = window.RWG || {};
           <div class="hint">Separate with commas. Click one below to add it.</div>
           ${tagChips}</div>
       </div>
+      ${(() => {
+        // What this person would get if their own address stays blank.
+        const famId = hhId || (c && c.householdId) || null;
+        const inherited = famId && H().isStarted() ? H().household(famId) : null;
+        const fromHH = inherited && H().hasAddress(inherited.address) ? H().addrLine(inherited.address) : '';
+        const own = c && H().hasAddress(c.address);
+        return `<div class="section-title">Address${own ? addrStamp(c && c.addressAt) : ''}</div>
+          ${fromHH && !own ? `<div class="hint" style="margin:-6px 0 10px">Leave blank and they use the household's:
+            <b>${esc(fromHH)}</b></div>` : ''}
+          ${addrBlock('p-addr', c && c.address,
+            fromHH ? 'Fill this in only if this person lives somewhere else.' : 'Where we mail things.')}`;
+      })()}
       <div class="section-title">FRS profile <span class="pill-soft" style="font-size:11px">optional</span></div>
       <div class="field-row">
         <div class="field-group"><label class="lbl">Employer</label><input id="p-employer" value="${esc(v('employer'))}"></div>
@@ -572,6 +624,10 @@ window.RWG = window.RWG || {};
               <span class="pill-soft">Advisor: ${esc(h.advisorName || userName(h.advisorUid) || '—')}</span>
               ${h.source ? `<span class="pill-soft">Source: ${esc(h.source)}</span>` : ''}
               <span class="pill-soft">Client since ${U().fmtDate(h.createdAt)}</span>
+              ${H().hasAddress(h.address)
+                ? `<span class="pill-soft" title="Where the family lives${h.addressAt
+                    ? ' — confirmed ' + esc(U().fmtRelative(Date.parse(h.addressAt))) : ''}">${esc(H().addrLine(h.address))}</span>`
+                : ''}
               ${a360}
             </div>
           </div>
@@ -830,7 +886,8 @@ window.RWG = window.RWG || {};
         const name = g('hh-name').trim();
         if (!name) { U().toast('Give the household a name'); return; }
         const uid = g('hh-advisor');
-        const h = H().addHousehold({ name, advisorUid: uid || null, advisorName: userName(uid), source: g('hh-source').trim() });
+        const h = H().addHousehold({ name, advisorUid: uid || null, advisorName: userName(uid),
+          source: g('hh-source').trim(), address: readAddr('hh-addr') });
         mount().innerHTML = '';
         st.currentId = h.id;
         RWG.app.nav('household');
@@ -848,7 +905,9 @@ window.RWG = window.RWG || {};
       'hh-edit': (el) => { const h = H().household(el.dataset.id); if (h) editHouseholdModal(h); },
       'hh-save-edit': (el) => {
         const uid = g('hh-advisor');
-        H().saveHousehold({ id: el.dataset.id, name: g('hh-name').trim() || '(unnamed)', advisorUid: uid || null, advisorName: userName(uid), source: g('hh-source').trim() });
+        H().saveHousehold({ id: el.dataset.id, name: g('hh-name').trim() || '(unnamed)',
+          advisorUid: uid || null, advisorName: userName(uid), source: g('hh-source').trim(),
+          address: readAddr('hh-addr') });
         mount().innerHTML = '';
         RWG.app.renderMain();
         U().toast('Saved', true);
@@ -916,6 +975,7 @@ window.RWG = window.RWG || {};
           relationship: g('p-rel'), dob: g('p-dob'),
           phones: readWays('p-phones'), emails: readWays('p-emails'),
           employer: g('p-employer').trim(),
+          address: readAddr('p-addr'),
           planType: g('p-plan'), yos: g('p-yos'), afc: g('p-afc'),
           tags: H().parseTags(g('p-tags'))
         };

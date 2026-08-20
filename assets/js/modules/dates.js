@@ -228,9 +228,13 @@ window.RWG = window.RWG || {};
     const uid = g('rm-who');
     const u = D().user(uid);
     const hh = el.dataset.hh && H().isStarted() ? H().household(el.dataset.hh) : null;
+    /* A birthday reminder is usually a card, and a card needs an address.
+       Carrying it into the note means whoever picks the task up can act on
+       it without going back to the record to look the family up. */
+    const addr = hh ? H().addrLine(hh.address) : '';
     t.addTask({
       title: title,
-      note: 'from Key dates · ' + (el.dataset.when || ''),
+      note: 'from Key dates · ' + (el.dataset.when || '') + (addr ? ' · ' + addr : ''),
       keyDateKey: el.dataset.key || null,   // what makes "already reminded" answerable
       assigneeUid: uid,
       assigneeName: (u && u.name) || '',
