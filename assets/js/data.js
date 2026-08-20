@@ -74,14 +74,22 @@ RWG.data = (function () {
       d => { cache.scoringConfig = (d.exists && d.data().value) || {}; onChange(); },
       e => console.error('scoring config listener:', e)));
 
-    // users — admin sees the whole team; an agent only needs itself
-    if (profile.role === 'admin') {
-      unsubs.push(db().collection('users').onSnapshot(
-        s => { cache.users = s.docs.map(d => Object.assign({ id: d.id }, d.data())); onChange(); },
-        e => console.error('users listener:', e)));
-    } else {
-      cache.users = [profile];
-    }
+    /* users — the whole team, for everyone (2026-08-20).
+       An agent used to hold a roster of exactly one: themselves. That is
+       why every "who is on this?" list in the app showed an agent a single
+       name — the co-agent ticks on an opportunity, the task assignee, the
+       Tasks "assigned to" filter, the workflow's case manager. It is a
+       list of the people they sit next to; a firm of five does not need
+       its own names kept from it.
+
+       Seeded with your own profile so the first paint is never nameless,
+       then replaced the moment the snapshot lands. Reading is all this
+       buys: approving, promoting and removing stay partner-only, in the
+       rules rather than here. */
+    cache.users = [profile];
+    unsubs.push(db().collection('users').onSnapshot(
+      s => { cache.users = s.docs.map(d => Object.assign({ id: d.id }, d.data())); onChange(); },
+      e => console.error('users listener:', e)));
 
     // leads — admin sees all; an agent sees only the leads assigned to them
     let q = db().collection('leads');

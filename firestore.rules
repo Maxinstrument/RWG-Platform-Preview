@@ -22,7 +22,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // The roster is team-readable (2026-08-20): names and roles of the
+      // people you work beside, which every "who is on this?" list in the
+      // app needs. Approving, promoting and removing stay partner-only,
+      // below — reading a teammate's name is not editing their account.
+      allow read: if signedIn();
       // First-login self-create: agents start pending; the owner email may create itself as active admin.
       allow create: if signedIn() && request.auth.uid == uid && (
         (request.resource.data.role == 'agent' && request.resource.data.status == 'pending')
