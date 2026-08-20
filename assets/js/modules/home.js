@@ -36,7 +36,7 @@ window.RWG = window.RWG || {};
   // Home opens on the year — the widest honest read of the book — and
   // narrows from there. A quarter default hid business that was still
   // there, which is the wrong way round for a page you check every morning.
-  const st = { period: 'ytd', customize: false, on: null, compose: '' };
+  const st = { period: 'ytd', customize: false, on: null };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const toMs = (v) => typeof v === 'number' ? v : (v ? Date.parse(v) : 0);
@@ -817,42 +817,24 @@ window.RWG = window.RWG || {};
   }
 
   /* ── The composer ─────────────────────────────────────────
-     Four things you can start from Home. Only "Update" has a form
-     here; Contact, Task and Opportunity open the real forms those
-     records already have, because a second copy of the person form
-     is a second thing to keep in step with the first. */
+     Three things you can start from Home, each opening the form that
+     record already owns — a second copy of the person form would be a
+     second thing to keep in step with the first.
+
+     "Update" (a posted note to the team) came out on 2026-08-20. Notes
+     still exist where they belong — on a person, a household, a case —
+     and the ones already posted still show in Team activity and can
+     still be deleted there. This was the only place that wrote one into
+     the air rather than onto a record. */
   function composerHtml(user) {
-    const N = RWG.notes;
     const tab = (id, icon, label) =>
-      `<button class="btn btn-sm ${st.compose === id ? 'btn-navy' : 'btn-ghost'}"
-         data-action="hm-compose" data-tab="${id}">${icon} ${label}</button>`;
-
-    const posting = st.compose === 'update';
-    const disabled = !N || !N.isStarted();
-
+      `<button class="btn btn-sm btn-ghost" data-action="hm-compose" data-tab="${id}">${icon} ${label}</button>`;
     return `<div class="card hm-composer">
       <div class="flex" style="gap:6px;flex-wrap:wrap;align-items:center">
-        ${tab('update', '📝', 'Update')}
         ${tab('contact', '👤', 'Contact')}
         ${tab('task', '✓', 'Task')}
         ${tab('opp', '＄', 'Opportunity')}
       </div>
-      ${posting ? `
-        <div class="hm-compose-row">
-          ${U().avatar(user, 34)}
-          <div style="flex:1;min-width:0">
-            ${U().noteEditor({ id: 'hm-note', editable: !disabled, minHeight: '78px',
-              placeholder: "What happened? Type @ and a client's name to file it against their household." })}
-            <div class="flex" style="gap:8px;align-items:center;margin-top:8px">
-              <span class="hint" style="margin:0">${disabled
-                ? 'Connecting…'
-                : 'Everyone sees this. It lands on the household if you mention one client.'}</span>
-              <span class="topbar-spacer"></span>
-              <button class="btn btn-ghost btn-sm" data-action="hm-compose" data-tab="">Cancel</button>
-              <button class="btn btn-gold btn-sm" data-action="hm-note-post" ${disabled ? 'disabled' : ''}>Post</button>
-            </div>
-          </div>
-        </div>` : ''}
     </div>`;
   }
 
@@ -1023,32 +1005,14 @@ window.RWG = window.RWG || {};
         U().toast(`Exported ${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`, true);
       },
 
-      // The composer. Update writes here; the other three hand off to the
-      // form that record already owns, so there is one of each in the app.
+      // Every tab hands off to the form that record already owns, so
+      // there is one of each in the app and nothing to hold open here.
       'hm-compose': (el) => {
-        const tab = el.dataset.tab || '';
-        const handoff = { contact: 'hh-person-add', task: 'tk-new', opp: 'cs-new' }[tab];
-        if (handoff) {
-          st.compose = ''; RWG.app.renderMain();
-          const owner = RWG.modules.actionOwner(handoff);
-          if (owner) owner.actions[handoff]({ dataset: {} });
-          else U().toast('That screen has not loaded yet — try again in a moment');
-          return;
-        }
-        st.compose = st.compose === tab ? '' : tab;
-        RWG.app.renderMain();
-        if (st.compose === 'update') { const b = document.getElementById('hm-note'); if (b) b.focus(); }
-      },
-      'hm-note-post': () => {
-        // The words are what gets searched, mentioned and previewed; the
-        // formatting rides along beside them.
-        const body = U().noteText('hm-note');
-        if (!body) { U().toast('Say something first'); return; }
-        const n = RWG.notes && RWG.notes.addNote({ body: body, bodyHtml: U().noteRead('hm-note') });
-        if (!n) { U().toast('Could not post that'); return; }
-        st.compose = '';
-        RWG.app.renderMain();
-        U().toast(n.relatedLabel ? 'Posted to ' + n.relatedLabel : 'Posted', true);
+        const handoff = { contact: 'hh-person-add', task: 'tk-new', opp: 'cs-new' }[el.dataset.tab || ''];
+        if (!handoff) return;
+        const owner = RWG.modules.actionOwner(handoff);
+        if (owner) owner.actions[handoff]({ dataset: {} });
+        else U().toast('That screen has not loaded yet — try again in a moment');
       },
       'hm-note-del': (el) => {
         if (!RWG.notes) return;
