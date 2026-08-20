@@ -1508,22 +1508,20 @@ button.user-chip:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(194,161,77
   .list-toolbar.tb-inline{flex-wrap:wrap;overflow-x:visible;}
 }
 
-/* ── The Tasks bar: pills for the slice, selects for the rest ──
-   Same controls, no sideways scroll. The pills carry the choice that gets
-   made twenty times a day; the three selects name themselves and sit out
-   of the way on the right. It wraps, and when it wraps the pills keep
-   their line and the selects keep theirs. */
-.list-toolbar.tb-slices{gap:8px;padding:8px var(--pad-panel);flex-wrap:wrap;overflow:visible;}
-.mw-slices{display:flex;gap:6px;flex-wrap:wrap;min-width:0;}
-.list-toolbar.tb-slices .btn-sm{min-height:30px;padding:3px 11px;font-size:12px;flex:0 0 auto;}
-.list-toolbar.tb-slices select{
+/* ── A toolbar of dropdowns that wraps instead of scrolling ──
+   The compact controls of tb-inline without its one-line rule: four
+   selects on the left, whatever is being offered on the right, and a
+   second line rather than a scrollbar when the window is narrow. */
+.list-toolbar.tb-wrap{gap:8px;padding:8px var(--pad-panel);flex-wrap:wrap;overflow:visible;}
+.list-toolbar.tb-wrap .btn-sm{min-height:30px;padding:3px 11px;font-size:12px;flex:0 0 auto;}
+.list-toolbar.tb-wrap select{
   min-width:0;max-width:none;width:auto;flex:0 0 auto;
   min-height:30px;padding:3px 26px 3px 9px;font-size:12.5px;
   background-position:right 7px center;background-size:9px;border-radius:8px;
 }
 @media (max-width:720px){
-  .list-toolbar.tb-slices .topbar-spacer{display:none;}
-  .list-toolbar.tb-slices select{flex:1 1 140px;}
+  .list-toolbar.tb-wrap .topbar-spacer{display:none;}
+  .list-toolbar.tb-wrap select{flex:1 1 140px;}
 }
 
 /* A clickable row still lets its own links and buttons act first */

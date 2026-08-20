@@ -431,18 +431,16 @@ window.RWG = window.RWG || {};
 
     const doneWk = T().doneThisWeek().filter(t => st.who === 'all' || t.assigneeUid === (st.who === 'me' ? uid : st.who));
 
-    /* The bar used to read as one long sentence — "Filtering by [x]
-       assigned to [y] in category [z]" — pinned to a single line that
-       scrolled sideways when it ran out of room. A sentence you have to
-       scroll is not a sentence. The when-slice is the choice people make
-       twenty times a day, so it becomes a row of pills you can hit, in the
-       same visual language as the board's track selector; the three rarer
-       narrowings stay as selects, pushed to the right, each one already
-       naming itself. Nothing is pinned to a line any more, so it wraps
-       instead of scrolling. */
+    /* Four dropdowns, one line, no sideways scroll. The bar used to read
+       as a sentence — "Filtering by [x] assigned to [y] in category [z]" —
+       pinned to a single line with overflow-x:auto, so it scrolled once it
+       ran out of room. The connector words were what made it long, and
+       every option already names itself ("Upcoming", "All work",
+       "Assigned to me", "All categories"), so the words go and the
+       controls stay. It wraps now rather than scrolling, and everything
+       is short enough that it rarely needs to. */
     const sel = (id, opts) => `<select id="${id}">${opts}</select>`;
-    const slices = WHEN.map(w =>
-      `<button class="btn btn-sm ${st.when === w.id ? 'btn-navy' : 'btn-ghost'}" data-action="tk-when" data-when="${w.id}">${esc(w.label)}</button>`).join('');
+    const whenOpts = WHEN.map(w => `<option value="${w.id}" ${st.when === w.id ? 'selected' : ''}>${esc(w.label)}</option>`).join('');
     const kindOpts = KINDS.map(k => `<option value="${k.id}" ${st.kind === k.id ? 'selected' : ''}>${esc(k.label)}</option>`).join('');
     const users = D().users().filter(u => u.status === 'active');
     const whoOpts = [`<option value="me" ${st.who === 'me' ? 'selected' : ''}>Assigned to me</option>`,
@@ -472,14 +470,14 @@ window.RWG = window.RWG || {};
           : `${canDelete() ? '<button class="btn btn-quiet btn-sm" data-action="tk-sel-on" title="Pick several tasks to move to the Trash at once">Select</button>' : ''}
             <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>`}
         </div>
-        <div class="list-toolbar tb-slices">
-          <span class="mw-slices">${slices}</span>
-          <span class="topbar-spacer"></span>
+        <div class="list-toolbar tb-wrap">
+          ${sel('tk-f-when', whenOpts)}
           ${sel('tk-f-kind', kindOpts)}
           ${sel('tk-f-who', whoOpts)}
           ${sel('tk-f-cat', catOpts)}
+          <span class="topbar-spacer"></span>
           ${heldN ? `<button class="btn btn-quiet btn-sm" data-action="tk-chain"
-            title="Workflow steps that cannot be started until the step before them is checked off">⛓ ${st.chain ? 'Hide' : 'Show'} ${heldN} waiting on ${heldN === 1 ? 'an earlier step' : 'earlier steps'}</button>` : ''}
+            title="Workflow steps chained behind an earlier step — they join the list when the step before them is checked off">⛓ ${st.chain ? 'Hide' : 'Show'} ${heldN} waiting</button>` : ''}
           ${narrowed ? '<button class="btn btn-quiet btn-sm" data-action="tk-reset">Reset</button>' : ''}
         </div>
         ${body || empty}
@@ -527,7 +525,7 @@ window.RWG = window.RWG || {};
     },
 
     onChange(e) {
-      const map = { 'tk-f-kind': 'kind', 'tk-f-who': 'who', 'tk-f-cat': 'cat' };
+      const map = { 'tk-f-when': 'when', 'tk-f-kind': 'kind', 'tk-f-who': 'who', 'tk-f-cat': 'cat' };
       const key = map[e.target.id];
       if (!key) return;
       st[key] = e.target.value;
@@ -536,7 +534,6 @@ window.RWG = window.RWG || {};
 
     actions: {
       'tk-who': (el) => { st.who = el.dataset.who; RWG.app.renderMain(); },
-      'tk-when': (el) => { st.when = el.dataset.when; RWG.app.renderMain(); },
       'tk-cat-pick': (el) => { st.cat = el.dataset.cat || ''; RWG.app.renderMain(); },
       'tk-reset': () => { st.who = 'me'; st.when = 'upcoming'; st.kind = 'all'; st.cat = ''; st.chain = false; RWG.app.renderMain(); },
       'tk-chain': () => { st.chain = !st.chain; RWG.app.renderMain(); },
