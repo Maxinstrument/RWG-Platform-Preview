@@ -33,7 +33,35 @@ window.RWG = window.RWG || {};
 
   // Whoever we're acting as: the logged-in agent, or (for an admin using the
   // agent picker / View As) the teammate being viewed.
-  const actor = () => (APP() && APP().effectiveUser && APP().effectiveUser()) || RWG.auth.currentUser();
+  /* Whose scorecard this is. Two different questions used to share one
+     answer: "who am I working as" (View as, in Team Overview — it changes
+     the whole site) and "whose week am I reading". Picking a name here
+     used to do the first, so looking up an agent's numbers put you inside
+     their entire account. Now the picker only changes the week on screen;
+     everything else about the session stays yours.
+
+     Reading someone else's week is READ-ONLY. Their tally is theirs to
+     log, and submitting a week on their behalf would be signing their
+     name to it. */
+  const session = () => (APP() && APP().effectiveUser && APP().effectiveUser()) || RWG.auth.currentUser();
+  function viewingUid() {
+    const m = RWG.modules.get('scorecard');
+    const uid = m && m.state && m.state.agentUid;
+    if (!uid) return null;
+    const me = session();
+    if (!me || uid === me.id) return null;
+    // an agent has no roster, and an admin already inside View as is that
+    // person — neither may reach anybody else's numbers from here
+    if (!RWG.auth.isAdmin || !RWG.auth.isAdmin()) return null;
+    if (APP() && APP().state && APP().state.viewAs) return null;
+    return uid;
+  }
+  const actor = () => {
+    const uid = viewingUid();
+    const u = uid && RWG.data && RWG.data.user ? RWG.data.user(uid) : null;
+    return u || session();
+  };
+  const readOnly = () => !!viewingUid();
 
   const money = (n) => U().money(n);
   const esc = (s) => U().esc(s);
@@ -313,7 +341,7 @@ window.RWG = window.RWG || {};
   }
 
   // ── the daily tally grid (Mon..Sat) ──
-  function dailyGridHtml(st, week) {
+  function dailyGridHtml(st, week, reading) {
     const days = S().weekDays(week, 6);
     const today = S().todayKey();
     const totals = dailyTotals(st);
@@ -323,7 +351,7 @@ window.RWG = window.RWG || {};
       const cells = days.map(d => {
         const v = (st.daily[d.key] || {})[m.id];
         return `<td class="${d.key === today ? 'is-today' : ''}"><input class="sc-daycell" type="number" min="0" inputmode="numeric"
-          data-day="${d.key}" data-metric="${m.id}" value="${v == null || v === '' ? '' : esc(String(v))}" placeholder="0"></td>`;
+          data-day="${d.key}" data-metric="${m.id}" value="${v == null || v === '' ? '' : esc(String(v))}" placeholder="0" ${reading ? 'disabled' : ''}></td>`;
       }).join('');
       return `<tr><th class="sc-metric">${m.label}</th>${cells}<td class="num sc-rowtot" data-tot="${m.id}">${totals[m.id] || 0}</td></tr>`;
     }).join('');
@@ -343,6 +371,7 @@ window.RWG = window.RWG || {};
 
     state: {
       weekEnding: null,
+      agentUid: null,       // whose scorecard to read; null = your own
       daily: {},            // { 'yyyy-mm-dd': { fa_sched, ... } }
       loadedKey: null,      // uid_week the daily tally was last loaded for
       // Cases this week: how the table was left. Not persisted anywhere —
@@ -354,7 +383,7 @@ window.RWG = window.RWG || {};
       tile: (ctx) => ({ icon: 'scorecard', title: 'Scorecard', desc: 'Log your week. Cases, activity, and your pace to goal.', view: 'sc_week' }),
       stats: (ctx) => {
         if (!D().isStarted()) return [];
-        const user = actor(); if (!user) return [];
+        const user = session(); if (!user) return [];   // your home, your number
         const wk = RWG.modules.get('scorecard').state.weekEnding || S().currentWeekEnding();
         const r = rollup(user, wk);
         return [{ label: 'Annualized premium (wk)', value: money(r.annualizedClosed) }];
@@ -370,7 +399,12 @@ window.RWG = window.RWG || {};
 
     onChange(e, st) {
       if (e.target.id === 'sc-week-pick') { st.weekEnding = e.target.value; st.loadedKey = null; RWG.app.renderMain(); return; }
-      if (e.target.id === 'sc-agent-pick') { RWG.app.viewAs(e.target.value || null); return; }
+      if (e.target.id === 'sc-agent-pick') {
+        st.agentUid = e.target.value || null;
+        st.loadedKey = null;          // load THEIR tally, not the one on screen
+        RWG.app.renderMain();
+        return;
+      }
       if (e.target.classList && e.target.classList.contains('sc-daycell')) { persistDaily(st); return; }
       if (e.target.dataset && e.target.dataset.colf) {
         U().sheetTick(st, e.target.dataset.colf, e.target.dataset.val, e.target.checked);
@@ -412,8 +446,11 @@ window.RWG = window.RWG || {};
       const st = this.state;
       const sc = S();
       const week = st.weekEnding || sc.currentWeekEnding();
-      syncDaily(user, st, week);
-      const vm = buildVM(user, st);
+      // `user` is who the session belongs to; actor() is whose week is on
+      // screen. They differ only while a partner is reading someone else's.
+      const who = actor() || user;
+      syncDaily(who, st, week);
+      const vm = buildVM(who, st);
       const me = vm.me;
 
       const weekOpts = recentWeeks(14).map(w =>
@@ -435,32 +472,36 @@ window.RWG = window.RWG || {};
       const realUser = RWG.auth.currentUser();
       const viewingId = (RWG.app.state && RWG.app.state.viewAs) || '';
       const canPick = RWG.auth.isAdmin() && !viewingId;
+      const picked = viewingUid();
       const others = canPick
         ? RWG.data.users().filter(u => u.status === 'active' && u.id !== realUser.id)
           .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         : [];
       const agentPicker = canPick
-        ? `<select id="sc-agent-pick" class="fbar-select" title="View another agent's scorecard">
+        ? `<select id="sc-agent-pick" class="fbar-select" title="Read another agent's scorecard — their numbers, your session">
              <option value="">Me — ${esc((realUser.name || '').split(' ')[0])}</option>
-             ${others.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
+             ${others.map(u => `<option value="${u.id}" ${u.id === picked ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
            </select>`
         : '';
+      const reading = readOnly();
 
       return `
       <div class="sc-wrap">
         <div class="sc-main">
           <div class="card">
-            <div class="card-head"><h3>Your week</h3><span class="sub">${esc(me.name)}</span>
+            <div class="card-head"><h3>${reading ? esc(me.name.split(' ')[0]) + '\u2019s week' : 'Your week'}</h3><span class="sub">${esc(me.name)}</span>
               <span class="topbar-spacer"></span>
               ${agentPicker}
               <select id="sc-week-pick" class="fbar-select">${weekOpts}</select>
             </div>
+            ${reading ? `<div class="sc-note">You are reading <b>${esc(me.name)}</b>'s scorecard — their numbers, in your own session. The tally is theirs to log, so it is read-only here. To work as them, use <b>View as</b> in Team Overview.</div>` : ''}
             ${notConnected ? `<div class="sc-note">Live save is off until the Firestore rules are published. You can still see the layout and the live math.</div>` : ''}
           </div>
 
           <div class="card">
-            <div class="card-head"><h3>Daily tally</h3><span class="sub">Log a couple of numbers at the end of each day — the week adds itself up</span></div>
-            ${dailyGridHtml(st, week)}
+            <div class="card-head"><h3>Daily tally</h3><span class="sub">${reading
+              ? 'What they logged this week' : 'Log a couple of numbers at the end of each day — the week adds itself up'}</span></div>
+            ${dailyGridHtml(st, week, reading)}
             <div class="sc-derived muted">
               Opportunities opened <b>${vm.r.opened.length}</b> &middot;
               New business submitted <b>${vm.r.submitted.length}</b> &middot;
@@ -511,7 +552,7 @@ window.RWG = window.RWG || {};
     const goals = me.goals || {};
     const target = goals.closeAnnualizedPremium || 0;
     const pacePct = target ? Math.min(100, Math.round(100 * r.annualizedClosed / target)) : 0;
-    return { week, me, r, totals, pts, floor, goals, target, pacePct };
+    return { week, me, r, totals, pts, floor, goals, target, pacePct, reading: readOnly() };
   }
 
   // ── the right rail (also refreshed in place as the daily tally is typed) ──
@@ -536,7 +577,9 @@ window.RWG = window.RWG || {};
         <div class="sc-bar"><div class="sc-bar-fill ${vm.pts >= vm.floor ? 'ok' : ''}" style="width:${floorPct}%"></div></div>
         <div class="sc-bar-note">${vm.pts} points${vm.floor ? ' &middot; floor ' + vm.floor : ''}</div>
       </div>
-      <button class="btn btn-navy btn-block" data-action="sc-save-week">Submit week</button>`;
+      ${vm.reading
+        ? `<p class="muted" style="font-size:12px;margin:0 2px">Read-only — ${esc((vm.me.name || '').split(' ')[0])} submits their own week.</p>`
+        : '<button class="btn btn-navy btn-block" data-action="sc-save-week">Submit week</button>'}`;
   }
 
   function refreshRail() {
@@ -556,6 +599,7 @@ window.RWG = window.RWG || {};
   }
 
   function persistDaily(st) {
+    if (readOnly()) return;   // never write into somebody else's week
     const user = actor(); if (!user || !D().isStarted()) return;
     D().saveDaily(weekDoc(st, user, { finalize: false }))
       .catch(err => U().toast('Could not save: ' + err.message));
@@ -565,6 +609,7 @@ window.RWG = window.RWG || {};
   // is the one way a case is born or changed; the scorecard only reads.)
 
   function saveWeek(st) {
+    if (readOnly()) { U().toast('This is their scorecard to submit, not yours'); return; }
     const user = actor();
     const me = identity(user);
     D().saveWeek(weekDoc(st, user, { finalize: true }))
