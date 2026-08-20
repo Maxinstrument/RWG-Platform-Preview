@@ -1262,6 +1262,33 @@ RWG.app = (function () {
         if (box) { e.preventDefault(); box.focus(); box.select(); }
       }
     });
+    /* The kanban board, sideways. A board three screens wide had exactly
+       one way to move: a scrollbar below the fold, or shift-wheel, which
+       nobody knew. A plain wheel now moves it — but the column under the
+       pointer keeps first claim on the wheel while it still has cards
+       below the fold, and once the board itself is at either end the
+       wheel goes back to the page, so nothing traps the scroll. */
+    document.addEventListener('wheel', (e) => {
+      if (!e.deltaY || e.ctrlKey) return;
+      const t = e.target;
+      if (!t || !t.closest) return;
+      const board = t.closest('.board');
+      if (!board) return;
+      const col = t.closest('.board-col-body');
+      if (col && col.scrollHeight - col.clientHeight > 1) {
+        const room = e.deltaY > 0
+          ? col.scrollHeight - col.clientHeight - col.scrollTop
+          : col.scrollTop;
+        if (room > 1) return;
+      }
+      const max = board.scrollWidth - board.clientWidth;
+      if (max <= 1) return;
+      const at = board.scrollLeft;
+      if ((e.deltaY > 0 && at >= max - 1) || (e.deltaY < 0 && at <= 0)) return;
+      board.scrollLeft = at + e.deltaY;
+      e.preventDefault();
+    }, { passive: false });
+
     /* A fixed popover during a scroll. Two very different scrolls arrive
        here: the wheel turning INSIDE the panel's own value list (that is
        just the list scrolling - leave the menu alone), and the page or

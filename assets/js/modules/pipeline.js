@@ -155,7 +155,7 @@ window.RWG = window.RWG || {};
     const lost = lostCount(pl.id);
 
     return `
-      <div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="filterbar pl-bar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px">
         ${tabs}
         <span class="pl-divider"></span>
         <button class="btn btn-sm btn-ghost" data-action="nav" data-view="cases"
@@ -165,11 +165,6 @@ window.RWG = window.RWG || {};
         <select id="pl-owner" class="fbar-select" style="width:auto"><option value="">All owners</option>${ownerOpts}</select>
         <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">
-        Drag a card, or use ‹ › on the card. Entering <b style="color:var(--gold)">Application</b> (or any gold-dot stage)
-        counts the case as written — permanently, on the week it happens. Dropping on
-        <b style="color:var(--good)">Close / Won</b> sends it for a partner's confirmation; it counts once confirmed.
-      </p>
       <div class="board">${cols}</div>`;
   }
 
