@@ -1159,9 +1159,12 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .rp-club-num{font-family:'Fraunces',serif;font-size:34px;color:var(--navy);margin:6px 0 10px;}
 
 /* ── All Cases browser ───────────────────────────────────── */
-.cs-bar{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+/* One row: search, the week controls, the count, whatever is filtered,
+   then Clear and Export pushed right. The search box is a control among
+   controls now, not the width of the page. */
+.cs-bar{display:flex;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .cs-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-.cs-search{flex:1;min-width:200px;}
+.cs-search{flex:0 1 260px;min-width:170px;}
 th .cs-th{cursor:pointer;user-select:none;white-space:nowrap;}
 th .cs-th:hover{color:var(--gold);}
 .cs-row{cursor:pointer;}

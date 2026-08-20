@@ -17,33 +17,45 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const money = (n) => U().money(n);
 
-  // Column schema: label, how to read the value, how to sort, and whether it filters.
+  /* Column schema: label, how to read the value, how to sort, whether it
+     filters — and whether it is on screen at all. `hidden` columns still
+     sort, still filter and still go into the export; they just do not take
+     up a column. The table shows what the week's scorecard shows plus the
+     agent, because the same six numbers answering the same question in two
+     places should not be two different tables. Source and the three week
+     stamps stay in the CSV, where reconciling actually happens. */
   function columns() {
     const sc = S();
     return [
-      { key: 'client', label: 'Client', val: c => c.clientName || '(no name)', str: true,
-        cell: c => `<div class="cell-name">${esc(c.clientName || '(no name)')}</div>${c.title ? `<div class="cell-sub">${esc(c.title)}</div>` : ''}` },
-      { key: 'agent', label: 'Agent', val: c => c.agentName || '', str: true, filter: true,
-        cell: c => `${esc(c.agentName || '')}${(c.coCreditNames || []).length ? ` <span class="cell-sub">+${c.coCreditNames.length}</span>` : ''}` },
+      { key: 'client', label: 'Opportunity', val: c => c.title || c.clientName || '(no name)', str: true,
+        cell: c => `<div class="cell-name">${esc(c.title || c.clientName || '(no name)')}</div>${c.title ? `<div class="cell-sub">${esc(c.clientName || '')}</div>` : ''}` },
       { key: 'product', label: 'Product', val: c => sc.productName(c.product), str: true, filter: true },
-      { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, filter: true },
-      { key: 'state', label: 'Stage', val: c => c.state || '', str: true, filter: true, cell: c => `<span class="chip ${stageChipClass(c.state)}">${esc(c.state || '')}</span>` },
+      { key: 'state', label: 'Stage', val: c => stageText(c), str: true, filter: true,
+        cell: c => `<span class="chip ${stageChipClass(c.state)}">${esc(stageText(c))}</span>` },
       { key: 'money', label: 'Amount / AUM', num: true, val: c => sc.placed(c) || 0,
         cell: c => `<span class="num">${sc.placed(c) == null ? '—' : money(sc.placed(c))}</span>` },
       { key: 'ann', label: 'Ann. premium', num: true, val: c => sc.deriveCase(c).annualizedPremium, cell: c => `<span class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</span>` },
       { key: 'rev', label: 'Revenue', num: true, val: c => sc.deriveCase(c).revenue, cell: c => `<span class="num">${money(sc.deriveCase(c).revenue)}</span>` },
-      { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', filter: true },
-      { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', filter: true },
-      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', filter: true }
+      { key: 'agent', label: 'Agent', val: c => c.agentName || '', str: true, filter: true,
+        cell: c => `${esc(c.agentName || '')}${(c.coCreditNames || []).length ? ` <span class="cell-sub">+${c.coCreditNames.length}</span>` : ''}` },
+      { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, hidden: true },
+      { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', hidden: true },
+      { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', hidden: true },
+      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', hidden: true }
     ];
   }
+  const shown = () => columns().filter(c => !c.hidden);
   const COL = (key) => columns().filter(c => c.key === key)[0];
   const stageChipClass = (s) => ({ Opened: 'tier-medium', Submitted: 'tier-high', Closed: 'tier-gold', Lost: 'tier-low' }[s] || 'pill-soft');
-
-  function distinct(rows, key) {
-    const col = COL(key), seen = {}, out = [];
-    rows.forEach(c => { const v = col.val(c); if (v && !seen[v]) { seen[v] = 1; out.push(v); } });
-    return out.sort();
+  /* The stage as the board says it. A lost case says Lost — this is the
+     screen you come to for those, and "Medical Underwriting" on a case
+     that died there would read as still alive. */
+  function stageText(c) {
+    if (c.state === 'Lost') return 'Lost';
+    if (c.closedAt) return 'Closed ✓';
+    if (c.pendingClose) return 'Pending partner';
+    const P = RWG.pipelines;
+    return (P && P.stageLabel(c.product, P.stageForCase(c))) || c.state || '';
   }
 
   function filtered(st) {
@@ -54,22 +66,10 @@ window.RWG = window.RWG || {};
       const q = st.search.toLowerCase();
       rows = rows.filter(c => String(c.clientName || '').toLowerCase().indexOf(q) >= 0 || String(c.agentName || '').toLowerCase().indexOf(q) >= 0);
     }
-    // Header checklists: a column with values ticked keeps only those rows;
-    // a column with nothing ticked filters nothing.
-    Object.keys(st.colf || {}).forEach(k => {
-      const want = st.colf[k];
-      if (!want || !want.length) return;
-      const col = COL(k); if (!col) return;
-      rows = rows.filter(c => want.indexOf(String(col.val(c))) >= 0);
-    });
-    const col = COL(st.sortKey) || COL('openedWeek');
-    rows.sort((a, b) => {
-      let r;
-      if (col.num) r = (col.val(a) || 0) - (col.val(b) || 0);
-      else { const x = String(col.val(a)).toLowerCase(), y = String(col.val(b)).toLowerCase(); r = x < y ? -1 : (x > y ? 1 : 0); }
-      return st.sortDir === 'desc' ? -r : r;
-    });
-    return rows;
+    // The header checklists and the sort are the shared table helpers, the
+    // same ones the scorecard's week table uses — hidden columns included,
+    // so the default "newest opened first" survives losing its column.
+    return U().sheetApply(rows, columns(), st);
   }
 
   function recentWeeks(count) {
@@ -610,7 +610,7 @@ window.RWG = window.RWG || {};
     // beside the pipeline tabs, where you are already thinking about cases.
     nav: [],
     views: ['cases'],
-    meta: { cases: { t: 'All Cases', s: 'The whole team\'s book' } },
+    meta: { cases: { t: 'Opportunity', s: 'Every case on every track, as a table' } },
 
     state: { search: '', colf: {}, viewAll: true, week: null, sortKey: 'openedWeek', sortDir: 'desc' },
 
@@ -620,6 +620,7 @@ window.RWG = window.RWG || {};
       if (!D().isStarted()) D().init(ctx.userObj || RWG.auth.currentUser(), RWG.app.renderMain);
       // the opportunity window lists the workflow steps opened against a case
       if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
+      RWG.pipelines.init();   // the Stage column reads the granular stage
       if (!this.state.week) this.state.week = S().currentWeekEnding();
     },
 
@@ -630,8 +631,8 @@ window.RWG = window.RWG || {};
       if (id === 'cs-week') { st.week = e.target.value; RWG.app.renderMain(); return; }
       // A tick in a header checklist narrows the rows immediately, popover
       // still open — picking three agents is three ticks, not three trips.
-      if (e.target.dataset && e.target.dataset.csfilter) {
-        const k = e.target.dataset.csfilter, v = e.target.dataset.val;
+      if (e.target.dataset && e.target.dataset.colf) {
+        const k = e.target.dataset.colf, v = e.target.dataset.val;
         const arr = st.colf[k] = st.colf[k] || [];
         const i = arr.indexOf(v);
         if (e.target.checked) { if (i < 0) arr.push(v); } else if (i >= 0) arr.splice(i, 1);
@@ -651,8 +652,8 @@ window.RWG = window.RWG || {};
       'cs-popsort': (el, e, st) => { st.sortKey = el.dataset.key; st.sortDir = el.dataset.dir; RWG.app.renderMain(); },
       'cs-colf-all': (el, e, st) => {
         const k = el.dataset.col;
-        st.colf[k] = distinct(D().cases(), k).map(String);
-        document.querySelectorAll('input[data-csfilter="' + k + '"]').forEach(cb => { cb.checked = true; });
+        st.colf[k] = U().sheetValues(D().cases(), COL(k));
+        document.querySelectorAll('input[data-colf="' + k + '"]').forEach(cb => { cb.checked = true; });
         const th = document.querySelector('.th-filter[data-col="' + k + '"]');
         if (th && th.classList) th.classList.add('on');
         refreshBody();
@@ -660,7 +661,7 @@ window.RWG = window.RWG || {};
       'cs-colf-clear': (el, e, st) => {
         const k = el.dataset.col;
         delete st.colf[k];
-        document.querySelectorAll('input[data-csfilter="' + k + '"]').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('input[data-colf="' + k + '"]').forEach(cb => { cb.checked = false; });
         const th = document.querySelector('.th-filter[data-col="' + k + '"]');
         if (th && th.classList) th.classList.remove('on');
         refreshBody();
@@ -759,7 +760,10 @@ window.RWG = window.RWG || {};
       // two ways of looking at it rather than two unrelated screens.
       const tracks = (RWG.pipelines.pipelines() || []).map(p =>
         `<button class="btn btn-sm btn-ghost" data-action="cs-to-board" data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
-      const bar = `<div class="filterbar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      /* The board's own bar, verbatim and in the same place on the page,
+         because this is the same area seen as a table — not a screen you
+         land on. Everything else fits on one line beside the search. */
+      const bar = `<div class="filterbar pl-bar" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px">
           ${tracks}
           <span class="pl-divider"></span>
           <button class="btn btn-sm btn-navy" data-action="nav" data-view="cases">☰ All cases</button>
@@ -767,72 +771,35 @@ window.RWG = window.RWG || {};
           <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
         </div>
         <div class="filterbar cs-bar">
-        <div class="cs-bar-row">
           <input id="cs-search" class="input cs-search" type="search" placeholder="Search client or agent…" value="${esc(st.search)}">
           <button class="btn btn-quiet btn-sm" data-action="cs-toggle-all">${st.viewAll ? 'All weeks' : 'This week only'}</button>
-          ${st.viewAll ? '' : `<select id="cs-week" class="fbar-select">${weekOpts}</select>`}
-        </div>
-        <div class="cs-bar-row">
-          <span class="cell-sub" style="flex:none">Filter from the column headers (▾) — pick as many values as you like.</span>
+          ${st.viewAll ? '' : `<select id="cs-week" class="fbar-select" style="width:auto">${weekOpts}</select>`}
+          <span class="cell-sub" id="cs-count" style="flex:none">${rows.length} of ${all.length}</span>
           <span id="cs-chips" class="flex" style="gap:6px;flex-wrap:wrap;min-width:0">${csChips(st)}</span>
           <span class="topbar-spacer"></span>
           <button class="btn btn-quiet btn-sm" data-action="cs-clear">Clear</button>
           <button class="btn btn-ghost btn-sm" data-action="cs-export">⬇ Export</button>
-        </div>
-      </div>`;
+        </div>`;
 
-      return `<div class="card">
-        <div class="card-head"><h3>All Cases</h3><span class="sub" id="cs-count">${rows.length} of ${all.length}</span></div>
-        ${bar}
-        <div id="cs-body">${tableHtml(rows, st, user)}</div>
-      </div>`;
+      return `${bar}<div id="cs-body">${tableHtml(rows, st, user)}</div>`;
     }
   });
 
-  /* Excel-style AutoFilter on the headers: ▾ opens a popover with sort and
-     a multi-select checklist of the column's values across the whole book.
-     The popover shell (positioning, outside-click, the value search) is the
-     same machinery the leads table wears — .pop-wrap/.pop-panel/.pop-search
-     are handled once, globally. */
-  function csFilterMenu(c, st) {
-    const selVals = st.colf[c.key] || [];
-    const vals = distinct(D().cases(), c.key);
-    const list = vals.map(v => `<label class="pop-row"><input type="checkbox" data-csfilter="${esc(c.key)}" data-val="${esc(String(v))}" ${selVals.indexOf(String(v)) >= 0 ? 'checked' : ''}> ${esc(String(v))}</label>`).join('');
-    return `<button class="th-filter ${selVals.length ? 'on' : ''}" data-action="popmenu" data-col="${esc(c.key)}" type="button" aria-label="Filter ${esc(c.label)}">▾</button>
-      <div class="pop-panel" hidden>
-        <button class="pop-sort" data-action="cs-popsort" data-key="${esc(c.key)}" data-dir="asc">↑ Sort ${c.num ? 'low → high' : 'A → Z'}</button>
-        <button class="pop-sort" data-action="cs-popsort" data-key="${esc(c.key)}" data-dir="desc">↓ Sort ${c.num ? 'high → low' : 'Z → A'}</button>
-        <div class="pop-sep"></div>
-        <input class="pop-search" type="search" placeholder="Search ${esc(c.label)}…">
-        <div class="pop-actions"><button data-action="cs-colf-all" data-col="${esc(c.key)}">Select all</button><button data-action="cs-colf-clear" data-col="${esc(c.key)}">Clear</button></div>
-        <div class="pop-list">${list || '<div class="muted" style="padding:8px;font-size:12.5px">No values</div>'}</div>
-      </div>`;
-  }
   function csBodyRows(rows, cols) {
     if (!rows.length) return `<tr class="no-rows"><td colspan="${cols.length}"><div class="empty" style="padding:34px 10px"><div class="ec">🔍</div><h3>No cases match</h3><p>Open a header's ▾ to widen a filter, or Clear.</p></div></td></tr>`;
     return rows.map(c => `<tr data-action="cs-open" data-id="${esc(c.recordId)}" class="cs-row">${cols.map(col => `<td class="${col.num ? 'num' : ''}">${col.cell ? col.cell(c) : esc(col.val(c))}</td>`).join('')}</tr>`).join('');
   }
-  function csChips(st) {
-    return Object.keys(st.colf || {}).filter(k => (st.colf[k] || []).length).map(k => {
-      const col = COL(k), vals = st.colf[k];
-      const txt = vals.length === 1 ? vals[0] : vals.length + ' selected';
-      return `<span class="filter-chip">${esc(col ? col.label : k)}: <b>${esc(String(txt))}</b><button class="chip-x" data-action="cs-colf-clear" data-col="${esc(k)}" title="Clear">✕</button></span>`;
-    }).join('');
-  }
+  const csChips = (st) => U().sheetChips(columns(), st, 'cs');
   function tableHtml(rows, st, user) {
-    const cols = columns();
-    const head = cols.map(c => {
-      const arrow = st.sortKey === c.key ? (st.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
-      return `<th class="${c.num ? 'num' : ''}${c.filter ? ' pop-wrap' : ''}"><span class="cs-th" data-action="cs-sort" data-key="${c.key}">${esc(c.label)}${arrow}</span>${c.filter ? csFilterMenu(c, st) : ''}</th>`;
-    }).join('');
-    return `<div class="table-wrap"><table class="data cs-table"><thead><tr>${head}</tr></thead><tbody id="cs-tbody">${csBodyRows(rows, cols)}</tbody></table></div>`;
+    const cols = shown();
+    return `<div class="table-wrap"><table class="data cs-table"><thead>${U().sheetHead(cols, D().cases(), st, 'cs')}</thead><tbody id="cs-tbody">${csBodyRows(rows, cols)}</tbody></table></div>`;
   }
 
   function refreshBody() {
     const st = RWG.modules.get('cases').state;
     const rows = filtered(st);
     const tbody = document.getElementById('cs-tbody');
-    if (tbody) tbody.innerHTML = csBodyRows(rows, columns());
+    if (tbody) tbody.innerHTML = csBodyRows(rows, shown());
     else { const body = document.getElementById('cs-body'); if (body) body.innerHTML = tableHtml(rows, st, RWG.auth.currentUser()); }
     const cnt = document.getElementById('cs-count'); if (cnt) cnt.textContent = rows.length + ' of ' + D().cases().length;
     const chips = document.getElementById('cs-chips'); if (chips) chips.innerHTML = csChips(st);
