@@ -99,6 +99,27 @@ window.RWG = window.RWG || {};
      contact's history show work that finished months ago. */
   const REL_TYPES = ['contact', 'case', 'household'];
 
+  /* The Category select's options, in one place, because two things build
+     them now: opening the window, and the ＋ repainting it after somebody
+     adds a word. "— none —", then any word this task wears that has since
+     left the firm's list, then the list itself. The off-list word is
+     carried so opening and saving a task cannot quietly erase what it was
+     filed under — Settings promises that removing a category never edits a
+     task, and this is where that promise is actually kept. */
+  let catKeep = null;
+  function catOptions(selCat, keep) {
+    const cats = T().categories();
+    const extras = [];
+    [keep, selCat].forEach(w => {
+      if (w && cats.indexOf(w) < 0 && extras.indexOf(w) < 0) extras.push(w);
+    });
+    return ['<option value="">— none —</option>']
+      .concat(extras.map(w =>
+        `<option value="${esc(w)}" ${w === selCat ? 'selected' : ''}>${esc(w)} (retired)</option>`))
+      .concat(cats.map(c =>
+        `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
+  }
+
   function taskModal(t, preset) {
     preset = preset || {};
     const v = (k, dflt) => t && t[k] != null ? t[k] : (preset[k] != null ? preset[k] : dflt);
@@ -110,13 +131,11 @@ window.RWG = window.RWG || {};
     const relType = v('relatedType', null), relId = v('relatedId', null);
     const selCat = v('category', '');
     // A task filed under a category that has since left the list keeps its
-    // word: the option is carried so opening and saving the task cannot
-    // quietly erase what it was filed under.
-    const cats = T().categories();
-    const catOpts = ['<option value="">— none —</option>']
-      .concat(selCat && cats.indexOf(selCat) < 0
-        ? [`<option value="${esc(selCat)}" selected>${esc(selCat)} (retired)</option>`] : [])
-      .concat(cats.map(c => `<option value="${esc(c)}" ${c === selCat ? 'selected' : ''}>${esc(c)}</option>`)).join('');
+    // word — see catOptions(). catKeep remembers it for the life of this
+    // window, because adding a category repaints the select and the promise
+    // Settings makes ("removing one never edits a task") has to survive that.
+    catKeep = selCat && T().categories().indexOf(selCat) < 0 ? selCat : null;
+    const catOpts = catOptions(selCat);
     const selPri = v('priority', 'none');
     const priOpts = T().PRIORITIES.map(p =>
       `<option value="${p.id}" ${p.id === selPri ? 'selected' : ''}>${esc(p.label)}</option>`).join('');
@@ -140,7 +159,19 @@ window.RWG = window.RWG || {};
           </div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Category</label>
-              <select id="tk-cat">${catOpts}</select></div>
+              <div class="flex" style="gap:6px">
+                <select id="tk-cat" style="flex:1;min-width:0">${catOpts}</select>
+                <button class="btn btn-quiet btn-sm" style="flex:none;padding:6px 11px" data-action="tk-cat-new"
+                  title="Add a category — it joins the firm's list for everyone">＋</button>
+              </div>
+              <div id="tk-cat-add" class="flex" style="gap:6px;margin-top:6px;display:none">
+                <input id="tk-cat-name" maxlength="${T().CATEGORY_MAX}" style="flex:1;min-width:0"
+                  placeholder="e.g. Beneficiary review">
+                <button class="btn btn-gold btn-sm" style="flex:none" data-action="tk-cat-save">Add</button>
+                <button class="btn btn-ghost btn-sm" style="flex:none" data-action="tk-cat-cancel">Cancel</button>
+              </div>
+              <div id="tk-cat-hint" class="hint" style="display:none">The whole team gets this one.
+                Renaming and removing stay with a partner, in Settings.</div></div>
             <div class="field-group"><label class="lbl">Priority</label>
               <select id="tk-pri">${priOpts}</select></div>
           </div>
@@ -562,6 +593,57 @@ window.RWG = window.RWG || {};
         taskModal(null, preset);
       },
       'tk-edit': (el) => { const t = T().task(el.dataset.id); if (t) taskModal(t); },
+      /* ── a category you can make where you noticed it was missing ──
+         Carlos, Aug '26: everyone can ADD. The ＋ is beside the select
+         rather than on the Settings screen because the moment a category
+         turns out to be missing is the moment somebody is filing a task,
+         and Settings is a partner-only door — they were choosing "none"
+         instead. Only adding: the list itself is still the firm's. */
+      'tk-cat-new': () => {
+        const row = document.getElementById('tk-cat-add');
+        const hint = document.getElementById('tk-cat-hint');
+        if (row) row.style.display = 'flex';
+        if (hint) hint.style.display = '';
+        const box = document.getElementById('tk-cat-name');
+        if (box) box.focus();
+      },
+      'tk-cat-cancel': () => {
+        const row = document.getElementById('tk-cat-add');
+        const hint = document.getElementById('tk-cat-hint');
+        const box = document.getElementById('tk-cat-name');
+        if (box) box.value = '';
+        if (row) row.style.display = 'none';
+        if (hint) hint.style.display = 'none';
+      },
+      'tk-cat-save': (el) => {
+        const box = document.getElementById('tk-cat-name');
+        const typed = box ? box.value : '';
+        if (!String(typed).trim()) { U().toast('Name the category first'); if (box) box.focus(); return; }
+        if (el) el.disabled = true;
+        T().addCategory(typed).then(r => {
+          /* Repaint the select in place, not the window. A full render
+             would throw away the title, the note and the record they have
+             already picked, which is a steep price for adding a word. */
+          const sel = document.getElementById('tk-cat');
+          if (sel) { sel.innerHTML = catOptions(r.name, catKeep); sel.value = r.name; }
+          const row = document.getElementById('tk-cat-add');
+          const hint = document.getElementById('tk-cat-hint');
+          if (box) box.value = '';
+          if (row) row.style.display = 'none';
+          if (hint) hint.style.display = 'none';
+          if (el) el.disabled = false;
+          U().toast(r.added
+            ? '“' + r.name + '” added — the whole team has it now'
+            : '“' + r.name + '” was already on the list', true);
+        }).catch(e => {
+          /* Offline, refused by the rules, or somebody else added a word
+             in the same second — all three deserve one more click, so what
+             they typed stays exactly where they typed it. */
+          if (el) el.disabled = false;
+          U().toast('Could not add it — ' + ((e && e.message) || 'try again'));
+          if (box) box.focus();
+        });
+      },
       // ── selection & deletion (partners; everything goes via the Trash) ──
       'tk-sel-on': () => { st.sel = {}; RWG.app.renderMain(); },
       'tk-sel-off': () => { st.sel = null; RWG.app.renderMain(); },

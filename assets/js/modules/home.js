@@ -531,15 +531,27 @@ window.RWG = window.RWG || {};
     return card('Team activity', 'live', rows);
   }
 
+  /* One rule for "what is on this person's plate right now", asked in two
+     places: the card below, and the reminder that opens over the whole
+     screen when somebody signs in. It lives here once, because a window
+     that lists a task the card underneath it does not is a window nobody
+     believes a second time.
+
+     Same rule as the Tasks page and the nav badge: a workflow step
+     waiting on an earlier step is not on anybody's morning list yet. */
+  function dueNow(uid) {
+    if (!T().isStarted()) return [];
+    const today = T().todayKey();
+    const held = (RWG.wf && RWG.wf.blockedIds) ? RWG.wf.blockedIds() : {};
+    return T().openFor(uid).filter(t => t.dueDate && t.dueDate <= today && !held[t.id])
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  }
+
   // 7 · My tasks today — the short list, checkable right here.
   function wMyTasks(ctx) {
     if (!T().isStarted()) return card('My tasks today', '', emptyRow('Loading…'));
     const today = T().todayKey();
-    // Same rule as the Tasks page and the nav badge: a workflow step
-    // waiting on an earlier step is not on anybody's morning list yet.
-    const held = (RWG.wf && RWG.wf.blockedIds) ? RWG.wf.blockedIds() : {};
-    const due = T().openFor(ctx.eff.id).filter(t => t.dueDate && t.dueDate <= today && !held[t.id])
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    const due = dueNow(ctx.eff.id);
     const body = due.length ? due.slice(0, 7).map(t => `<div class="flex" style="gap:10px;padding:9px var(--pad-panel);border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
         <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px">
         <span style="min-width:0;flex:1;font-size:13px;color:var(--ink)">${esc(t.title)}
@@ -549,6 +561,167 @@ window.RWG = window.RWG || {};
       : emptyRow('Clear. Nothing due today.');
     return card('My tasks today', due.length ? String(due.length) : '',
       body, `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="mywork">All tasks →</button>`);
+  }
+
+  /* ── The morning reminder ─────────────────────────────────
+     Carlos, Aug '26: "a pop up reminder of the tasks that are due that
+     day, so that they don't forget what they have to do that day."
+     The card above has been sitting on this screen since the dashboard
+     shipped and people still walked past it — a card you can look past
+     is not a reminder. So the same list, once, standing in front of the
+     screen, with the checkboxes still live: "I already did that" should
+     cost one click, not a trip to another page.
+
+     Once per sign-in rather than once per day. The flag lives in
+     sessionStorage, which dies with the tab: moving around the app all
+     morning never brings the window back, and leaving for lunch and
+     coming back to a fresh tab does. The date is in the key as well, so
+     a browser left open overnight opens tomorrow on the new day's list
+     instead of yesterday's silence.
+
+     Nothing due, nothing shown. A window that says "you have nothing to
+     do" is a window that teaches people to close windows unread. */
+
+  const REM_MAX = 8;   // a morning glance, not a backlog review
+  const remKey = (uid) => 'rwg.home.remind.' + uid + '.' + T().todayKey();
+
+  /* sessionStorage can be missing or refused outright (private windows,
+     the odd embedded browser). The in-memory flag is what actually
+     guarantees "once" inside a page; storage only carries that answer
+     across a reload of the same tab. If it throws we lose the reload,
+     not the manners. */
+  function remDecided(key) {
+    if (st.remindFor === key) return true;
+    try { return sessionStorage.getItem(key) === '1'; } catch (e) { return false; }
+  }
+  function remDecide(key) {
+    st.remindFor = key;
+    try { sessionStorage.setItem(key, '1'); } catch (e) {}
+  }
+
+  // Counting out loud, in the words a person would use.
+  function remLine(n, late) {
+    const head = n + ' task' + (n === 1 ? ' is' : 's are') + ' on your list today';
+    if (!late) return head + '.';
+    if (late === n) return head + (n === 1 ? ', and it is already late.' : ', and every one is already late.');
+    return head + ' — ' + late + ' of them already late.';
+  }
+
+  // The rows are the card's rows, deliberately: same checkbox, same
+  // late/today marker, so the window and the card read as one thing.
+  function remBody(due, today) {
+    if (!due.length) return emptyRow('That is everything due today.');
+    const rest = due.length - Math.min(due.length, REM_MAX);
+    return due.slice(0, REM_MAX).map(t => `<div class="flex" style="gap:10px;padding:9px 2px;border-bottom:1px solid rgba(14,36,64,.06);align-items:flex-start">
+        <input type="checkbox" data-action="tk-done" data-id="${esc(t.id)}" style="margin-top:2px" aria-label="Mark done: ${esc(t.title)}">
+        <span style="min-width:0;flex:1;font-size:13.5px;color:var(--ink)">${esc(t.title)}
+          ${t.workflowName ? `<span class="chip tier-gold" style="font-size:10px;margin-left:4px">${U().icon('workflow','ic-inline')} ${esc(t.workflowName)}</span>` : ''}
+          ${t.relatedLabel ? `<span class="cell-sub" style="display:block">${esc(t.relatedLabel)}</span>` : ''}</span>
+        <span style="flex:none;font-size:11px;${t.dueDate < today ? 'color:var(--bad);font-weight:700' : 'color:var(--warn);font-weight:700'}">${t.dueDate < today ? 'late' : 'today'}</span>
+      </div>`).join('')
+      + (rest ? hint(rest + ' more waiting on your tasks page.') : '');
+  }
+
+  function remindHtml(due, today) {
+    const late = due.filter(t => t.dueDate < today).length;
+    return `
+      <div class="scrim" data-action="close-modal"></div>
+      <div class="modal-card modal-sm" id="hm-remind" role="dialog" aria-modal="true" aria-label="Your list for today">
+        <div class="modal-head">
+          <h2>Before you start</h2>
+          <p id="hm-remind-sub">${esc(remLine(due.length, late))} Tick anything you have already done.</p>
+          <button class="drawer-close" data-action="close-modal" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body" id="hm-remind-body">${remBody(due, today)}</div>
+        <div class="modal-foot">
+          <button class="btn btn-quiet" data-action="close-modal">Close</button>
+          <button class="btn btn-gold" data-action="home-open" data-view="mywork">Open my tasks</button>
+        </div>
+      </div>`;
+  }
+
+  /* Keep an open window honest. Ticking a row calls for a full render —
+     that is how we get back here — and the window lives outside
+     #main-content, so it survives the paint untouched and would go on
+     listing a task that is now done. Says whether it was on screen. */
+  function remRefresh() {
+    const body = document.getElementById('hm-remind-body');
+    if (!body) return false;
+    const me = RWG.auth.currentUser();
+    if (!me) return false;
+    const today = T().todayKey();
+    const due = dueNow(me.id);
+    body.innerHTML = remBody(due, today);
+    const sub = document.getElementById('hm-remind-sub');
+    if (sub) {
+      sub.textContent = due.length
+        ? remLine(due.length, due.filter(t => t.dueDate < today).length) + ' Tick anything you have already done.'
+        : 'Nothing left on your list for today.';
+    }
+    return true;
+  }
+
+  // Leaving Home takes the window with it: nav() paints the next screen
+  // underneath and would otherwise leave this one hanging over it.
+  function remClose() {
+    const m = document.getElementById('modal-mount');
+    if (m && m.querySelector && m.querySelector('#hm-remind')) m.innerHTML = '';
+  }
+
+  function maybeRemind() {
+    const me = RWG.auth.currentUser();
+    if (!me) return;
+
+    /* A partner reading somebody else's cockpit through View As is
+       borrowing a screen, not starting a day. Their tasks are not the
+       partner's to be reminded of, and the partner's own list is not
+       what this screen is showing — so no window either way while it
+       is on. Checked two ways because they answer slightly different
+       questions: the flag says "we are impersonating", the comparison
+       catches any other route to a stand-in identity. */
+    const app = RWG.app || {};
+    if (app.state && app.state.viewAs) return;
+    const eff = app.effectiveUser ? app.effectiveUser() : me;
+    if (eff && eff.id !== me.id) return;
+
+    /* Tasks arrive from Firestore a moment after this screen first
+       paints, and onEnter runs after EVERY paint — including the one
+       the task listener itself asks for when the data lands. So there
+       is nothing to schedule here: we simply decline to answer until
+       the cache has actually delivered. isStarted() is not that
+       promise; it turns true the instant init() is called, with the
+       cache still empty. An empty cache means either "not here yet" or
+       "the firm has no tasks at all", and in the second case nothing is
+       due either — so waiting forever and showing nothing are the same
+       answer, and neither of them is a wrong one. */
+    if (!T().isStarted() || !T().all().length) return;
+
+    const key = remKey(me.id);
+    if (remDecided(key)) return;
+
+    /* Never barge in over a window somebody already has open. Left
+       undecided on purpose, so it comes up on the next paint once that
+       window is shut rather than being skipped for the session. */
+    const mount = document.getElementById('modal-mount');
+    if (!mount || mount.firstElementChild) return;
+    const m2 = document.getElementById('modal-mount-2');
+    if (m2 && m2.firstElementChild) return;
+
+    /* Decided BEFORE we know the answer, and that is the point: with
+       nothing due there is no window, and a task assigned at eleven in
+       the morning must not then spring one open over whatever they were
+       doing. The reminder belongs to arriving, not to the day. */
+    remDecide(key);
+    const today = T().todayKey();
+    const due = dueNow(me.id);
+    if (!due.length) return;
+    mount.innerHTML = remindHtml(due, today);
+  }
+
+  // One entry point, called after every paint of Home.
+  function remindTick() {
+    if (remRefresh()) return;   // already up: keep it in step, never re-open it
+    maybeRemind();
   }
 
   // 8 · Pipeline forecast — what the open book is worth if it lands.
@@ -941,6 +1114,13 @@ window.RWG = window.RWG || {};
       if (RWG.notes && !RWG.notes.isStarted()) RWG.notes.init(me, RWG.app.renderMain);
       P().init();
       if (RWG.wf) RWG.wf.init();
+
+      /* Last, because everything above may still be waking up. onEnter
+         runs after every paint of this screen and each layer repaints
+         when its data lands, so this is called again the moment the
+         tasks are actually here — which is where the reminder decides
+         for itself whether there is anything to say. */
+      remindTick();
     },
 
     onChange(e) {
@@ -948,7 +1128,9 @@ window.RWG = window.RWG || {};
     },
 
     actions: {
-      'home-open': (el) => RWG.app.nav(el.dataset.view),
+      // The reminder's own footer leaves by this door too, so it closes
+      // itself on the way out rather than following you to Tasks.
+      'home-open': (el) => { remClose(); RWG.app.nav(el.dataset.view); },
       'hm-customize': () => { st.customize = !st.customize; RWG.app.renderMain(); },
 
       /* Open the cases behind a number. Each branch re-reads the same model

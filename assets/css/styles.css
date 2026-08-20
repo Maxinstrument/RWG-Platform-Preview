@@ -535,6 +535,12 @@ table.data tbody tr:hover{background:rgba(194,161,77,.06);}
 table.data tbody tr:last-child td{border-bottom:none;}
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
+/* All Cases' Details preview. The JS already clips the note to 50
+   characters; this only stops fifty capitals from running 400px wide and
+   shoving Revenue off screen. 28ch tracks the font rather than guessing
+   pixels, and the cursor says the cell is worth hovering — `help`, not
+   `text`, because the row itself opens the case. */
+.cell-note{display:block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help;}
 table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .score-bar{display:inline-flex;align-items:center;gap:8px;}
 .score-bar .track{width:46px;height:6px;border-radius:4px;background:rgba(14,36,64,.1);overflow:hidden;}
@@ -546,10 +552,14 @@ table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 /* stretch, not flex-start: every column stands as tall as the tallest, so
    the whole column strip is a drop target — not just the header of a
    near-empty one. The floor keeps even an empty board droppable. */
-/* The board is three screens wide and a mouse has one wheel, so the only
-   way sideways used to be a scrollbar sitting below the fold. It now takes
-   the wheel (app.js) and wears the same gold scrollbar the tables do, so
-   there is something to grab and something to see. */
+/* The board is three screens wide, so it carries its own horizontal
+   scrollbar — the same gold one the tables wear, thin enough to sit under
+   the columns and solid enough to grab. That scrollbar exists because
+   .main carries min-width:0; a `1fr` grid track will not shrink below its
+   content, and without it the board grew the page sideways instead of
+   growing a bar. Grab it, hold shift and turn the wheel, or swipe sideways
+   on a trackpad: three ordinary ways across, which is why the board asks
+   nothing of a plain vertical wheel (app.js, Aug '26). */
 .board{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 14px;align-items:stretch;
   scrollbar-width:thin;scrollbar-color:var(--gold) rgba(14,36,64,.10);overscroll-behavior-x:contain;}
 .board::-webkit-scrollbar{height:13px;}
@@ -955,6 +965,7 @@ button.list-group:hover{background:rgba(14,36,64,.05);}
 
   /* Tighter screen edges → more room for content */
   .main{padding:18px 14px 84px;}
+  .cell-note{max-width:18ch;}                /* narrow the note, never hide it */
   .topbar{padding:0 12px;gap:10px;height:60px;}
   .topbar .page-title{font-size:18px;}
   .topbar .page-sub{display:none;}

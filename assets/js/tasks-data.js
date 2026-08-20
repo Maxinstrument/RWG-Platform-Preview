@@ -53,6 +53,51 @@ RWG.tasks = (function () {
   const categories = () =>
     (CATEGORY_OVERRIDE && CATEGORY_OVERRIDE.length) ? CATEGORY_OVERRIDE.slice() : DEFAULT_CATEGORIES.slice();
 
+  /* Adding a category is open to the whole team; the LIST is still the
+     firm's. Carlos, Aug '26: "let anyone create a Category in case there is
+     one I missed but the team finds valuable." The person who notices a word
+     is missing is the person filing the task at 4pm, and Settings is a door
+     only a partner can open — so they picked the wrong word, or picked none
+     at all, and the category on a task stopped meaning anything. Appending
+     is safe; renaming, reordering and removing another person's word out
+     from under them is not, so those stay in Settings. The Firestore rule
+     on config/taskcategories enforces exactly that split rather than
+     trusting this function to be the only caller.
+
+     The write is always the WHOLE list, never just the new word. Until a
+     partner opens Settings the doc does not exist and the effective list is
+     the code defaults above — so creating it with one name would quietly
+     delete the eight defaults for everybody. */
+  const CATEGORY_MAX = 40;   // room for "Beneficiary review"; not room for a paragraph
+  function addCategory(name) {
+    const clean = String(name == null ? '' : name).trim().replace(/\s+/g, ' ').slice(0, CATEGORY_MAX);
+    if (!clean) return Promise.reject(new Error('A category needs a name'));
+    const list = categories();
+    /* Already there under a different shift key. Two words that differ by a
+       capital are two halves of a filter that will never agree, so this is
+       not an error — it is the word they were reaching for. Hand back the
+       one that exists, spelled the way the firm spells it, and let the
+       caller select it. */
+    const hit = list.filter(c => c.toLowerCase() === clean.toLowerCase())[0];
+    if (hit) return Promise.resolve({ name: hit, added: false });
+    if (!db()) return Promise.reject(new Error('Not connected'));
+    const next = list.concat([clean]);
+    return db().collection('config').doc('taskcategories').set({
+      value: next, updatedAt: new Date().toISOString(), updatedBy: (me && me.id) || null
+    }).then(() => {
+      /* Paint it here rather than waiting for the listener to come back:
+         the select that asked for it is on screen right now. On success
+         only — a refused write has to leave the list exactly as the firm
+         has it. Two people adding in the same second is caught by the rule
+         (hasAll compares against the server's list, so the second one is
+         REFUSED, not silently overwriting the first), and the honest answer
+         to that is a toast and one more click. */
+      CATEGORY_OVERRIDE = next.slice();
+      onChange();
+      return { name: clean, added: true };
+    });
+  }
+
   const PRIORITIES = [
     { id: 'none', label: 'None' },
     { id: 'low', label: 'Low' },
@@ -272,7 +317,8 @@ RWG.tasks = (function () {
     init, teardown, isStarted,
     all, task, open, openFor, groupByDue, dueCount, doneThisWeek, todayKey,
     addTask, saveTask, toggleDone, removeTask,
-    categories, nextDue, DEFAULT_CATEGORIES, PRIORITIES, REPEATS,
+    categories, addCategory, CATEGORY_MAX,
+    nextDue, DEFAULT_CATEGORIES, PRIORITIES, REPEATS,
     repairCategories,   // the retired-word migration, exposed so it can be pinned
     _cache: cache
   };

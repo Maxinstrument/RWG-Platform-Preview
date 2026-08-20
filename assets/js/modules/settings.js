@@ -324,7 +324,16 @@ window.RWG = window.RWG || {};
      The same config-as-data shape as everything else here: code
      defaults ship in tasks-data.js, this doc overrides them. A
      category is a plain string, so renaming one leaves old tasks
-     wearing the old word — the filter simply stops offering it. */
+     wearing the old word — the filter simply stops offering it.
+
+     This screen is no longer the only way a word arrives (Carlos,
+     Aug '26): anyone can ADD one from the ＋ beside the task window's
+     Category select, because that is where a missing category is
+     actually noticed. Adding is all they can do — the Firestore rule
+     lets a non-partner grow the list and nothing else — so renaming,
+     reordering and removing are still only possible here. The helper
+     line below says so, or a partner opens this tab one morning and
+     finds a word nobody on this screen ever typed. */
 
   function categoriesTab() {
     const d = draftC();
@@ -353,6 +362,9 @@ window.RWG = window.RWG || {};
       <p class="muted" style="font-size:12px;margin:10px 2px 0;max-width:520px">
         Keep these few enough that people actually pick one. Removing a category never
         edits a task — history keeps the word it was filed under.
+        Anyone can <b>add</b> a category from the ＋ beside the Category box on a task,
+        so a word you did not type may appear above. Adding is all they can do:
+        renaming, reordering and removing stay on this screen.
       </p>
       ${saveBar('c', 'set-save-cat', 'Save categories')}`;
   }

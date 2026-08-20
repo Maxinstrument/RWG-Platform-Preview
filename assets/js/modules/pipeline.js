@@ -27,6 +27,16 @@ window.RWG = window.RWG || {};
   const U  = () => RWG.ui;
   const esc = (s) => U().esc(s);
 
+  /* Column-footer money. Compensation totals run one to three orders of
+     magnitude below the AUM totals this footer used to add up, and
+     moneyK() rounds to whole thousands — $1,400 of revenue would read
+     "$1k" and $85 would read "$0k", which is a lie about an open case.
+     ui.js is shared with every other screen, so the rounding stays where
+     it is and the board picks the formatter that fits its own numbers:
+     exact dollars up to $10k, thousands above it, where moneyK's rounding
+     error is already under 5%. */
+  const colMoney = (n) => n >= 10000 ? U().moneyK(n) : U().money(n);
+
   const st = { pl: 'insurance', owner: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
@@ -132,13 +142,22 @@ window.RWG = window.RWG || {};
 
     const cols = P().boardStages(pl).map(stage => {
       const items = (byStage[stage.id] || []).sort((a, b) => ageDays(b) - ageDays(a));
-      const sum = items.reduce((n, c) => n + (Number(SC().usesAum(c.product) ? c.aum : c.amount) || 0), 0);
+      /* Carlos, Aug '26: the column footer summed the money PLACED — on the
+         Investments board that is the annuity deposit and the assets brought
+         in, numbers nobody is paid. It sums what the firm EARNS now, through
+         caseRevenue(), so each case is valued at its OWN resolved rate (this
+         firm sets rates per case) and the board answers the same question the
+         scorecard does. Insurance and Financial Planning read exactly as
+         before: there the amount typed IS the money earned. Rounded to whole
+         dollars once, so a total of $0.40 shows nothing rather than "$0". */
+      const sum = items.reduce((n, c) => n + (Number(SC().caseRevenue(c)) || 0), 0);
+      const cash = Math.round(sum);
       const isWon = stage.bucket === 'Closed';
       return `<div class="board-col" data-plstage="${esc(stage.id)}" ${isWon ? 'data-plwon="1"' : ''}>
         <div class="board-col-head">
           <span class="bar" style="background:${BUCKET_DOT[stage.bucket]}"></span>
           <span class="ttl">${esc(stage.label)}</span>
-          <span class="cnt">${items.length}${sum ? ' · ' + U().moneyK(sum) : ''}</span>
+          <span class="cnt" title="Cases in this column · the compensation they earn, not the money placed">${items.length}${cash ? ' · ' + colMoney(cash) : ''}</span>
         </div>
         <div class="board-col-body">
           ${items.map(c => card(c, stage, isAdmin)).join('') || `<p class="muted center drop-hint" style="font-size:12.5px;padding:14px 0">${isWon ? 'Closes land here' : 'Drop here'}</p>`}

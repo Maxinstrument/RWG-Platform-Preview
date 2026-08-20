@@ -53,6 +53,42 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ── Task categories: the one config doc the team may ADD to ──
+    // Carlos, Aug '26: "let anyone create a Category in case there is one I
+    // missed but the team finds valuable." The person who notices a word is
+    // missing is the person filing the task, and Settings is a partner-only
+    // screen — so the plus beside the task window's Category box writes here.
+    //
+    // Adding only, and hasAll() is the whole guarantee: the list that arrives
+    // must still contain every word the list already on the server had. So
+    // nobody can rename, reorder away or delete somebody else's category on
+    // the way past, and two people adding in the same second ends with the
+    // second write REFUSED rather than quietly dropping the first person's
+    // word. One new word per write, and a ceiling on the list so a runaway
+    // loop cannot inflate the document.
+    //
+    // Create is here because until a partner opens Settings this doc does not
+    // exist at all — the app seeds it with the whole current list (the code
+    // defaults) plus the new word, never with the new word alone.
+    //
+    // The generic config/{doc} block below is untouched and still gives
+    // admins unrestricted write, here and everywhere else: matching rules are
+    // OR'ed, so this block only ever ADDS permission. Deleting the doc, and
+    // every kind of edit that is not an append, remain a partner's.
+    match /config/taskcategories {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.value is list
+        && request.resource.data.value.size() <= 60
+        && request.resource.data.updatedBy == request.auth.uid;
+      allow update: if signedIn()
+        && request.resource.data.value is list
+        && request.resource.data.value.hasAll(resource.data.value)
+        && request.resource.data.value.size() <= resource.data.value.size() + 1
+        && request.resource.data.value.size() <= 60
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
     match /config/{doc} {
       allow read:  if signedIn();
       allow write: if isAdmin();

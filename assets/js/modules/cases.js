@@ -18,13 +18,65 @@ window.RWG = window.RWG || {};
   const esc = (s) => U().esc(s);
   const money = (n) => U().money(n);
 
+  /* ── the details preview, in plain text ──
+     Carlos, Aug '26: finding out whether anybody had touched a case meant
+     opening it, and opening it was the entire cost of the question. Fifty
+     characters of the note answers it from the table; the hover carries
+     the rest, and the export carries all of it.
+
+     Details are stored as SANITIZED HTML by the opportunity window's note
+     editor. Notes typed before that editor existed are plain text and stay
+     that way (the same both-ways rule ui.noteHtml lives by), so this has to
+     read either and hand back text for both.
+
+     The order is the safety. Strip the markup FIRST, decode the entities
+     SECOND, and let the caller escape LAST. Decoding first would turn a
+     &lt;script&gt; that somebody actually TYPED — correctly stored, inert,
+     just words about a script tag — into a live-looking tag for the
+     stripper to find and eat, and any tag the stripper missed would then
+     reach the page as markup. Going the other way round, what comes out of
+     here is only ever plain text: whatever the decode produces is data by
+     then, and esc() at the point of use turns it back into the characters
+     the person typed. Nothing in this file puts the return value into the
+     page unescaped, and nothing should. */
+  const ENTITIES = [
+    [/&nbsp;/gi, ' '], [/&lt;/gi, '<'], [/&gt;/gi, '>'],
+    [/&quot;/gi, '"'], [/&#0*39;/g, "'"], [/&apos;/gi, "'"],
+    // &amp; goes LAST, always: decode it first and the stored text "&lt;"
+    // — five characters someone deliberately wrote as &amp;lt; — becomes a
+    // real "<". Ampersand last is what keeps one decode from feeding another.
+    [/&amp;/gi, '&']
+  ];
+  function detailsText(v) {
+    let s = String(v == null ? '' : v)
+      /* A paragraph break is a word break. <p>Called</p><p>Emailed</p> is
+         two sentences, and "CalledEmailed" would be a worse answer than no
+         answer. Inline tags close up instead — <b>plan</b> mid-sentence
+         should not grow spaces around it. */
+      .replace(/<\s*\/?\s*(?:p|div|br|li|ul|ol|h[1-6]|blockquote|pre|table|tr|td|th)\b[^>]*>/gi, ' ')
+      /* Requires a letter after the bracket, so a plain-text note reading
+         "premium < 5k" keeps its arithmetic instead of losing everything
+         up to the next ">". */
+      .replace(/<\/?[a-zA-Z][^>]*>/g, '');
+    ENTITIES.forEach(e => { s = s.replace(e[0], e[1]); });
+    // One line, always: the cell has one line to give, and the CSV field
+    // this same text feeds must not carry a newline into the file. \s is
+    // the wide one — it counts a non-breaking space as space, so the ones
+    // the editor leaves behind collapse with everything else.
+    return s.replace(/\s+/g, ' ').trim();
+  }
+  // Ellipsis only when something was actually cut: 50 characters is 50
+  // characters, not 50 and a promise of more that isn't there.
+  const clip = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
+
   /* Column schema: label, how to read the value, how to sort, whether it
      filters — and whether it is on screen at all. `hidden` columns still
      sort, still filter and still go into the export; they just do not take
      up a column. The table shows what the week's scorecard shows plus the
      agent, because the same six numbers answering the same question in two
      places should not be two different tables. Source and the three week
-     stamps stay in the CSV, where reconciling actually happens. */
+     stamps stay in the CSV, where reconciling actually happens — and the
+     note comes last, where a long ragged string costs the numbers nothing. */
   function columns() {
     const sc = S();
     return [
@@ -42,7 +94,26 @@ window.RWG = window.RWG || {};
       { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, hidden: true },
       { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', hidden: true },
       { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', hidden: true },
-      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', hidden: true }
+      { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', hidden: true },
+      /* val() is the WHOLE note, deliberately. The export reads col.val()
+         straight through, and an export is something you sit down with
+         later — a fifty-character stub would be a worse file than no
+         column. The sort reads val() too, and sorting on the full string
+         orders by its opening characters anyway, so the rows land in the
+         order the previews on screen say they should. What is trimmed to
+         fifty is the CELL, which is the only place the width is scarce.
+
+         No `filter: true`: a per-value checklist here would list every
+         distinct note in the firm, one row each, and answer nothing. */
+      { key: 'details', label: 'Details', str: true, val: c => detailsText(c.details),
+        cell: c => {
+          const t = detailsText(c.details);
+          if (!t) return '<span class="cell-sub">—</span>';
+          // Both halves escaped at the point of use — see detailsText.
+          // The tooltip is capped too: a note three screens long is a
+          // tooltip three screens long, which is nobody's idea of a hover.
+          return `<div class="cell-sub cell-note" title="${esc(clip(t, 300))}">${esc(clip(t, 50))}</div>`;
+        } }
     ];
   }
   const shown = () => columns().filter(c => !c.hidden);
@@ -868,5 +939,5 @@ window.RWG = window.RWG || {};
     fitTable();   // a chip appearing can push the table down a line
   }
 
-  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, _form: () => form };
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, clip, _form: () => form };
 })();

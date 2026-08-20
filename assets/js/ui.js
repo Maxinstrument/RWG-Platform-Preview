@@ -541,9 +541,12 @@ RWG.ui = (function () {
      opportunity window; it lives here now so no screen grows its
      own version of it.
 
-     Insert date stamps the day AND who stamped it — in a book the
-     whole team reads, "8/13/2026" is worth much less than
-     "8/13/2026 · Carlos Temperan".
+     Insert date stamps the day, the hour AND who stamped it — in a
+     book the whole team reads, "8/13/2026" is worth much less than
+     "8/13/2026 2:15 PM · Carlos Temperan". Carlos, Aug '26: the date
+     alone tells you the day but not the hour, and on a case that moves
+     three times in an afternoon the hour is the whole story — it is
+     what puts the carrier's call and your callback in the right order.
 
      Storage is sanitized HTML. Notes typed before today are plain
      text and stay that way: noteHtml() renders either, so nothing
@@ -571,11 +574,21 @@ RWG.ui = (function () {
     const u = RWG.auth && RWG.auth.currentUser ? RWG.auth.currentUser() : null;
     return (u && u.name) || '';
   }
+  // Built by hand, digit by digit, the same way the date is. toLocaleTimeString
+  // would be shorter and would also hand the formatting to whatever locale the
+  // browser happens to carry — one machine set to en-GB and half the notes in
+  // the book read 15:07. Carlos asked for AM and PM, so AM and PM it is,
+  // everywhere, on every machine.
   function dateStamp() {
     const d = new Date();
     const day = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+    const h24 = d.getHours();
+    // The 12-hour clock has no zero: midnight and noon are both 12, and only
+    // the meridiem tells them apart. That off-by-twelve is the classic bug here.
+    const hour = (h24 % 12) || 12;
+    const time = hour + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + (h24 < 12 ? 'AM' : 'PM');
     const who = whoAmI();
-    return day + (who ? ' · ' + who : '') + ' — ';
+    return day + ' ' + time + (who ? ' · ' + who : '') + ' — ';
   }
 
   // opts: { id, value, placeholder, editable, minHeight }
@@ -589,7 +602,7 @@ RWG.ui = (function () {
         ${tool('insertUnorderedList', '•≡', 'Bullet list')}${tool('insertOrderedList', '1≡', 'Numbered list')}
         ${tool('link', '🔗', 'Insert link')}
         <span class="topbar-spacer"></span>
-        ${tool('date', 'Insert date', 'Stamp today’s date and your name')}
+        ${tool('date', 'Insert date', 'Stamp the date, the time and your name')}
       </div>` : '';
     return bar + `<div id="${esc(o.id)}" class="rt-body${editable ? '' : ' rt-ro'}"
         data-ph="${esc(o.placeholder || '')}" ${editable ? 'contenteditable="true"' : ''}
