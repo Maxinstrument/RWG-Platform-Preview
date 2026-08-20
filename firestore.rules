@@ -15,6 +15,16 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+    // Approved and still here. signedIn() only means Firebase knows them:
+    // a self-created account sits at status 'pending' until a partner lets
+    // it in, and a removed one keeps its token until it expires. Anywhere
+    // the team as a whole may write, this is what "the team" means.
+    function isActive() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
     // The owner account is allowed to bootstrap itself as an active admin on first login.
     function isOwnerEmail() {
       return signedIn() && request.auth.token.email != null
@@ -77,11 +87,11 @@ service cloud.firestore {
     // every kind of edit that is not an append, remain a partner's.
     match /config/taskcategories {
       allow read: if signedIn();
-      allow create: if signedIn()
+      allow create: if isActive()
         && request.resource.data.value is list
         && request.resource.data.value.size() <= 60
         && request.resource.data.updatedBy == request.auth.uid;
-      allow update: if signedIn()
+      allow update: if isActive()
         && request.resource.data.value is list
         && request.resource.data.value.hasAll(resource.data.value)
         && request.resource.data.value.size() <= resource.data.value.size() + 1

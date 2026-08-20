@@ -8,6 +8,7 @@
 window.RWG = window.RWG || {};
 RWG.auth = (function () {
   let _profile = null;       // { id, name, email, role, status, color, createdAt }
+  let _sessionAt = 0;        // when this sign-in happened; 0 when signed out
   let _pendingName = '';      // carried from the signup form into profile creation
   const COLORS = ['#0E2440', '#2E7D5B', '#B0691F', '#7A4FB5', '#B23A48', '#1F6F8B', '#3C6E47'];
   const pickColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -16,7 +17,12 @@ RWG.auth = (function () {
   function init(cb) {
     if (!RWG.fb) { cb(); return; }
     RWG.fb.auth.onAuthStateChanged(async (fbUser) => {
-      if (!fbUser) { _profile = null; cb(); return; }
+      if (!fbUser) { _profile = null; _sessionAt = 0; cb(); return; }
+      // Stamped once per arrival. Anything that should happen when somebody
+      // signs in — rather than once per tab, or once per day — hangs off
+      // this: signing out and back in at the same desk is a new stamp, and
+      // a screen left open all afternoon is not.
+      _sessionAt = Date.now();
       try {
         const ref = RWG.fb.db.collection('users').doc(fbUser.uid);
         let snap = await ref.get();
@@ -66,7 +72,7 @@ RWG.auth = (function () {
     } catch (e) { return { ok: false, error: friendly(e) }; }
   }
 
-  function logout() { _profile = null; return RWG.fb.auth.signOut(); }
+  function logout() { _profile = null; _sessionAt = 0; return RWG.fb.auth.signOut(); }
 
   // Email a password-reset link (Firebase hosts the reset page automatically).
   async function resetPassword(email) {
@@ -95,5 +101,7 @@ RWG.auth = (function () {
     return (e && m[e.code]) || (e && e.message) || 'Something went wrong. Please try again.';
   }
 
-  return { init, currentUser, isAdmin, login, signup, logout, resetPassword };
+  const sessionAt = () => _sessionAt;
+
+  return { init, currentUser, isAdmin, sessionAt, login, signup, logout, resetPassword };
 })();

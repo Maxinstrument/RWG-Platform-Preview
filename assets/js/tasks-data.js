@@ -50,6 +50,15 @@ RWG.tasks = (function () {
     return out;
   }
   let CATEGORY_OVERRIDE = null;
+  /* The list exactly as the server holds it, before repairCategories()
+     rewrites a retired word for display. Adding has to build on THIS, not
+     on the repaired copy: the rule on config/taskcategories refuses any
+     write that drops a word the stored list still carries, and the repair
+     drops one by design. Reading shows the new word, writing preserves the
+     old one, and the migration stays what it has always been — something
+     that happens on the way to the screen, not a silent rewrite of the
+     firm's document by whoever happened to add a category that morning. */
+  let CATEGORY_RAW = null;
   const categories = () =>
     (CATEGORY_OVERRIDE && CATEGORY_OVERRIDE.length) ? CATEGORY_OVERRIDE.slice() : DEFAULT_CATEGORIES.slice();
 
@@ -73,6 +82,11 @@ RWG.tasks = (function () {
     const clean = String(name == null ? '' : name).trim().replace(/\s+/g, ' ').slice(0, CATEGORY_MAX);
     if (!clean) return Promise.reject(new Error('A category needs a name'));
     const list = categories();
+    /* What the server actually holds. Absent doc: the code defaults, which
+       is what everyone is seeing, so that is what gets written. A stored
+       EMPTY list is a real answer too — a partner who cleared the list
+       meant it — so [] stays [] and the new word joins nothing else. */
+    const base = Array.isArray(CATEGORY_RAW) ? CATEGORY_RAW.slice() : DEFAULT_CATEGORIES.slice();
     /* Already there under a different shift key. Two words that differ by a
        capital are two halves of a filter that will never agree, so this is
        not an error — it is the word they were reaching for. Hand back the
@@ -80,8 +94,14 @@ RWG.tasks = (function () {
        caller select it. */
     const hit = list.filter(c => c.toLowerCase() === clean.toLowerCase())[0];
     if (hit) return Promise.resolve({ name: hit, added: false });
+    /* Typing the retired word itself. It is not on the list they can see,
+       but it IS in the document, so appending it would write a duplicate.
+       Hand back what the repair turned it into — the word actually on the
+       screen — so the select can land on something that exists. */
+    const buried = base.filter(c => c.toLowerCase() === clean.toLowerCase())[0];
+    if (buried) return Promise.resolve({ name: RETIRED_CATEGORIES[buried] || buried, added: false });
     if (!db()) return Promise.reject(new Error('Not connected'));
-    const next = list.concat([clean]);
+    const next = base.concat([clean]);
     return db().collection('config').doc('taskcategories').set({
       value: next, updatedAt: new Date().toISOString(), updatedBy: (me && me.id) || null
     }).then(() => {
@@ -92,7 +112,8 @@ RWG.tasks = (function () {
          (hasAll compares against the server's list, so the second one is
          REFUSED, not silently overwriting the first), and the honest answer
          to that is a toast and one more click. */
-      CATEGORY_OVERRIDE = next.slice();
+      CATEGORY_RAW = next.slice();
+      CATEGORY_OVERRIDE = repairCategories(next.slice());
       onChange();
       return { name: clean, added: true };
     });
@@ -156,7 +177,8 @@ RWG.tasks = (function () {
         // Settings writes {value, updatedAt, updatedBy} — the same envelope
         // pipelines, workflows and rates use.
         const v = d.exists ? (d.data() || {}).value : null;
-        CATEGORY_OVERRIDE = Array.isArray(v) ? repairCategories(v.map(String).filter(Boolean)) : null;
+        CATEGORY_RAW = Array.isArray(v) ? v.map(String).filter(Boolean) : null;
+        CATEGORY_OVERRIDE = CATEGORY_RAW ? repairCategories(CATEGORY_RAW.slice()) : null;
         onChange();
       },
       e => console.error('task categories listener:', e && e.message)));

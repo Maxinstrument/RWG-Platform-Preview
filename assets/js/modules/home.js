@@ -583,7 +583,17 @@ window.RWG = window.RWG || {};
      do" is a window that teaches people to close windows unread. */
 
   const REM_MAX = 8;   // a morning glance, not a backlog review
-  const remKey = (uid) => 'rwg.home.remind.' + uid + '.' + T().todayKey();
+  /* Keyed to the SIGN-IN, not to the tab. Carlos asked for this "every
+     time they log into the system — if they leave and then they come back
+     later". sessionStorage alone answered most of that (moving around the
+     app never re-opens it; a fresh tab does) but missed the case he
+     actually described in words: signing out and back in at the same desk,
+     which leaves the tab, and its storage, exactly where they were. The
+     sign-in stamp is in the key, so that is a different key and a fresh
+     reminder. The date is still in it too, for a screen left open past
+     midnight. */
+  const remKey = (uid) => 'rwg.home.remind.' + uid + '.' + T().todayKey()
+    + '.' + ((RWG.auth && RWG.auth.sessionAt && RWG.auth.sessionAt()) || 0);
 
   /* sessionStorage can be missing or refused outright (private windows,
      the odd embedded browser). The in-memory flag is what actually

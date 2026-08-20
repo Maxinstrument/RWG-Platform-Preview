@@ -540,7 +540,15 @@ table.data tbody tr:last-child td{border-bottom:none;}
    shoving Revenue off screen. 28ch tracks the font rather than guessing
    pixels, and the cursor says the cell is worth hovering — `help`, not
    `text`, because the row itself opens the case. */
-.cell-note{display:block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help;}
+/* All Cases' Details preview. The JS clips the note to 50 characters; the
+   job here is to carry those 50 in as little width as possible, because
+   this column is the eighth on a table that fitted a 1366 laptop with
+   nothing to spare. Three short lines at 18ch hold 54 characters in about
+   118px — where one nowrap line of the same text wanted 215px and put a
+   sideways scrollbar on a screen that had none. `help` and not `text`
+   because the row itself opens the case; the full note is on the title. */
+.cell-note{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  max-width:18ch;white-space:normal;line-height:1.3;overflow:hidden;cursor:help;}
 table.data .cell-name,table.data .cell-sub{line-height:1.25;}
 .score-bar{display:inline-flex;align-items:center;gap:8px;}
 .score-bar .track{width:46px;height:6px;border-radius:4px;background:rgba(14,36,64,.1);overflow:hidden;}

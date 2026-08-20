@@ -42,6 +42,17 @@ window.RWG = window.RWG || {};
   const ENTITIES = [
     [/&nbsp;/gi, ' '], [/&lt;/gi, '<'], [/&gt;/gi, '>'],
     [/&quot;/gi, '"'], [/&#0*39;/g, "'"], [/&apos;/gi, "'"],
+    /* The stamp's own punctuation. dateStamp() inserts these as literal
+       characters, so ordinarily they arrive that way — but a contenteditable
+       that ever serialized them as entities would leave "&middot;" sitting
+       in the preview AND stop detailsPreview from recognising a stamp to
+       strip. Cheap to decode, so decoded. */
+    [/&middot;/gi, '·'], [/&mdash;/gi, '—'], [/&ndash;/gi, '–'],
+    [/&rsquo;/gi, '’'], [/&hellip;/gi, '…'],
+    /* Anything else numeric. It runs before &amp; and cannot manufacture
+       markup: whatever it produces is text by then, and esc() at the point
+       of use is what decides how it reaches the page. */
+    [/&#0*(\d{2,5});/g, (m, d) => { const n = Number(d); return n > 8 && n < 1114112 ? String.fromCodePoint(n) : m; }],
     // &amp; goes LAST, always: decode it first and the stored text "&lt;"
     // — five characters someone deliberately wrote as &amp;lt; — becomes a
     // real "<". Ampersand last is what keeps one decode from feeding another.
@@ -68,6 +79,34 @@ window.RWG = window.RWG || {};
   // Ellipsis only when something was actually cut: 50 characters is 50
   // characters, not 50 and a promise of more that isn't there.
   const clip = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
+
+  /* What the preview should actually say.
+     Two things landed the same afternoon: this column, clipped at fifty
+     characters, and a longer Insert date stamp — "8/20/2026 2:15 PM ·
+     Carlos Temperan — " is thirty-eight of those fifty on its own. The
+     column went out reading "8/12/2026 9:04 AM · Carlos Temperan — Op…",
+     which answers who typed first and nothing else.
+
+     So: the LAST entry, not the first, because stamps append downward and
+     the question is what has been done lately; and with the stamp taken
+     off the front, because the date is already the least surprising thing
+     on the row. A note nobody stamped is just a note and comes through
+     whole. If stripping leaves nothing (a stamp with no words after it),
+     fall back rather than show an empty cell. */
+  const STAMP = /^\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*[AaPp]\.?[Mm]\.?)?\s*(?:·[^—]*)?—\s*/;
+  function detailsPreview(v) {
+    // Blocks first, so the entries stay separable; detailsText collapses
+    // them into one line, which is right for the export and wrong here.
+    const blocks = String(v == null ? '' : v)
+      .replace(/<\s*\/?\s*(?:p|div|br|li|ul|ol|h[1-6]|blockquote|pre|table|tr|td|th)\b[^>]*>/gi, '\n')
+      .split('\n').map(b => detailsText(b)).filter(Boolean);
+    if (!blocks.length) return '';
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const bare = blocks[i].replace(STAMP, '').trim();
+      if (bare) return bare;
+    }
+    return blocks[blocks.length - 1];
+  }
 
   /* Column schema: label, how to read the value, how to sort, whether it
      filters — and whether it is on screen at all. `hidden` columns still
@@ -107,7 +146,7 @@ window.RWG = window.RWG || {};
          distinct note in the firm, one row each, and answer nothing. */
       { key: 'details', label: 'Details', str: true, val: c => detailsText(c.details),
         cell: c => {
-          const t = detailsText(c.details);
+          const t = detailsPreview(c.details);
           if (!t) return '<span class="cell-sub">—</span>';
           // Both halves escaped at the point of use — see detailsText.
           // The tooltip is capped too: a note three screens long is a
@@ -939,5 +978,5 @@ window.RWG = window.RWG || {};
     fitTable();   // a chip appearing can push the table down a line
   }
 
-  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, clip, _form: () => form };
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, _form: () => form };
 })();

@@ -27,15 +27,16 @@ window.RWG = window.RWG || {};
   const U  = () => RWG.ui;
   const esc = (s) => U().esc(s);
 
-  /* Column-footer money. Compensation totals run one to three orders of
-     magnitude below the AUM totals this footer used to add up, and
-     moneyK() rounds to whole thousands — $1,400 of revenue would read
-     "$1k" and $85 would read "$0k", which is a lie about an open case.
-     ui.js is shared with every other screen, so the rounding stays where
-     it is and the board picks the formatter that fits its own numbers:
-     exact dollars up to $10k, thousands above it, where moneyK's rounding
-     error is already under 5%. */
-  const colMoney = (n) => n >= 10000 ? U().moneyK(n) : U().money(n);
+  /* Column-footer money, in full dollars.
+     Compensation totals run one to three orders of magnitude below the AUM
+     totals this footer used to add up, and moneyK() rounds to whole
+     thousands — $1,400 of revenue reads "$1k" and $85 reads "$0k", which
+     is a lie about an open case. Switching formatter by size fixed the
+     lie and bought a worse one: "$28k · $5,950 · $16k · $4,480" across one
+     row of headers reads as a page half-finished. These numbers are small
+     enough to simply say, so they are said. ui.js keeps its rounding for
+     the screens whose numbers need it. */
+  const colMoney = (n) => U().money(n);
 
   const st = { pl: 'insurance', owner: '' };
 
