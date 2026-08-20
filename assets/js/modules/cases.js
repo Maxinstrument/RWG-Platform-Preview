@@ -622,6 +622,7 @@ window.RWG = window.RWG || {};
       if (RWG.tasks && !RWG.tasks.isStarted()) RWG.tasks.init(RWG.auth.currentUser(), RWG.app.renderMain);
       RWG.pipelines.init();   // the Stage column reads the granular stage
       if (!this.state.week) this.state.week = S().currentWeekEnding();
+      fitTable();   // onEnter runs after the paint, so the table can be measured
     },
 
     onInput(e, st) { if (e.target.id === 'cs-search') { st.search = e.target.value; refreshBody(); } },
@@ -790,9 +791,33 @@ window.RWG = window.RWG || {};
     return rows.map(c => `<tr data-action="cs-open" data-id="${esc(c.recordId)}" class="cs-row">${cols.map(col => `<td class="${col.num ? 'num' : ''}">${col.cell ? col.cell(c) : esc(col.val(c))}</td>`).join('')}</tr>`).join('');
   }
   const csChips = (st) => U().sheetChips(columns(), st, 'cs');
+
+  /* One scrollbar, not two. The table stopped at 70vh and let the page
+     scroll on past it, so a long book meant scrolling the page to reach a
+     table that then scrolled again inside itself — and the header row you
+     were scrolling towards sat in the wrong one. The wrap is sized to what
+     is actually left of the window, so the page has nothing left to
+     scroll and the sticky headers stay put above the rows.
+
+     Measured from the document, not the viewport: rect.top + scrollY is
+     the same number wherever the page happens to be sitting when we ask.
+     A short book keeps its short table — this is a ceiling, not a height. */
+  function fitTable() {
+    if (typeof document === 'undefined' || !document.querySelector) return;
+    const w = document.querySelector('.cs-fit');
+    if (!w || !w.getBoundingClientRect) return;
+    const docTop = w.getBoundingClientRect().top + (window.scrollY || 0);
+    const main = document.querySelector('.main');
+    const pad = (main && window.getComputedStyle)
+      ? (parseFloat(window.getComputedStyle(main).paddingBottom) || 0) : 0;
+    w.style.maxHeight = Math.max(260, Math.round(window.innerHeight - docTop - pad - 12)) + 'px';
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('resize', fitTable);
+  }
   function tableHtml(rows, st, user) {
     const cols = shown();
-    return `<div class="table-wrap"><table class="data cs-table"><thead>${U().sheetHead(cols, D().cases(), st, 'cs')}</thead><tbody id="cs-tbody">${csBodyRows(rows, cols)}</tbody></table></div>`;
+    return `<div class="table-wrap cs-fit"><table class="data cs-table"><thead>${U().sheetHead(cols, D().cases(), st, 'cs')}</thead><tbody id="cs-tbody">${csBodyRows(rows, cols)}</tbody></table></div>`;
   }
 
   function refreshBody() {
@@ -803,6 +828,7 @@ window.RWG = window.RWG || {};
     else { const body = document.getElementById('cs-body'); if (body) body.innerHTML = tableHtml(rows, st, RWG.auth.currentUser()); }
     const cnt = document.getElementById('cs-count'); if (cnt) cnt.textContent = rows.length + ' of ' + D().cases().length;
     const chips = document.getElementById('cs-chips'); if (chips) chips.innerHTML = csChips(st);
+    fitTable();   // a chip appearing can push the table down a line
   }
 
   RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, _form: () => form };
