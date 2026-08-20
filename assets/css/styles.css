@@ -533,6 +533,14 @@ table.data tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertic
 table.data tbody tr{transition:background .12s;cursor:pointer;}
 table.data tbody tr:hover{background:rgba(194,161,77,.06);}
 table.data tbody tr:last-child td{border-bottom:none;}
+/* Home's three pace tiles open the cases behind the number, so they lift
+   under the cursor the way the clickable rows do. Border rather than
+   shadow: they sit on the paper, not above it. */
+.pace-tile{cursor:pointer;transition:border-color .18s ease,transform .18s ease;}
+.pace-tile:hover{border-color:var(--gold);transform:translateY(-1px);}
+.pace-tile:active{transform:translateY(0);}
+@media (prefers-reduced-motion:reduce){.pace-tile{transition:none;}.pace-tile:hover{transform:none;}}
+
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
 /* All Cases' Details preview. The JS already clips the note to 50

@@ -215,34 +215,72 @@ window.RWG = window.RWG || {};
 
   /* ══ the widgets ══════════════════════════════════════════ */
 
+  /* The three slices behind the pace tiles, defined once.
+     Carlos, Aug '26: clicking one of these numbers should open the cases
+     that make it up, the same as clicking a funnel number does. Which
+     means the tile and the panel explaining the tile are now two readings
+     of the same question, and the only safe way to have two is to write
+     the question once. `pick` is that question; the tile filters with it
+     and so does the drill.
+
+     FYC is life and disability only — fyc() is zero for annuities,
+     investments, LTC and plans — so the panel lists exactly the cases
+     that put money in the number and nothing that quietly contributes
+     zero. Sorted biggest first: opening this asks "what made the week",
+     and the answer is at the top. */
+  const PACE = {
+    fyc: { pick: (c) => SC().deriveCase(c).fyc > 0,
+           title: 'FYC closed this week',
+           note: 'First-year commission on life and disability closes confirmed this week. Annuities, investments, LTC and plans earn no FYC and are not counted here.' },
+    ann: { pick: (c) => c.product === 'annuity',
+           title: 'Annuity deposits closed this week',
+           note: 'What the client actually deposited on annuities closed this week — not what the firm earns on them.' },
+    aum: { pick: (c) => SC().usesAum(c.product),
+           title: 'AUM closed this week',
+           note: 'Assets brought in on investment closes confirmed this week — not what the firm earns on them.' }
+  };
+  const paceWeek = (ctx) => scoped(SD().cases(), ctx)
+    .filter(c => c.closedAt && SC().weekEndingFor(c.closedAt) === SC().currentWeekEnding());
+  const paceList = (kind, ctx) => PACE[kind]
+    ? paceWeek(ctx).filter(PACE[kind].pick).sort((a, b) => headlineMoney(b) - headlineMoney(a))
+    : [];
+
   // 1 · Weekly pace — CLOSED this week, against the one target that exists.
   // Closed is what counts: a case written in July that closes today belongs
   // to this week's number. (Written-week production still lives on the
   // scorecard; this row is the money that actually landed.)
   function wPace(ctx) {
     const cur = SC().currentWeekEnding();
-    const wk = scoped(SD().cases(), ctx).filter(c => c.closedAt && SC().weekEndingFor(c.closedAt) === cur);
-    const fycSum = wk.reduce((n, c) => n + SC().deriveCase(c).fyc, 0);
-    const annSum = wk.filter(c => c.product === 'annuity').reduce((n, c) => n + (Number(c.amount) || 0), 0);
-    const aumSum = wk.filter(c => SC().usesAum(c.product)).reduce((n, c) => n + (Number(c.aum) || 0), 0);
+    const wk = paceWeek(ctx);
+    const fycRows = wk.filter(PACE.fyc.pick);
+    const annRows = wk.filter(PACE.ann.pick);
+    const aumRows = wk.filter(PACE.aum.pick);
+    const fycSum = fycRows.reduce((n, c) => n + SC().deriveCase(c).fyc, 0);
+    const annSum = annRows.reduce((n, c) => n + (Number(c.amount) || 0), 0);
+    const aumSum = aumRows.reduce((n, c) => n + (Number(c.aum) || 0), 0);
     const goal = ctx.isAdmin ? SC().FYC_PER_WEEK_AT_TARGET : 0;
     const pct = goal ? Math.min(100, Math.round(100 * fycSum / goal)) : 0;
     const daysLeft = Math.max(0, Math.round((Date.parse(cur + 'T12:00:00') - Date.now()) / dayMs));
-    const tile = (label, value, note, barPct, barColor) => `<div class="card" style="margin:0">
+    /* Clickable, like the funnel bars — a number you cannot open is a
+       number you have to take on trust. No tabindex: data-action is
+       dispatched on click only, and a focus ring promising a keyboard
+       that does nothing is worse than no focus ring. */
+    const tile = (kind, label, value, note, barPct, barColor) => `<div class="card pace-tile" style="margin:0"
+      data-action="hm-drill" data-kind="${kind}" title="See the cases behind this number">
       <div style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">${esc(label)}</div>
       <div><span class="serif" style="font-size:24px;color:var(--navy)">${value}</span></div>
       ${barPct !== null ? `<div style="height:5px;background:var(--field);margin-top:9px;border-radius:3px;overflow:hidden"><div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px"></div></div>` : ''}
       <div class="cell-sub" style="margin-top:5px;font-size:10.5px">${note}</div>
     </div>`;
     return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s4)">
-      ${tile('FYC closed this week', U().money(Math.round(fycSum)),
+      ${tile('fyc', 'FYC closed this week', U().money(Math.round(fycSum)),
         ctx.isAdmin ? pct + '% of the $' + (goal / 1000) + 'k pace · ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left'
           : 'counts toward the team’s ' + U().money(SC().FYC_PER_WEEK_AT_TARGET) + '/week pace',
         ctx.isAdmin ? pct : null, pct >= 100 ? 'var(--good)' : (pct >= 60 ? 'var(--gold)' : 'var(--bad)'))}
-      ${tile('Annuity deposits closed this week', U().money(Math.round(annSum)),
-        wk.filter(c => c.product === 'annuity').length + ' closed · no weekly target set', null, '')}
-      ${tile('AUM closed this week', U().money(Math.round(aumSum)),
-        wk.filter(c => SC().usesAum(c.product)).length + ' closed · no weekly target set', null, '')}
+      ${tile('ann', 'Annuity deposits closed this week', U().money(Math.round(annSum)),
+        annRows.length + ' closed · no weekly target set', null, '')}
+      ${tile('aum', 'AUM closed this week', U().money(Math.round(aumSum)),
+        aumRows.length + ' closed · no weekly target set', null, '')}
     </div>`;
   }
 
@@ -1149,6 +1187,18 @@ window.RWG = window.RWG || {};
       'hm-drill': (el) => {
         const kind = el.dataset.kind;
         const i = Number(el.dataset.i);
+
+        /* The pace tiles. Same slice the tile counted, from the same
+           `pick` — so the panel can never list a different set of cases
+           than the number it is standing behind. */
+        if (PACE[kind]) {
+          const ctx = { isAdmin: RWG.app.effectiveRole() === 'admin', eff: RWG.app.effectiveUser() };
+          const list = paceList(kind, ctx);
+          openDrill(PACE[kind].title,
+            list.length + (list.length === 1 ? ' close' : ' closes') + ' · week ending ' + SC().currentWeekEnding(),
+            list, PACE[kind].note);
+          return;
+        }
 
         if (kind === 'mix') {
           const ctx = { isAdmin: RWG.app.effectiveRole() === 'admin', eff: RWG.app.effectiveUser() };
