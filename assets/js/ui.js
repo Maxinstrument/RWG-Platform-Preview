@@ -667,7 +667,92 @@ RWG.ui = (function () {
     t.dataset.timer = String(setTimeout(() => dismissToast(t), 2600));
   }
 
+  /* ── A sortable, column-filtered table ────────────────────
+     Three things every table in this app wants: click a header to sort,
+     open its ▾ to tick which values to keep, and see at a glance what is
+     being narrowed. The popover shell — positioning, outside-click, the
+     value search — is already global (.pop-wrap/.pop-panel/.pop-search),
+     so what is left is the header, the checklist and the maths, which the
+     All Cases table had otherwise written for itself.
+
+     A column is { key, label, val(row), num?, filter?, cell?(row) }. The
+     state bag ({ sortKey, sortDir, colf }) stays with the module, so each
+     screen keeps its own memory of how it was left; `ns` is the action
+     prefix so two tables on one screen never fight. Checkboxes carry
+     data-colf, which the module reads in onChange. */
+  function sheetValues(list, col) {
+    const seen = {}, out = [];
+    (list || []).forEach(r => {
+      const v = String(col.val(r) == null ? '' : col.val(r));
+      if (v === '' || seen[v]) return;
+      seen[v] = 1; out.push(v);
+    });
+    return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }
+  function sheetApply(list, cols, st) {
+    const by = {}; cols.forEach(c => { by[c.key] = c; });
+    const keys = Object.keys(st.colf || {}).filter(k => (st.colf[k] || []).length);
+    let out = (list || []).filter(r => keys.every(k => {
+      const c = by[k];
+      return !c || st.colf[k].indexOf(String(c.val(r))) >= 0;
+    }));
+    const c = by[st.sortKey];
+    if (c) {
+      const dir = st.sortDir === 'desc' ? -1 : 1;
+      // slice first: sorting the caller's array would reorder the book itself
+      out = out.slice().sort((a, b) => (c.num
+        ? (Number(c.val(a)) || 0) - (Number(c.val(b)) || 0)
+        : String(c.val(a)).localeCompare(String(c.val(b)))) * dir);
+    }
+    return out;
+  }
+  function sheetMenu(col, list, st, ns) {
+    const sel = (st.colf && st.colf[col.key]) || [];
+    const rows = sheetValues(list, col).map(v =>
+      `<label class="pop-row"><input type="checkbox" data-colf="${esc(col.key)}" data-val="${esc(v)}" ${sel.indexOf(v) >= 0 ? 'checked' : ''}> ${esc(v)}</label>`).join('');
+    return `<button class="th-filter ${sel.length ? 'on' : ''}" data-action="popmenu" data-col="${esc(col.key)}" type="button" aria-label="Filter ${esc(col.label)}">▾</button>
+      <div class="pop-panel" hidden>
+        <button class="pop-sort" data-action="${ns}-popsort" data-key="${esc(col.key)}" data-dir="asc">↑ Sort ${col.num ? 'low → high' : 'A → Z'}</button>
+        <button class="pop-sort" data-action="${ns}-popsort" data-key="${esc(col.key)}" data-dir="desc">↓ Sort ${col.num ? 'high → low' : 'Z → A'}</button>
+        <div class="pop-sep"></div>
+        <input class="pop-search" type="search" placeholder="Search ${esc(col.label)}…">
+        <div class="pop-actions"><button data-action="${ns}-colf-all" data-col="${esc(col.key)}">Select all</button><button data-action="${ns}-colf-clear" data-col="${esc(col.key)}">Clear</button></div>
+        <div class="pop-list">${rows || '<div class="muted" style="padding:8px;font-size:12.5px">No values</div>'}</div>
+      </div>`;
+  }
+  function sheetHead(cols, list, st, ns) {
+    return '<tr>' + cols.map(c => {
+      const arrow = st.sortKey === c.key ? (st.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+      return `<th class="${c.num ? 'num' : ''}${c.filter ? ' pop-wrap' : ''}"><span class="cs-th" data-action="${ns}-sort" data-key="${esc(c.key)}">${esc(c.label)}${arrow}</span>${c.filter ? sheetMenu(c, list, st, ns) : ''}</th>`;
+    }).join('') + '</tr>';
+  }
+  function sheetChips(cols, st, ns) {
+    const by = {}; cols.forEach(c => { by[c.key] = c; });
+    return Object.keys(st.colf || {}).filter(k => (st.colf[k] || []).length).map(k => {
+      const vals = st.colf[k];
+      const txt = vals.length === 1 ? vals[0] : vals.length + ' selected';
+      return `<span class="filter-chip">${esc(by[k] ? by[k].label : k)}: <b>${esc(String(txt))}</b><button class="chip-x" data-action="${ns}-colf-clear" data-col="${esc(k)}" title="Clear">✕</button></span>`;
+    }).join('');
+  }
+  // Header click: same column flips direction, a new one starts the way
+  // that column is usually read — biggest first for money, A-Z for words.
+  function sheetSort(st, cols, key) {
+    const col = cols.filter(c => c.key === key)[0]; if (!col) return;
+    if (st.sortKey === key) st.sortDir = st.sortDir === 'asc' ? 'desc' : 'asc';
+    else { st.sortKey = key; st.sortDir = col.num ? 'desc' : 'asc'; }
+  }
+  // A ticked box in a column's checklist. Returns nothing — it edits state.
+  function sheetTick(st, key, val, on) {
+    st.colf = st.colf || {};
+    const arr = st.colf[key] = st.colf[key] || [];
+    const at = arr.indexOf(val);
+    if (on && at < 0) arr.push(val);
+    if (!on && at >= 0) arr.splice(at, 1);
+    if (!arr.length) delete st.colf[key];
+  }
+
   return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName, icon, ICON_PATHS,
     cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, relAction, relIcon,
-    pickerHtml, pickerInit, pickerValue, pickerRec, pickerMounted, pickerSettle, pickResolve, pickSearch };
+    pickerHtml, pickerInit, pickerValue, pickerRec, pickerMounted, pickerSettle, pickResolve, pickSearch,
+    sheetApply, sheetHead, sheetChips, sheetSort, sheetTick, sheetValues };
 })();

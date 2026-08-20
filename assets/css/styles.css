@@ -1135,8 +1135,8 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .cs-bar{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
 .cs-bar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .cs-search{flex:1;min-width:200px;}
-.cs-table th .cs-th{cursor:pointer;user-select:none;white-space:nowrap;}
-.cs-table th .cs-th:hover{color:var(--gold);}
+th .cs-th{cursor:pointer;user-select:none;white-space:nowrap;}
+th .cs-th:hover{color:var(--gold);}
 .cs-row{cursor:pointer;}
 .cs-row:hover td{background:var(--field);}
 .cs-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
@@ -1598,7 +1598,7 @@ input:focus,select:focus,textarea:focus,.rt-body:focus,
 .tile-go,.lb-row .rank,.pop-actions button,.gold-text,.hist-change .harr,
 table.data thead th .arrow,.board-col.drop-target .drop-hint,
 .linklike,.linklike:hover,.th-filter.on{color:var(--gold-ink);}
-.cs-row:hover .cell-name,.ct-name .cell-name:hover,.cs-table th .cs-th:hover,
+.cs-row:hover .cell-name,.ct-name .cell-name:hover,th .cs-th:hover,
 .ct-shell td a:hover,.ct-shell td .btn-link:hover{
   color:var(--navy);text-decoration:underline;
   text-decoration-color:var(--gold);text-decoration-thickness:1.5px;text-underline-offset:3px;

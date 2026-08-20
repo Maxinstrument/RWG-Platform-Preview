@@ -203,6 +203,76 @@ window.RWG = window.RWG || {};
   // The scorecard no longer owns a case form. A row opens the real
   // opportunity window; money runs through deriveCase, so a per-case
   // rate reads the same here as everywhere else.
+  /* The stage as the row SAYS it, so the ▾ checklist offers the words on
+     screen rather than the ids underneath them. */
+  function stageText(c) {
+    const P = RWG.pipelines;
+    if (c.closedAt) return 'Closed ✓';
+    if (c.pendingClose) return 'Pending partner';
+    return P.stageLabel(c.product, P.stageForCase(c)) || c.state || '';
+  }
+
+  /* Cases this week, as a table you can interrogate: sort any column,
+     tick which products or stages to keep. The machinery is shared with
+     the rest of the app (ui.sheet*) — this only declares what the columns
+     ARE, and how each one is read for sorting. */
+  /* Ticking a value in a column's checklist repaints the TABLE, never the
+     screen: a full render rebuilds the popover you are standing in and
+     shuts it, so a multi-select would be one value per open. The body, the
+     chips, the count and the ▾ button's own "on" mark are all that
+     actually changed. */
+  function refreshCases() {
+    const m = RWG.modules.get('scorecard'); if (!m) return;
+    const st = m.state;
+    const body = document.getElementById('sc-cases-body');
+    if (!body) { RWG.app.renderMain(); return; }
+    const all = weekCases(st), cols = caseCols();
+    const shown = U().sheetApply(all, cols, st);
+    const narrowed = isNarrowed(st);
+    body.innerHTML = casesRowsHtml(shown, narrowed);
+    const chips = document.getElementById('sc-chips');
+    if (chips) {
+      chips.innerHTML = U().sheetChips(cols, st, 'sc');
+      chips.style.display = narrowed ? 'flex' : 'none';
+    }
+    const cnt = document.getElementById('sc-cases-count');
+    if (cnt) cnt.textContent = casesCountText(shown.length, all.length, narrowed);
+    const clr = document.getElementById('sc-cases-clear');
+    if (clr) clr.hidden = !narrowed;
+    cols.forEach(c => {
+      if (!c.filter) return;
+      const btn = document.querySelector('.sc-cases [data-action="popmenu"][data-col="' + c.key + '"]');
+      if (btn) btn.classList.toggle('on', !!(st.colf[c.key] || []).length);
+    });
+  }
+  const isNarrowed = (st) => Object.keys(st.colf || {}).some(k => (st.colf[k] || []).length);
+  const casesCountText = (shown, total, narrowed) => narrowed
+    ? shown + ' of ' + total + ' shown'
+    : total + ' case' + (total === 1 ? '' : 's') + ' · counted from the stamps, not typed';
+  function casesRowsHtml(shown, narrowed) {
+    if (shown.length) return shown.map(caseRow).join('');
+    return narrowed
+      ? `<tr><td colspan="6"><div class="empty" style="padding:26px"><div class="ec">🔍</div><h3>Nothing matches</h3><p>Open a header's ▾ to widen a filter, or <button class="btn btn-quiet btn-sm" data-action="sc-colf-reset">clear them</button>.</p></div></td></tr>`
+      : `<tr><td colspan="6"><div class="empty" style="padding:26px"><div class="ec">🗂</div><h3>Nothing counted this week yet</h3><p>Open an opportunity, or move one on the Pipeline — the scorecard counts the stamps by itself.</p></div></td></tr>`;
+  }
+
+  function weekCases(st) {
+    const user = actor(); if (!user) return [];
+    return rollup(user, st.weekEnding || S().currentWeekEnding()).cases;
+  }
+
+  function caseCols() {
+    const sc = S();
+    return [
+      { key: 'name',    label: 'Opportunity',   val: c => c.title || c.clientName || '' },
+      { key: 'product', label: 'Product',       val: c => sc.productName(c.product), filter: true },
+      { key: 'stage',   label: 'Stage',         val: c => stageText(c), filter: true },
+      { key: 'placed',  label: 'Amount / AUM',  val: c => sc.placed(c) || 0, num: true },
+      { key: 'ann',     label: 'Ann. premium',  val: c => sc.deriveCase(c).annualizedPremium || 0, num: true },
+      { key: 'rev',     label: 'Revenue',       val: c => sc.deriveCase(c).revenue || 0, num: true }
+    ];
+  }
+
   function caseRow(c) {
     const sc = S(), P = RWG.pipelines;
     const d = sc.deriveCase(c);
@@ -213,7 +283,7 @@ window.RWG = window.RWG || {};
     const sid = P.stageForCase(c);
     const bucket = P.bucketOf(c.product, sid) || c.state;
     const cls = bucket === 'Closed' ? 'tier-high' : bucket === 'Submitted' ? 'tier-gold' : bucket === 'Lost' ? 'tier-low' : '';
-    const stageLbl = c.closedAt ? 'Closed ✓' : (c.pendingClose ? 'Pending partner' : P.stageLabel(c.product, sid));
+    const stageLbl = stageText(c);
     return `<tr class="cs-row" data-action="cs-open" data-id="${esc(c.recordId)}" style="cursor:pointer">
       <td><div class="cell-name">${esc(c.title || c.clientName || '(no name)')}</div>
         ${c.title ? `<div class="cell-sub">${esc(c.clientName || '')}</div>` : ''}</td>
@@ -274,7 +344,10 @@ window.RWG = window.RWG || {};
     state: {
       weekEnding: null,
       daily: {},            // { 'yyyy-mm-dd': { fa_sched, ... } }
-      loadedKey: null       // uid_week the daily tally was last loaded for
+      loadedKey: null,      // uid_week the daily tally was last loaded for
+      // Cases this week: how the table was left. Not persisted anywhere —
+      // a sort is how you are reading the screen right now, not a setting.
+      sortKey: null, sortDir: 'asc', colf: {}
     },
 
     home: {
@@ -299,6 +372,10 @@ window.RWG = window.RWG || {};
       if (e.target.id === 'sc-week-pick') { st.weekEnding = e.target.value; st.loadedKey = null; RWG.app.renderMain(); return; }
       if (e.target.id === 'sc-agent-pick') { RWG.app.viewAs(e.target.value || null); return; }
       if (e.target.classList && e.target.classList.contains('sc-daycell')) { persistDaily(st); return; }
+      if (e.target.dataset && e.target.dataset.colf) {
+        U().sheetTick(st, e.target.dataset.colf, e.target.dataset.val, e.target.checked);
+        refreshCases();   // not renderMain: the menu you are ticking in stays open
+      }
     },
 
     onInput(e, st) {
@@ -312,7 +389,23 @@ window.RWG = window.RWG || {};
     },
 
     actions: {
-      'sc-save-week': function (el, e, st) { saveWeek(st); }
+      'sc-save-week': function (el, e, st) { saveWeek(st); },
+      'sc-sort': (el, e, st) => { U().sheetSort(st, caseCols(), el.dataset.key); RWG.app.renderMain(); },
+      'sc-popsort': (el, e, st) => { st.sortKey = el.dataset.key; st.sortDir = el.dataset.dir; RWG.app.renderMain(); },
+      'sc-colf-all': (el, e, st) => {
+        const k = el.dataset.col, col = caseCols().filter(c => c.key === k)[0];
+        if (!col) return;
+        st.colf[k] = U().sheetValues(weekCases(st), col);
+        document.querySelectorAll('input[data-colf="' + k + '"]').forEach(cb => { cb.checked = true; });
+        refreshCases();
+      },
+      'sc-colf-clear': (el, e, st) => {
+        const k = el.dataset.col;
+        delete st.colf[k];
+        document.querySelectorAll('input[data-colf="' + k + '"]').forEach(cb => { cb.checked = false; });
+        refreshCases();
+      },
+      'sc-colf-reset': (el, e, st) => { st.colf = {}; st.sortKey = null; RWG.app.renderMain(); }
     },
 
     render(view, user, ctx) {
@@ -326,9 +419,10 @@ window.RWG = window.RWG || {};
       const weekOpts = recentWeeks(14).map(w =>
         `<option value="${w}" ${w === week ? 'selected' : ''}>Week ending ${w}${w === sc.currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
 
-      const rows = vm.r.cases.length
-        ? vm.r.cases.map(caseRow).join('')
-        : `<tr><td colspan="6"><div class="empty" style="padding:26px"><div class="ec">🗂</div><h3>Nothing counted this week yet</h3><p>Open an opportunity, or move one on the Pipeline — the scorecard counts the stamps by itself.</p></div></td></tr>`;
+      const cols = caseCols();
+      const shown = U().sheetApply(vm.r.cases, cols, st);
+      const narrowed = isNarrowed(st);
+      const rows = casesRowsHtml(shown, narrowed);
 
       const notConnected = !D().isStarted() || (D().cases().length === 0 && !D().agentConfig(user.id));
 
@@ -382,14 +476,18 @@ window.RWG = window.RWG || {};
           </div>
 
           <div class="card">
-            <div class="card-head"><h3>Cases this week</h3><span class="sub">${vm.r.cases.length} case${vm.r.cases.length === 1 ? '' : 's'} · counted from the stamps, not typed</span>
+            <div class="card-head"><h3>Cases this week</h3>
+              <span class="sub" id="sc-cases-count">${esc(casesCountText(shown.length, vm.r.cases.length, narrowed))}</span>
               <span class="topbar-spacer"></span>
+              <button class="btn btn-quiet btn-sm" id="sc-cases-clear" data-action="sc-colf-reset" ${narrowed ? '' : 'hidden'}>Clear filters</button>
               <button class="btn btn-gold btn-sm" data-action="cs-new">＋ Opportunity</button></div>
+            <div class="flex" id="sc-chips" style="gap:6px;flex-wrap:wrap;margin:-4px 0 12px;${narrowed ? '' : 'display:none'}">${U().sheetChips(cols, st, 'sc')}</div>
             <div class="table-wrap"><table class="data sc-cases">
-              <thead><tr><th>Opportunity</th><th>Product</th><th>Stage</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th></tr></thead>
-              <tbody>${rows}</tbody>
+              <thead>${U().sheetHead(cols, vm.r.cases, st, 'sc')}</thead>
+              <tbody id="sc-cases-body">${rows}</tbody>
             </table></div>
             <p class="muted" style="font-size:12px;margin:10px 2px 2px">
+              Click a heading to sort, or its ▾ to pick which products and stages to show.
               A row opens the opportunity window. Opened, written and closed count from the write-once
               stamps — the same numbers the Pipeline, the reports and the partner's confirm all read.
             </p>
