@@ -216,6 +216,19 @@ window.RWG = window.RWG || {};
     const isAdmin = user.role === 'admin';
     const c = opts.id ? D().caseById(opts.id) : null;
     if (opts.id && !c) return;
+    /* A duplicate is a NEW opportunity that starts out looking like an old
+       one. `copy` is only ever read from — `c` stays null — so every stamp,
+       every stage, every button that acts on a record already in the book
+       behaves exactly as it does on a blank window.
+
+       What comes across is what you typed: the people, the product, the
+       money, the source, the details. What does not is everything the case
+       EARNED — its opened week, its stage, the partner's confirm, the
+       credit split, its workflow steps. Copying those would mint a case
+       that claims a history it never had, and the scorecard counts from
+       exactly those stamps. */
+    const copy = (!opts.id && opts.copyOf) ? D().caseById(opts.copyOf) : null;
+    const src = c || copy;
     const editable = !c || canEdit(c, user);
     const closed = !!(c && c.closedAt);
     const pending = !!(c && c.pendingClose && !closed);
@@ -225,9 +238,9 @@ window.RWG = window.RWG || {};
     const bookLive = HH && HH.isStarted();
     // The contact is the anchor. The household is whatever that person's
     // family happens to be — derived, never asked for twice.
-    const ctcId = (c && c.contactId) || opts.contactId || null;
+    const ctcId = (src && src.contactId) || opts.contactId || null;
     const ctc = ctcId && bookLive ? HH.contact(ctcId) : null;
-    const hhId = (ctc && ctc.householdId) || (c && c.householdId) || opts.householdId || null;
+    const hhId = (ctc && ctc.householdId) || (src && src.householdId) || opts.householdId || null;
     const hh = hhId && bookLive ? HH.household(hhId) : null;
     // Regarding: the person, or — when an opportunity is genuinely the
     // family's rather than one member's — the household. One search box over
@@ -241,16 +254,16 @@ window.RWG = window.RWG || {};
     const viewCtc = ctc || (hhId && bookLive ? HH.primaryContact(hhId) : null);
     const relType = ctcId ? 'contact' : (hhId ? 'household' : null);
     const relId = ctcId || hhId || null;
-    const product = c ? c.product : 'wl';
-    form = moneyInit(c, product);
+    const product = src ? src.product : 'wl';
+    form = moneyInit(src, product);
 
     const users = RWG.data.users().filter(u => u.status === 'active');
-    const ownerUid = c ? c.agentUid : ((hh && hh.advisorUid) || user.id);
-    const coUids = (c && c.coCreditUids) || [];
+    const ownerUid = src ? src.agentUid : ((hh && hh.advisorUid) || user.id);
+    const coUids = (src && src.coCreditUids) || [];
     const dis = editable ? '' : 'disabled';
 
     const prodOpts = sc.PRODUCTS.map(p => `<option value="${p.id}" ${p.id === product ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-    const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}" ${c && s.id === c.source ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
+    const srcOpts = sc.SOURCES.map(s => `<option value="${s.id}" ${src && s.id === src.source ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
     const ownerOpts = users.map(u => `<option value="${esc(u.id)}" ${u.id === ownerUid ? 'selected' : ''}>${esc(u.name)}</option>`).join('')
       || `<option value="${esc(user.id)}" selected>${esc(user.name)}</option>`;
 
@@ -312,19 +325,22 @@ window.RWG = window.RWG || {};
     mount.innerHTML = `<div class="scrim" data-action="close-modal"></div>
       <div class="modal-card modal-lg">
         <div class="modal-head">
-          <div><h2>${c ? (editable ? 'Opportunity' : 'Opportunity (read-only)') : 'Add opportunity'}</h2>
-            <p>${c ? esc(c.clientName || '') + (hh ? ' · ' + esc(hh.name) : '') : 'What you are working on, who is on it, and what it is worth.'}</p></div>
+          <div><h2>${c ? (editable ? 'Opportunity' : 'Opportunity (read-only)') : (copy ? 'Duplicate opportunity' : 'Add opportunity')}</h2>
+            <p>${c ? esc(c.clientName || '') + (hh ? ' · ' + esc(hh.name) : '')
+              : copy ? 'Copied from “' + esc(copy.title || copy.clientName || 'the other one')
+                  + '”. The people, product and money came across — the week, the stage and the splits start fresh.'
+              : 'What you are working on, who is on it, and what it is worth.'}</p></div>
           <button class="drawer-close" data-action="close-modal" title="Close">✕</button></div>
         <div class="modal-body">
 
           <div class="field-group"><label class="lbl">Opportunity name <span style="color:var(--bad)">*</span></label>
-            <input id="op2-title" value="${esc((c && c.title) || '')}" placeholder="e.g. Vargas — whole life + DI package" ${dis}></div>
+            <input id="op2-title" value="${esc((src && src.title) || '')}" placeholder="e.g. Vargas — whole life + DI package" ${dis}></div>
 
           <div class="field-row">
             <div class="field-group"><label class="lbl">Regarding ${bookLive ? '<span style="color:var(--bad)">*</span>' : ''}</label>
               ${bookLive ? U().pickerHtml({ id: 'op2-rel', type: relType, recordId: relId, disabled: !editable,
                 placeholder: 'Search a contact or household…' })
-                : `<input id="op2-client" value="${esc((c && c.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
+                : `<input id="op2-client" value="${esc((src && src.clientName) || opts.clientName || '')}" placeholder="Client name" ${dis}>`}
               ${viewCtc
                 ? `<div style="margin-top:8px"><button class="btn btn-quiet btn-sm" data-action="cs-view-ctc" data-id="${esc(viewCtc.id)}"
                      title="Look up ${esc(HH.contactName(viewCtc))}${ctc ? '' : ' — primary client of ' + esc((hh && hh.name) || 'this household')} beside this window">View contact</button></div>`
@@ -355,14 +371,14 @@ window.RWG = window.RWG || {};
 
           <div class="op2-money">
             <div class="field-group"><label class="lbl">Benefit amount</label>
-              <input id="op2-benefit" type="text" inputmode="decimal" value="${esc(fmt$(c && c.benefit != null && c.benefit !== '' ? c.benefit : ''))}" ${dis}></div>
+              <input id="op2-benefit" type="text" inputmode="decimal" value="${esc(fmt$(src && src.benefit != null && src.benefit !== '' ? src.benefit : ''))}" ${dis}></div>
             <div class="field-group"><label class="lbl" id="op2-prem-label">${esc(L.premium)}</label>
               <input id="op2-premium" type="text" inputmode="decimal" value="${esc(fmt$(form.premium || ''))}" ${dis}></div>
             <div class="field-group"><label class="lbl" id="op2-fyc-label">${esc(L.fyc)}</label>
               <input id="op2-fyc" type="text" inputmode="decimal" value="${esc(fmt$(form.fyc || ''))}" ${dis}>
               <div class="hint" id="op2-rate-hint">${esc(rateHintText(form, product))}</div></div>
             <div class="field-group"><label class="lbl">Renewals / yr</label>
-              <input id="op2-renewal" type="text" inputmode="decimal" value="${esc(fmt$(c && c.renewalAnnual != null && c.renewalAnnual !== '' ? c.renewalAnnual : ''))}" ${dis}>
+              <input id="op2-renewal" type="text" inputmode="decimal" value="${esc(fmt$(src && src.renewalAnnual != null && src.renewalAnnual !== '' ? src.renewalAnnual : ''))}" ${dis}>
               <div class="hint">reporting only</div></div>
           </div>
 
@@ -370,11 +386,11 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">Source</label>
               <select id="op2-src" ${dis}>${srcOpts}</select></div>
             <div class="field-group"><label class="lbl">Source description</label>
-              <input id="op2-srcnote" value="${esc((c && c.sourceNote) || '')}" placeholder="e.g. referred by the Delgados" ${dis}></div>
+              <input id="op2-srcnote" value="${esc((src && src.sourceNote) || '')}" placeholder="e.g. referred by the Delgados" ${dis}></div>
           </div>
 
           <div class="field-group"><label class="lbl">Details</label>
-            ${U().noteEditor({ id: 'op2-details', value: (c && c.details) || '', editable: editable,
+            ${U().noteEditor({ id: 'op2-details', value: (src && src.details) || '', editable: editable,
               placeholder: 'Anything worth remembering about this opportunity…' })}</div>
 
           ${stepsBlock(c ? c.recordId : null, ctcId)}
@@ -383,6 +399,8 @@ window.RWG = window.RWG || {};
         </div>
         <div class="modal-foot">
           ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
+          ${c ? `<button class="btn btn-quiet" data-action="cs-dup" data-id="${esc(c.recordId)}"
+            title="Start another opportunity pre-filled from this one. Anything unsaved here is not carried over.">⧉ Duplicate</button>` : ''}
           <span class="topbar-spacer"></span>
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
           ${editable ? `<button class="btn btn-gold" data-action="cs-save" ${c ? `data-id="${esc(c.recordId)}"` : ''} ${hhId ? `data-hh="${esc(hhId)}"` : ''}>${c ? 'Save' : 'Open opportunity ' + U().icon('spark','ic-inline')}</button>` : ''}
@@ -698,6 +716,13 @@ window.RWG = window.RWG || {};
       'cs-new': (el) => oppWindow({ householdId: el.dataset.hh || null,
         contactId: el.dataset.contact || null, clientName: el.dataset.client || '' }),
       'cs-save': (el) => saveWindow(el),
+      /* The second policy on the same family, the spouse's version of the
+         same plan, the DI that follows the whole life — same client, same
+         source, near enough the same money, and nobody should type it
+         twice. It replaces this window with a fresh one, so what was
+         typed and not saved here does not come along; the tooltip says so
+         before the click. */
+      'cs-dup': (el) => oppWindow({ copyOf: el.dataset.id }),
       /* Ticking a step inside the opportunity window. The window holds
          half-typed money fields, so a full re-render would eat them —
          only the steps block repaints. The chain guard and the chained
