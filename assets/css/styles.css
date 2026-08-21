@@ -552,6 +552,13 @@ table.data tbody tr:last-child td{border-bottom:none;}
 .dq-btn.is-on{background:var(--navy);border-color:var(--navy);color:#fff;}
 @media (prefers-reduced-motion:reduce){.dq-btn{transition:none;}}
 
+/* The open-work badge beside an opportunity name in All Cases. Small
+   enough to sit inside the name without breaking the line it is on. */
+.chip.cs-task{padding:1px 7px;font-size:11px;font-weight:600;vertical-align:middle;margin-left:6px;}
+/* Grey, amber, red — and deliberately no green on this badge:
+   tier-high is the green of "Closed ✓", and open work is not that. */
+.chip.cs-task.is-late{background:rgba(178,58,72,.12);color:var(--bad);border:1px solid rgba(178,58,72,.35);}
+
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
 /* All Cases' Details preview. The JS already clips the note to 50

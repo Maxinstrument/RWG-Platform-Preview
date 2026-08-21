@@ -108,6 +108,69 @@ window.RWG = window.RWG || {};
     return blocks[blocks.length - 1];
   }
 
+  /* ── open work, beside the name ──
+     Carlos, 21 Aug '26: "a little notice next to the opportunity name that
+     lets us know if that opportunity has an open task associated with it —
+     so when I see this report I can tell."
+
+     Built once per paint, not once per row. A row asking "are there tasks
+     on me?" would walk every task in the firm, and the table draws a few
+     hundred rows against a few hundred tasks; done the obvious way that is
+     the kind of multiplication nobody notices until the year it stops
+     being fast. One pass over the tasks, keyed by case.
+
+     Held workflow steps count. The Tasks page hides a step that is waiting
+     on an earlier one, correctly — it is not on anybody's list this
+     morning. But the question this badge answers is different: is there
+     open work on this case? A step queued behind another is exactly that,
+     and a case reading "clear" while a chain sits on it would be the badge
+     telling a lie of omission. */
+  let taskIdx = null;
+  function buildTaskIdx() {
+    const T = RWG.tasks;
+    const idx = {};
+    if (!T || !T.isStarted || !T.isStarted()) return idx;
+    const today = T.todayKey();
+    T.all().forEach(t => {
+      if (t.status === 'done' || t.relatedType !== 'case' || !t.relatedId) return;
+      const e = idx[t.relatedId] || (idx[t.relatedId] = { n: 0, late: 0, due: 0, next: '' });
+      e.n++;
+      if (t.dueDate && t.dueDate < today) e.late++;
+      else if (t.dueDate === today) e.due++;
+      if (t.dueDate && (!e.next || t.dueDate < e.next)) e.next = t.dueDate;
+    });
+    return idx;
+  }
+  const tasksOn = (id) => (taskIdx || (taskIdx = buildTaskIdx()))[id] || null;
+
+  /* Three words, because "has open work" and "has work that is late" are
+     different questions and the second is the one that changes a Monday.
+     This is also what the column filter offers, so the report can be cut
+     down to just the cases carrying something. */
+  function taskState(c) {
+    const e = tasksOn(c.recordId);
+    if (!e) return 'No open tasks';
+    return e.late ? 'Overdue task' : 'Open task';
+  }
+  /* The word "open", not a tick. This app already uses ✓ for a task as a
+     NOUN (Home's composer reads "✓ Task"), but a tick beside an opportunity
+     NAME reads as "this one is finished" — the opposite of what the badge
+     is for. The colour runs grey → amber → red and never green: tier-high
+     in this palette is the green of "Closed ✓", so an overdue task wearing
+     it would be a red flag painted as good news. The number is the total,
+     the colour is the worst thing in it, and the tooltip says both —
+     "3 open, 1 of them late" is two facts and a row has room for one. */
+  function taskBadge(c) {
+    const e = tasksOn(c.recordId);
+    if (!e) return '';
+    const cls = e.late ? 'is-late' : (e.due ? 'tier-medium' : 'tier-low');
+    const bits = [e.n + (e.n === 1 ? ' open task' : ' open tasks')];
+    if (e.late) bits.push(e.late + ' overdue');
+    else if (e.due) bits.push('due today');
+    else if (e.next) bits.push('next due ' + e.next);
+    return ` <span class="chip cs-task ${cls}" title="${esc(bits.join(' · '))}">${e.n} open</span>`;
+  }
+
   /* Column schema: label, how to read the value, how to sort, whether it
      filters — and whether it is on screen at all. `hidden` columns still
      sort, still filter and still go into the export; they just do not take
@@ -120,7 +183,7 @@ window.RWG = window.RWG || {};
     const sc = S();
     return [
       { key: 'client', label: 'Opportunity', val: c => c.title || c.clientName || '(no name)', str: true,
-        cell: c => `<div class="cell-name">${esc(c.title || c.clientName || '(no name)')}</div>${c.title ? `<div class="cell-sub">${esc(c.clientName || '')}</div>` : ''}` },
+        cell: c => `<div class="cell-name">${esc(c.title || c.clientName || '(no name)')}${taskBadge(c)}</div>${c.title ? `<div class="cell-sub">${esc(c.clientName || '')}</div>` : ''}` },
       { key: 'product', label: 'Product', val: c => sc.productName(c.product), str: true, filter: true },
       { key: 'state', label: 'Stage', val: c => stageText(c), str: true, filter: true,
         cell: c => `<span class="chip ${stageChipClass(c.state)}">${esc(stageText(c))}</span>` },
@@ -134,6 +197,12 @@ window.RWG = window.RWG || {};
       { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', hidden: true },
       { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', hidden: true },
       { key: 'closedWeek', label: 'Closed', str: true, val: c => sc.deriveWeeks(c).closedWeek || '', hidden: true },
+      /* The badge, as something you can filter by. Hidden, because the
+         badge already says it on the row and the table has no width to
+         spare — but a hidden column still filters, which is what turns
+         "I can see it case by case" into "show me only the ones with
+         something open". */
+      { key: 'tasks', label: 'Open tasks', str: true, val: c => taskState(c), filter: true, hidden: true },
       /* val() is the WHOLE note, deliberately. The export reads col.val()
          straight through, and an export is something you sit down with
          later — a fifty-character stub would be a worse file than no
@@ -900,6 +969,8 @@ window.RWG = window.RWG || {};
 
     render(view, user, ctx) {
       const st = this.state;
+      // One pass over the tasks for the whole paint — see buildTaskIdx.
+      taskIdx = buildTaskIdx();
       const all = D().cases();
       const rows = filtered(st);
       const weekOpts = recentWeeks(20).map(w => `<option value="${w}" ${w === st.week ? 'selected' : ''}>Week ending ${w}${w === S().currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
@@ -978,5 +1049,6 @@ window.RWG = window.RWG || {};
     fitTable();   // a chip appearing can push the table down a line
   }
 
-  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, _form: () => form };
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, taskState, buildTaskIdx,
+    _setTaskIdx: (v) => { taskIdx = v; }, _form: () => form };
 })();
