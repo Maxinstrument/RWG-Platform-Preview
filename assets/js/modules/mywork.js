@@ -155,7 +155,8 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">Assigned to</label>
               <select id="tk-assignee">${assigneeOpts}</select></div>
             <div class="field-group"><label class="lbl">Due</label>
-              <input id="tk-due" type="date" value="${esc(v('dueDate', T().todayKey()))}"></div>
+              <input id="tk-due" type="date" value="${esc(v('dueDate', T().todayKey()))}">
+              ${U().dateQuick('tk-due', v('dueDate', T().todayKey()))}</div>
           </div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Category</label>

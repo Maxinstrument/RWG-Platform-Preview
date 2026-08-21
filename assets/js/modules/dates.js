@@ -196,7 +196,8 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">Who does it</label>
               <select id="rm-who">${whoOpts}</select></div>
             <div class="field-group"><label class="lbl">Due</label>
-              <input id="rm-due" type="date" value="${esc(due)}"></div>
+              <input id="rm-due" type="date" value="${esc(due)}">
+              ${U().dateQuick('rm-due', due)}</div>
           </div>
           <div class="field-group"><label class="lbl">Category <span class="pill-soft" style="font-size:10.5px">optional</span></label>
             <select id="rm-cat">${catOpts}</select></div>
@@ -316,7 +317,8 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">What is it</label>
               <input id="kd-label" placeholder="e.g. DROP window ends"></div>
             <div class="field-group"><label class="lbl">Date</label>
-              <input id="kd-date" type="date"></div>
+              <input id="kd-date" type="date">
+              ${U().dateQuick('kd-date', '')}</div>
           </div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Repeats</label>

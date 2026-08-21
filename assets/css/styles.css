@@ -541,6 +541,17 @@ table.data tbody tr:last-child td{border-bottom:none;}
 .pace-tile:active{transform:translateY(0);}
 @media (prefers-reduced-motion:reduce){.pace-tile{transition:none;}.pace-tile:hover{transform:none;}}
 
+/* Today / Tomorrow under a date field. Quiet until wanted: they read as
+   text, take a gold edge on hover, and fill in when the field already
+   holds that day. */
+.dq-row{display:flex;gap:6px;margin-top:6px;}
+.dq-btn{border:1px solid var(--line);background:transparent;color:var(--muted);
+  font:inherit;font-size:11.5px;padding:3px 10px;border-radius:999px;cursor:pointer;
+  transition:border-color .15s ease,color .15s ease,background .15s ease;}
+.dq-btn:hover{border-color:var(--gold);color:var(--navy);}
+.dq-btn.is-on{background:var(--navy);border-color:var(--navy);color:#fff;}
+@media (prefers-reduced-motion:reduce){.dq-btn{transition:none;}}
+
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
 /* All Cases' Details preview. The JS already clips the note to 50

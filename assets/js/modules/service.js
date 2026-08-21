@@ -63,7 +63,8 @@ window.RWG = window.RWG || {};
             <input id="sv-title" placeholder="e.g. Update beneficiary to the new trust"></div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Assigned to</label><select id="sv-who">${userOpts}</select></div>
-            <div class="field-group"><label class="lbl">Due</label><input id="sv-due" type="date" value="${esc(due)}"></div>
+            <div class="field-group"><label class="lbl">Due</label><input id="sv-due" type="date" value="${esc(due)}">
+              ${U().dateQuick('sv-due', due)}</div>
           </div>
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
             ${U().noteEditor({ id: 'sv-note', minHeight: '84px', placeholder: 'policy #, carrier, who called…' })}</div>

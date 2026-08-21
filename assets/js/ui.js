@@ -552,9 +552,19 @@ RWG.ui = (function () {
      text and stay that way: noteHtml() renders either, so nothing
      needs converting and nothing shows its tags. */
 
+  /* Non-breaking spaces, on the way in.
+     Carlos, 21 Aug '26: "when I press Insert Date I see &nbsp; in the
+     notes." He was right, and Insert date really was the trigger — the
+     stamp ends in a space, and a contenteditable preserves a trailing
+     space by turning it into a non-breaking one. Prose has no use for a
+     space that refuses to wrap, so it becomes an ordinary space here, and
+     the codes stop being written at all. Both spellings: the browser holds
+     the character and serializes the entity. */
+  const unNbsp = (s) => String(s == null ? '' : s).replace(/&nbsp;/gi, ' ').replace(/\u00a0/g, ' ');
+
   // Team-internal notes, but still no scripts or handlers in stored HTML.
   function cleanHtml(html) {
-    return String(html || '')
+    return unNbsp(html)
       .replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
       .replace(/<\s*(script|style|iframe|object|embed)[^>]*\/?\s*>/gi, '')
       .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
@@ -563,11 +573,30 @@ RWG.ui = (function () {
 
   const HAS_TAG = /<(?:p|div|br|b|i|u|em|strong|ul|ol|li|a|span|h[1-6])\b[^>]*>/i;
 
-  // Render a stored note: HTML if it is HTML, escaped text if it is not.
+  /* Render a stored note: HTML if it is HTML, escaped text if it is not.
+
+     The "is not" branch is where the &nbsp; was surfacing, and it is worth
+     saying why, because the rule looks right and is not quite. A note
+     typed on one line with no bold, no bullets and no second paragraph
+     comes out of the editor as HTML with no TAGS in it — which is most
+     task notes. That branch escaped it as though it were something
+     somebody had typed by hand, so the "&" of "&nbsp;" became "&amp;" and
+     the reader saw the code instead of the space.
+
+     Tag-free HTML is still HTML, so it is decoded first and escaped after.
+     The cost is a genuinely old plain-text note that happens to contain
+     the letters "&amp;" — it will now render as "&". Nobody writes that
+     on purpose in a note about a client; everybody was seeing &nbsp;. */
+  const ENT = [[/&nbsp;/gi, ' '], [/&lt;/gi, '<'], [/&gt;/gi, '>'],
+               [/&quot;/gi, '"'], [/&#0*39;/g, "'"], [/&apos;/gi, "'"],
+               [/&amp;/gi, '&']];   // ampersand last, so one decode cannot feed the next
   function noteHtml(v) {
     const s = String(v == null ? '' : v);
     if (!s.trim()) return '';
-    return HAS_TAG.test(s) ? cleanHtml(s) : esc(s);
+    if (HAS_TAG.test(s)) return cleanHtml(s);
+    let t = s;
+    ENT.forEach(e => { t = t.replace(e[0], e[1]); });
+    return esc(t);
   }
 
   function whoAmI() {
@@ -590,6 +619,48 @@ RWG.ui = (function () {
     const who = whoAmI();
     return day + ' ' + time + (who ? ' · ' + who : '') + ' — ';
   }
+
+  /* Today and Tomorrow, beside a date field.
+     Carlos, 21 Aug '26: "wherever there is a calendar for dates, I would
+     like a Tomorrow in addition to Today." Most due dates are one of those
+     two, and both were costing a trip through a date picker to say.
+
+     Deliberately not offered on a date of birth: "tomorrow" is not a thing
+     anybody was ever born on, and a shortcut that makes no sense where it
+     sits teaches people to stop reading the ones that do.
+
+     Marked when the field already holds that day, so the row doubles as a
+     reading of the current value rather than only a way to change it. */
+  const dayKey = (ms) => {
+    const d = new Date(ms);
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  };
+  function dateQuick(id, value) {
+    const now = Date.now();
+    const opts = [[dayKey(now), 'Today'], [dayKey(now + 86400000), 'Tomorrow']];
+    return `<div class="dq-row">` + opts.map(o =>
+      `<button type="button" class="dq-btn${value === o[0] ? ' is-on' : ''}"
+         data-dq="${esc(id)}" data-day="${o[0]}">${o[1]}</button>`).join('') + `</div>`;
+  }
+
+  /* Delegated once, like the note toolbar: a date field grows its
+     shortcuts wherever it is drawn, with nothing to wire per screen.
+     The input event is dispatched by hand because setting .value in code
+     does not fire one, and screens that recalculate on a date change
+     (a workflow's step dates, say) listen for exactly that. */
+  document.addEventListener('click', (e) => {
+    const b = (e.target && e.target.closest) ? e.target.closest('.dq-btn') : null;
+    if (!b) return;
+    e.preventDefault();
+    const box = document.getElementById(b.dataset.dq);
+    if (!box) return;
+    box.value = b.dataset.day;
+    const row = b.parentElement;
+    if (row) row.querySelectorAll('.dq-btn').forEach(x => x.classList.toggle('is-on', x === b));
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 
   // opts: { id, value, placeholder, editable, minHeight }
   function noteEditor(opts) {
@@ -765,7 +836,7 @@ RWG.ui = (function () {
   }
 
   return { esc, money, moneyK, initials, fmtDate, fmtDateTime, fmtRelative, avatar, tierChip, scoreBar, stageChip, isCallback, callbackChip, isClickedNoSignup, clickedChip, ring, toast, tierFill, csvCell, toCSV, downloadCSV, stampName, icon, ICON_PATHS,
-    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, relAction, relIcon,
+    cleanHtml, noteHtml, noteEditor, noteRead, noteText, dateStamp, dateQuick, relAction, relIcon,
     pickerHtml, pickerInit, pickerValue, pickerRec, pickerMounted, pickerSettle, pickResolve, pickSearch,
     sheetApply, sheetHead, sheetChips, sheetSort, sheetTick, sheetValues };
 })();

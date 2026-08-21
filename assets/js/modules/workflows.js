@@ -109,7 +109,8 @@ window.RWG = window.RWG || {};
             <div class="field-group"><label class="lbl">Workflow</label>
               <select id="wf-tpl">${tplOpts}</select></div>
             <div class="field-group"><label class="lbl">Start</label>
-              <input id="wf-start" type="date" value="${esc(T().todayKey())}"></div>
+              <input id="wf-start" type="date" value="${esc(T().todayKey())}">
+              ${U().dateQuick('wf-start', T().todayKey())}</div>
           </div>
           <div class="field-group" id="wf-case-wrap"><label class="lbl">For which opportunity</label>
             <select id="wf-case">${caseOpts || '<option value="">— no open opportunities —</option>'}</select></div>
