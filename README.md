@@ -1,35 +1,45 @@
-# RWG Platform — Preview
+# The Resilient CRM
 
-The build site for the Resilient CRM. **Not the live platform.**
+The firm's CRM. **This repo is the live one** — it serves
+https://crm.yourresilientwealth.com and there is no other.
 
 | | |
 |---|---|
-| **This site** | https://maxinstrument.github.io/RWG-Platform-Preview/ |
-| **Live platform** | https://maxinstrument.github.io/RWG-Platform/ |
-| **Backup tool** | https://maxinstrument.github.io/RWG-Platform-Preview/backup/ |
+| **Live CRM** | https://crm.yourresilientwealth.com |
+| **Backup tool** | https://crm.yourresilientwealth.com/backup/ |
+| **Firebase project** | `resilient-wealth-group` |
 
-Work happens here first. Nothing reaches the live platform until Carlos calls it, and when he
-does it moves across as one reviewed change rather than a trickle.
+## History, because the names are misleading
 
-A gold strip runs across the top of every preview page so nobody confuses the two. It draws
-itself from the URL rather than a flag, so it cannot be left on by accident when code moves to
-the live repo.
+This folder is called "RWG Platform - PREVIEW" and the GitHub repo is
+`RWG-Platform-Preview`. Both names are left over from when it was the
+rehearsal for a separate live site. It stopped being that at the cutover on
+18 Aug 2026: this became the real thing, and the two older builds —
+`Maxinstrument/CRM` (the lead tracker) and `Maxinstrument/RWG-Platform` —
+were taken off GitHub Pages and archived on 22 Aug 2026.
 
-## The one thing to understand
+Renaming this repo would break the Pages deployment for no gain, so the
+names stay and this paragraph exists instead. **If you are ever choosing
+between repos, the one with the longer, sillier name is the live one.**
 
-**Both sites talk to the same Firebase project** (`resilient-wealth-group`), so the preview shows
-real leads, real cases and real people. Anything changed here is changed for everyone.
+## One Firebase project, one set of rules
 
-That is deliberate. Grouping the real book into households is the actual work of phase 1, and
-doing it against a stale copy would mean doing it twice. The tradeoff is that the preview is not
-a sandbox, so build work follows one rule:
+Every build that ever existed pointed at the same Firebase project, which
+is why the old ones had to come down rather than merely be ignored: a stale
+copy of the app is not a museum piece, it is a second set of hands on the
+live book.
 
-> New features write only to **new** collections. Existing records (`leads`, `cases`, `users`,
-> `weeks`, `reports`) are read-only from preview code, apart from additive, reversible fields
-> such as the pointer that links a converted lead to its new household.
+The same fact has a sharper edge on the security rules. There is **one**
+published rule set for the project, so publishing a rules file that covers
+fewer collections silently revokes access to the rest. That happened on
+22 Aug 2026 — an older, shorter `firestore.rules` was pasted into the
+console and the whole CRM went blank until the right one replaced it. No
+data was lost; none of it was readable either.
 
-Firestore rules are project-wide and cannot tell the two sites apart, so that rule lives in the
-code rather than on the server. Which is why the backup below exists.
+**The only rules file to publish is `firestore.rules` in this repo.** The
+copies in the archived repos have been renamed `firestore.rules.OLD-DO-NOT-
+PUBLISH` and carry a banner explaining what they break. Rules are pasted by
+hand in the Firebase console — a `git push` does not deploy them.
 
 ## Back up before anything that touches data
 
@@ -50,7 +60,8 @@ git push
 ```
 
 GitHub Pages serves it a minute or two later. Source is `main` / root, and `.nojekyll` keeps
-Pages from trying to build it.
+Pages from trying to build it. This is the live CRM, so a push is a release: there is no
+staging site any more, and the team is in here during the working day.
 
 ## What is being built
 
@@ -63,3 +74,8 @@ The full plan lives in the blueprint and screen-design documents. In order:
 5. **Dates** — birthdays, DROP windows, reviews, the AdvisorStream queue
 6. **Scorecard** — derived from stage events instead of typed on a Friday
 7. **Service layer, then cutover** — one door, and the old URLs retire
+
+All seven shipped. The cutover was 18 Aug 2026 and the old URLs retired on
+22 Aug 2026, which is the last line of the plan and the reason this README
+had to be rewritten: it described a rehearsal that had already become the
+performance.

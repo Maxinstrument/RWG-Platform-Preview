@@ -790,7 +790,7 @@ RWG.app = (function () {
     D.setUserName(id, name); closeModal(); renderMain(); U.toast('Saved', true);
   }
 
-  const appBaseUrl = () => location.origin + location.pathname;   // e.g. https://maxinstrument.github.io/CRM/
+  const appBaseUrl = () => location.origin + location.pathname;   // e.g. https://crm.yourresilientwealth.com/
   function buildInviteModal() {
     const url = appBaseUrl();
     const msg = `You're invited to join the Resilient Wealth Group CRM.\n\n1. Open this link: ${url}\n2. Click "Request access" and sign up with your email.\n3. I'll approve your account and you'll be in.\n\n— Resilient Wealth Group`;
