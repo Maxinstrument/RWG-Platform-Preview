@@ -572,6 +572,14 @@ table.data tbody tr:last-child td{border-bottom:none;}
 .modal-card.modal-guard{z-index:190;top:clamp(64px,20vh,200px);}
 .modal-card.modal-guard .modal-head{border-bottom:0;}
 
+/* A Team activity row opens the record it is about (Carlos, 22 Aug '26).
+   It says so the way the other clickable rows in the app do — a quiet
+   ground shift under the cursor, not a link colour, because the row is
+   already carrying a name in bold and a second emphasis would fight it. */
+.list-row.hm-act{cursor:pointer;transition:background .15s ease;}
+.list-row.hm-act:hover{background:rgba(194,161,77,.07);}
+@media (prefers-reduced-motion:reduce){.list-row.hm-act{transition:none;}}
+
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
 /* All Cases' Details preview. The JS already clips the note to 50

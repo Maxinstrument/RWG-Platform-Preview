@@ -532,23 +532,86 @@ window.RWG = window.RWG || {};
 
   // 6 · Team activity — synthesised from the stamps already on the data,
   //     plus the one kind of entry somebody actually chose to write.
+  /* ── What counts as team activity ────────────────────────
+     Carlos, 22 Aug '26: "what do you consider a Team Activity to add
+     here?" The test is whether somebody else at the firm would want to
+     know, unprompted, on a Monday morning. Money moving, a client
+     arriving, a decision being made: yes. Housekeeping: no.
+
+     So it carries the life of a case — opened, moved, written, pushed to
+     close, closed, lost, brought back — plus the book growing (a lead
+     converted, a household or a person added) and the work finished on
+     top of it.
+
+     Two things are deliberately NOT here. Tasks being CREATED: assigning
+     work is not news, finishing it is, and a firm of five assigns dozens a
+     week — the feed would become a to-do list nobody reads. And edits: a
+     phone number corrected at four in the afternoon is not something
+     anybody needs told.
+
+     One row per case per event, and a stage move is suppressed when it IS
+     one of the other events — writing a case moves it to Application, and
+     the feed should say "wrote", once, not "wrote" and "moved to
+     Application" a second apart. */
   function wActivity(ctx) {
     const ev = [];
     const cutoff = Date.now() - 30 * dayMs;
     const push = (ts, who, txt, sub, extra) => { if (ts && ts >= cutoff) ev.push(Object.assign({ ts, who, txt, sub }, extra || {})); };
     const userName = (uid) => { const u = uid && D().user(uid); return (u && u.name) || ''; };
+    const P = RWG.pipelines;
     SD().cases().forEach(c => {
       const label = (c.clientName || '(no name)') + ' · ' + SC().productName(c.product);
-      if (c.closedAt) push(toMs(c.closedAt), c.agentName, `<b>${esc(label)}</b> closed and confirmed`, 'verified by a partner');
-      if (c.pendingClose && !c.closedAt) push(toMs(c.pendingCloseAt), c.agentName, `pushed <b>${esc(label)}</b> to Close / Won`, 'waiting on a partner');
-      if (c.lostAt) push(toMs(c.lostAt), userName(c.lostBy) || c.agentName, `marked <b>${esc(label)}</b> lost`, (c.lostReason || '').split(' — ')[0]);
-      if (c.submittedAt && !c.closedAt && c.state !== 'Lost') push(toMs(c.submittedAt), c.agentName, `wrote <b>${esc(label)}</b>`, 'new business submitted');
+      // Every case row opens the case — the answer to "what is this?" is
+      // the record itself, one click away.
+      const go = { goAct: 'cs-open', goId: c.recordId };
+      if (c.closedAt) push(toMs(c.closedAt), c.agentName, `<b>${esc(label)}</b> closed and confirmed`, 'verified by a partner', go);
+      if (c.pendingClose && !c.closedAt) push(toMs(c.pendingCloseAt), c.agentName, `pushed <b>${esc(label)}</b> to Close / Won`, 'waiting on a partner', go);
+      if (c.lostAt) push(toMs(c.lostAt), userName(c.lostBy) || c.agentName, `marked <b>${esc(label)}</b> lost`, (c.lostReason || '').split(' — ')[0], go);
+      if (c.submittedAt && !c.closedAt && c.state !== 'Lost') push(toMs(c.submittedAt), c.agentName, `wrote <b>${esc(label)}</b>`, 'new business submitted', go);
+      // Brought back from lost (22 Aug '26) — rare, and worth saying.
+      if (c.reopenedAt) push(toMs(c.reopenedAt), userName(c.reopenedBy) || c.agentName,
+        `reopened <b>${esc(label)}</b>`, String(c.reopenedFrom || '').split(' — ')[0], go);
+      // Opened. The feed used to say nothing about a case until it was
+      // written, so weeks of early work were invisible on this screen.
+      if (c.createdAt) push(toMs(c.createdAt), userName(c.createdBy) || c.agentName,
+        `opened <b>${esc(label)}</b>`, SC().sourceLabel ? SC().sourceLabel(c.source) : '', go);
+      /* Moved. This is the pulse of the board — the thing the team does
+         most days — and it was the largest gap in the feed. stageAt holds
+         only the LAST move, so this is one row per case however many times
+         it has travelled, which is what keeps it from drowning everything
+         else. Suppressed when the move IS another event already reported. */
+      const mAt = toMs(c.stageAt);
+      if (mAt && c.state !== 'Lost' && !c.closedAt && !c.pendingClose) {
+        const near = [toMs(c.submittedAt), toMs(c.createdAt), toMs(c.reopenedAt)]
+          .some(t => t && Math.abs(t - mAt) < 60000);
+        const stage = P && P.stageLabel ? P.stageLabel(c.product, c.stageId) : '';
+        if (!near && stage) push(mAt, c.agentName, `moved <b>${esc(label)}</b> to ${esc(stage)}`, '', go);
+      }
     });
     if (T().isStarted()) T().all().forEach(t => {
       if (t.status === 'done' && t.doneAt) push(t.doneAt, userName(t.doneBy) || t.assigneeName,
-        `completed <b>${esc(t.title)}</b>`, t.relatedLabel || (t.workflowName ? t.workflowName + ' workflow' : ''));
+        `completed <b>${esc(t.title)}</b>`, t.relatedLabel || (t.workflowName ? t.workflowName + ' workflow' : ''),
+        { goAct: 'tk-edit', goId: t.id });
     });
-    if (H().isStarted()) H().households().forEach(h => push(toMs(h.createdAt), h.advisorName, `added <b>${esc(h.name)}</b> to the book`, h.source || ''));
+    if (H().isStarted()) {
+      H().households().forEach(h => {
+        const go = { goAct: 'hh-goto', goId: h.id };
+        push(toMs(h.createdAt), h.advisorName, `added <b>${esc(h.name)}</b> to the book`, h.source || '', go);
+        /* A lead becoming a client is the single most consequential thing
+           that happens to a name in this system, and it was not on the
+           feed at all. */
+        if (h.convertedAt) push(toMs(h.convertedAt), userName(h.convertedBy) || h.advisorName,
+          `converted <b>${esc(h.name)}</b> from a lead`, 'now a household in the book', go);
+      });
+      // People, not only families: a spouse or an adult child added to an
+      // existing household never showed here.
+      (H().contacts() || []).forEach(p => {
+        if (!p.createdAt) return;
+        const hh = p.householdId && H().household(p.householdId);
+        push(toMs(p.createdAt), (hh && hh.advisorName) || '', `added <b>${esc(H().contactName(p))}</b>`,
+          hh ? 'to ' + hh.name : 'a new contact', { goAct: 'ct-open', goId: p.id });
+      });
+    }
     // Posted updates. These are the only entries a person wrote on purpose,
     // so they carry the words themselves rather than a generated sentence.
     const me = RWG.auth.currentUser();
@@ -558,7 +621,13 @@ window.RWG = window.RWG || {};
     ev.sort((a, b) => b.ts - a.ts);
     const top = ev.slice(0, 9);
     if (!top.length) return card('Team activity', 'last 30 days', emptyRow('Quiet so far — moves, closes and completed steps land here as they happen.'));
-    const rows = top.map(e => `<div class="list-row" style="gap:9px">
+    /* Clickable, because "what is that?" is the question this list
+       provokes and it had no answer. Each row carries the record it is
+       about; the ✕ on your own posted update stays a nested target and
+       the innermost one wins, so deleting an update never opens a
+       record on the way past. */
+    const rows = top.map(e => `<div class="list-row${e.goAct ? ' hm-act' : ''}" style="gap:9px"
+      ${e.goAct ? `data-action="${esc(e.goAct)}" data-id="${esc(e.goId)}" title="Open this"` : ''}>
       ${avatar(e.who)}
       <span style="min-width:0;flex:1"><span style="font-size:12.5px;color:var(--ink)">${esc(firstName(e.who))} ${e.txt}</span>
       ${e.body ? `<span class="hm-note-body">${U().noteHtml(e.body)}</span>` : ''}
