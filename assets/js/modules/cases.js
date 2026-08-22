@@ -133,12 +133,28 @@ window.RWG = window.RWG || {};
     const today = T.todayKey();
     T.all().forEach(t => {
       if (t.status === 'done' || t.relatedType !== 'case' || !t.relatedId) return;
-      const e = idx[t.relatedId] || (idx[t.relatedId] = { n: 0, late: 0, due: 0, next: '' });
+      const e = idx[t.relatedId] || (idx[t.relatedId] = { n: 0, late: 0, due: 0, next: '', list: [] });
       e.n++;
       if (t.dueDate && t.dueDate < today) e.late++;
       else if (t.dueDate === today) e.due++;
       if (t.dueDate && (!e.next || t.dueDate < e.next)) e.next = t.dueDate;
+      /* Carlos, 22 Aug '26: "when I hover this bubble [I want] to see the
+         title of the task (or tasks) that are open, and also if I click the
+         bubble, to see the tasks associated with that opportunity that are
+         open." So the index carries the task ITSELF rather than a copy of
+         three of its fields: the panel wants the assignee, the due date, the
+         chain and the required flag, and the whole index is thrown away and
+         rebuilt on every paint — a reference cannot go staler than the count
+         standing beside it. One pass, still. */
+      e.list.push(t);
     });
+    /* Sorted here, once, for the same reason the index exists at all: a row
+       that sorted its own tasks would be doing per-row work again. Soonest
+       first with the undated last, which floats the overdue ones to the top
+       — where a hover has room for only the first few. */
+    Object.keys(idx).forEach(k => idx[k].list.sort((a, b) =>
+      String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31'))
+      || String(a.title || '').localeCompare(String(b.title || ''))));
     return idx;
   }
   const tasksOn = (id) => (taskIdx || (taskIdx = buildTaskIdx()))[id] || null;
@@ -160,15 +176,145 @@ window.RWG = window.RWG || {};
      it would be a red flag painted as good news. The number is the total,
      the colour is the worst thing in it, and the tooltip says both —
      "3 open, 1 of them late" is two facts and a row has room for one. */
+  /* How much of a hover is still a hover.
+     Carlos asked the badge to name the tasks, and a task title is free text
+     somebody typed — this firm has tasks titled with a whole sentence about
+     a carrier. Two caps, then:
+
+       · 58 characters a title, because one line of a tooltip is the unit
+         being spent and a title longer than that was never going to be read
+         off a hover anyway;
+       · four titles, then "…and N more". Four is where a tooltip stops being
+         read and starts being skimmed, and — unlike before — there is now
+         somewhere better to send the fifth: the click.
+
+     `title=` is a native tooltip. It cannot be styled, it arrives after the
+     browser's own delay, and it will not wrap where we want it to. Kept
+     anyway, because the alternative for HOVER is a hand-rolled popover with
+     its own show/hide timers, its own escape, its own placement against the
+     viewport, and its own way of getting stuck open on a touch screen —
+     inside a table that repaints its whole body on every keystroke in the
+     search box. The one thing a popover would genuinely do better is act on
+     the tasks, and that is what the CLICK does, in a panel this app already
+     owns. Newlines are the one piece of formatting title does honour, so the
+     list is a list. */
+  const TIP_NAMES = 4;
+  const TIP_CHARS = 58;
+  function taskTip(e) {
+    const head = [e.n + (e.n === 1 ? ' open task' : ' open tasks')];
+    if (e.late) head.push(e.late + ' overdue');
+    else if (e.due) head.push('due today');
+    else if (e.next) head.push('next due ' + e.next);
+    const T = RWG.tasks;
+    const today = (T && T.isStarted && T.isStarted()) ? T.todayKey() : '';
+    const lines = e.list.slice(0, TIP_NAMES).map(t => {
+      const late = t.dueDate && today && t.dueDate < today;
+      const name = clip(String(t.title == null ? '' : t.title).replace(/\s+/g, ' ').trim() || '(untitled)', TIP_CHARS);
+      return '· ' + name + (late ? ' — overdue' : '');
+    });
+    if (e.list.length > TIP_NAMES) lines.push('…and ' + (e.list.length - TIP_NAMES) + ' more');
+    return [head.join(' · ')].concat(lines).concat(['Click to open them']).join('\n');
+  }
   function taskBadge(c) {
     const e = tasksOn(c.recordId);
     if (!e) return '';
     const cls = e.late ? 'is-late' : (e.due ? 'tier-medium' : 'tier-low');
-    const bits = [e.n + (e.n === 1 ? ' open task' : ' open tasks')];
-    if (e.late) bits.push(e.late + ' overdue');
-    else if (e.due) bits.push('due today');
-    else if (e.next) bits.push('next due ' + e.next);
-    return ` <span class="chip cs-task ${cls}" title="${esc(bits.join(' · '))}">${e.n} open</span>`;
+    /* A real <button>, and its own data-action — which together are the
+       whole trick for "clicking the bubble must not open the whole
+       opportunity". The kernel resolves a click with
+       e.target.closest('[data-action]'), so the INNERMOST one wins and the
+       row's cs-open never hears about it: no stopPropagation, no z-index
+       games, no special case in the dispatcher. A <button> rather than a
+       <span role="button"> because the kernel listens for click and nothing
+       else — a focusable span would take the tab stop and then do nothing
+       when you pressed Enter, which is a worse lie than not being focusable
+       at all. */
+    return ` <button type="button" class="chip cs-task ${cls}" data-action="cs-tasks" data-id="${esc(c.recordId)}"
+      title="${esc(taskTip(e))}">${e.n} open</button>`;
+  }
+
+  /* ── the open work behind the badge ──
+     Carlos, 22 Aug '26: "if I click the bubble, to see the tasks associated
+     with that opportunity that are open."
+
+     It is the same side panel Home's drill-downs raise (RWG.app.openPanel)
+     wearing the same rows the opportunity window lists its steps with. A
+     third kind of task list would be a third place to keep in step with the
+     task engine, and everything here acts through the engine's own doors:
+     tk-edit opens a task, cs-task-tick hands the tick straight to tk-done.
+     Nothing is recomputed — the rows are the very tasks the badge counted. */
+  function taskPanelSub(recordId) {
+    const cs = D().caseById(recordId);
+    const e = tasksOn(recordId);
+    const n = e ? e.n : 0;
+    const bits = [n + (n === 1 ? ' open task' : ' open tasks')];
+    if (e && e.late) bits.push(e.late + ' overdue');
+    if (cs && cs.clientName) bits.push(cs.clientName);
+    return bits.join(' · ');
+  }
+  function taskPanelRows(recordId) {
+    const e = tasksOn(recordId);
+    const list = e ? e.list : [];
+    if (!list.length) return '<p class="list-empty">Nothing open on this opportunity — every task on it is done.</p>';
+    const T = RWG.tasks;
+    const today = (T && T.isStarted && T.isStarted()) ? T.todayKey() : '';
+    return list.map(t => {
+      const late = t.dueDate && today && t.dueDate < today;
+      // A held step is shown, not hidden — the badge counts it, so the panel
+      // has to account for it or the numbers stop agreeing. The tick refuses
+      // it the same way it refuses on the Tasks page, and says why.
+      const waitFor = RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
+      const title = String(t.title == null ? '' : t.title) || '(untitled)';
+      // .list-row already gives flex-start and the 11px gutter; .held is the
+      // same dimming the Tasks page puts on a step that is waiting its turn.
+      return `<div class="list-row${waitFor ? ' held' : ''}">
+        <input type="checkbox" data-action="cs-task-tick" data-id="${esc(t.id)}" data-case="${esc(recordId)}"
+          style="flex:none;margin-top:3px;accent-color:var(--good)"
+          title="${waitFor ? 'Waits for: ' + esc(waitFor.title) : 'Mark done'}">
+        <span class="grow" style="min-width:0">
+          <span data-action="cs-task-open" data-id="${esc(t.id)}" style="cursor:pointer;font-size:var(--fs-dense);color:var(--navy);font-weight:600"
+            title="Open this task — it opens in place of this panel">${esc(title)}</span>
+          ${t.required ? '<span class="chip tier-medium" style="font-size:10.5px;margin-left:6px">required to close</span>' : ''}
+          ${waitFor ? `<span class="chip" style="font-size:10.5px;margin-left:6px;background:rgba(92,107,126,.10);color:var(--muted);border:1px solid rgba(92,107,126,.3)" title="Chained: opens when “${esc(waitFor.title)}” is checked off">⛓ after: ${esc(clip(String(waitFor.title || ''), 26))}</span>` : ''}
+          <span class="cell-sub" style="display:block">${esc((t.assigneeName || '').split(' ')[0] || 'unassigned')}${t.workflowName ? ' · ' + esc(t.workflowName) : ''}</span>
+        </span>
+        <span class="end cell-sub" style="${late ? 'color:var(--bad);font-weight:700' : ''}">${esc(t.dueDate || 'no date')}</span>
+      </div>`;
+    }).join('');
+  }
+  function taskPanel(recordId) {
+    const cs = D().caseById(recordId); if (!cs) return;
+    if (!RWG.app.openPanel) { U().toast('Panels are not available on this screen'); return; }
+    const name = cs.title || cs.clientName || '(no name)';
+    RWG.app.openPanel(`
+      <div class="scrim" data-action="close-drawer"></div>
+      <aside class="drawer" role="dialog" aria-label="Open work on ${esc(name)}">
+        <div class="drawer-head">
+          <div class="dh-top">
+            <div style="min-width:0">
+              <div class="tag-row mb-8"><span class="chip tier-low">Open work</span></div>
+              <h2>${esc(name)}</h2>
+              <div class="dh-sub" id="cs-tp-sub">${esc(taskPanelSub(recordId))}</div>
+            </div>
+            <div class="flex" style="gap:8px;flex:none">
+              <button class="drawer-edit" data-action="cs-open" data-panel="1" data-id="${esc(recordId)}"
+                title="Open the whole opportunity — this panel steps aside rather than sitting under it">Open opportunity</button>
+              <button class="drawer-close" data-action="close-drawer" aria-label="Close">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-body" id="cs-tp-body">${taskPanelRows(recordId)}</div>
+      </aside>`);
+  }
+  /* Repaint the panel in place after a tick. openPanel writes the whole
+     drawer, which re-runs its slide-in animation — a tick is not an arrival,
+     so only the two things that changed are rewritten. Same reasoning as
+     RWG.refreshOppSteps, which repaints a block rather than a window. */
+  function refreshTaskPanel(recordId) {
+    const b = document.getElementById('cs-tp-body');
+    if (b) b.innerHTML = taskPanelRows(recordId);
+    const s = document.getElementById('cs-tp-sub');
+    if (s) s.textContent = taskPanelSub(recordId);
   }
 
   /* Column schema: label, how to read the value, how to sort, whether it
@@ -285,6 +431,32 @@ window.RWG = window.RWG || {};
      three live in firestore.rules as well as here, because a rule is the
      only one of the two an agent cannot get around. */
   function canEdit(c, user) { return true; }
+
+  /* ── what a lost case says about itself ──
+     Carlos, 22 Aug '26. The window used to show four characters — "Lost"
+     and the reason's first word — which answers "is this dead" and nothing
+     else. The three questions actually asked of a dead case are when, why
+     and who said so: the note half of lostReason is where the why usually
+     is (the reason list is six words long; "Price" is a bucket, "went with
+     employer coverage" is the story), and the loss review in the partner
+     inbox reads lostBy, so the name is worth saying out loud here too. */
+  const lostWhen = (iso) => {
+    const ms = Date.parse(iso || '');
+    if (!ms) return '';
+    // "Aug 12" for this year's losses; older ones say which year, because a
+    // lost case does not stop being browsable in January.
+    const y = new Date(ms).getFullYear();
+    return U().fmtDate(ms) + (y === new Date().getFullYear() ? '' : ' ’' + String(y).slice(2));
+  };
+  function lostLine(c) {
+    const parts = String(c.lostReason || '').split(' — ');
+    const note = parts.slice(1).join(' — ').trim();
+    const u = c.lostBy && RWG.data && RWG.data.user ? RWG.data.user(c.lostBy) : null;
+    const when = lostWhen(c.lostAt);
+    let s = 'Marked lost' + (when ? ' ' + when : '') + (u && u.name ? ' by ' + u.name.split(' ')[0] : '');
+    if (note) s += ' — “' + note + '”';
+    return s;
+  }
   const FAM = (p) => (p === 'wl' || p === 'term' || p === 'di') ? 'ins' : (p === 'annuity' ? 'ann' : (p === 'inv' ? 'inv' : 'flat'));
 
   // The note editor and its scrubber are shared (ui.js) — the opportunity
@@ -496,7 +668,32 @@ window.RWG = window.RWG || {};
              title="The client signed the delivery receipt — nothing else owed">Receipt signed ✓</button>${reviewBtn}`
         : '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>' + reviewBtn)
       : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>' + reviewBtn
-      : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(c.lostReason.split(' — ')[0]) : ''}</span>` : '';
+      : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(String(c.lostReason).split(' — ')[0]) : ''}</span>
+           <div class="hint" style="margin-top:6px">${esc(lostLine(c))}</div>` : '';
+
+    /* Carlos, 22 Aug '26: "I would like for admin and agents to have the
+       ability to move cases to 'Lost Opportunities'. I do see that some
+       opportunities are lost, but I don't know where I can put them to
+       lost." The ability was never missing — the board has offered it to
+       every agent since it shipped. THIS window is where he went looking,
+       and its footer read Delete / Duplicate / Cancel / Save.
+
+       It opens the board's own flow (pl-lost), because there is one lost
+       reason list and one place that stamps a loss, and a second one would
+       be a second thing to keep in step. It sits in the footer rather than
+       beside the Stage field for one plain reason: the footer is pinned and
+       the body scrolls, so this is the half of the window that is always on
+       screen — which is exactly the property it was missing.
+
+       Offered on precisely the cases the board offers it on. stageLocked is
+       closed || pending || lost, and canMove on a board card is
+       stage.bucket !== 'Closed', which those three are and nothing else is.
+       That is also what stops a lost case being marked lost twice: no
+       button, and lostModal refuses the id anyway. */
+    const lostBtn = c && !stageLocked
+      ? `<button class="btn btn-quiet cs-lost-btn" data-action="pl-lost" data-id="${esc(c.recordId)}"
+          title="Not going ahead? Asks for a reason, then files it under lost — it stays browsable in All cases. This window closes with it, so anything unsaved here is not carried over.">✕ Mark lost…</button>`
+      : '';
 
     const L = MONEY_LABELS[form.fam];
     const w = c ? sc.deriveWeeks(c) : null;
@@ -590,6 +787,7 @@ window.RWG = window.RWG || {};
         </div>
         <div class="modal-foot">
           ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
+          ${lostBtn}
           ${c ? `<button class="btn btn-quiet" data-action="cs-dup" data-id="${esc(c.recordId)}"
             title="Start another opportunity pre-filled from this one. Anything unsaved here is not carried over.">⧉ Duplicate</button>` : ''}
           <span class="topbar-spacer"></span>
@@ -881,7 +1079,43 @@ window.RWG = window.RWG || {};
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
         a.download = 'RWG_cases_' + S().currentWeekEnding() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
       },
-      'cs-open': (el) => oppWindow({ id: el.dataset.id }),
+      'cs-open': (el) => {
+        // From the open-work panel, the window is the bigger view of the
+        // same case — so the panel gets out of the way instead of sitting
+        // half-covered behind a 760px window on a laptop.
+        if (el.dataset.panel && RWG.app.closeDrawer) RWG.app.closeDrawer();
+        oppWindow({ id: el.dataset.id });
+      },
+      // The badge, opened. See taskPanel.
+      'cs-tasks': (el) => taskPanel(el.dataset.id),
+      /* Ticking from the panel. The chain guard, the recurrence spawn and
+         the repaint of everything behind the panel all belong to the task
+         engine's own tk-done — a second copy here would be a second thing to
+         keep in step. What tk-done cannot know about is this panel, which is
+         not part of the paint it triggers, so the index is rebuilt and the
+         panel refreshed on the way back. */
+      /* Opening one of them. Not tk-edit directly, and the reason is a
+         stacking one rather than a behavioural one: the task modal mounts on
+         layer 1 at z-index 130 and this panel is a drawer at 130 too, so the
+         modal paints over it — but the modal's scrim is 120 and the drawer
+         is 130, so the panel would sit UN-DIMMED and still clickable behind
+         an open task window. Two live lists of the same tasks, one of them
+         underneath the other. So the panel steps aside and hands the id
+         straight to the task engine's own door; closing the task lands back
+         on All Cases, where the badge is one click from the panel again. */
+      'cs-task-open': (el) => {
+        const owner = RWG.modules.actionOwner('tk-edit');
+        if (!owner) { U().toast('Tasks are still loading'); return; }
+        if (RWG.app.closeDrawer) RWG.app.closeDrawer();
+        owner.actions['tk-edit'](el, null, owner.state);
+      },
+      'cs-task-tick': (el) => {
+        const owner = RWG.modules.actionOwner('tk-done');
+        if (!owner) { U().toast('Tasks are still loading'); return; }
+        owner.actions['tk-done'](el, null, owner.state);
+        taskIdx = buildTaskIdx();
+        refreshTaskPanel(el.dataset.case);
+      },
       // Post-close bookkeeping, not a close: stamps are untouched by design.
       /* Into the close review from an open case window. The review is a
          page, not a layer — both modal layers close first, and the inbox's
@@ -1049,6 +1283,7 @@ window.RWG = window.RWG || {};
     fitTable();   // a chip appearing can push the table down a line
   }
 
-  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, taskState, buildTaskIdx,
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, taskState, buildTaskIdx, lostLine,
+    taskTip, taskPanelRows, taskPanelSub, tasksOn,
     _setTaskIdx: (v) => { taskIdx = v; }, _form: () => form };
 })();

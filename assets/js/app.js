@@ -476,16 +476,194 @@ RWG.app = (function () {
   }
   function refreshDrawer() { if (state.leadId) openLead(state.leadId, state.editing); }
 
+  /* ────────────────────────── unsaved-changes guard
+     Carlos, 21 Aug '26: "when we are inputting information, if we click
+     out of that window it closes, and the information we inputted gets
+     erased … give us the opportunity to go back, save and THEN close."
+     A scrim that swallows ten minutes of typing is not a dismissal, it is
+     a trapdoor.
+
+     Two rules keep this from turning into the boy who cried wolf.
+
+     ONLY A HAND CLOSES A WINDOW HERE. A save handler shuts its own window
+     the moment the write is away; asking there would accuse somebody of
+     losing the work they just saved. So the question is asked at the two
+     places a person closes a window by hand — the click carrying
+     data-action="close-modal"/"close-drawer" (the ✕, the scrim and Cancel
+     all wear one of those), and peelTop(), which is Escape and the phone's
+     Back button — and never inside closeModal()/closeDrawer(), which is
+     the door the modules go through on their way out of a save.
+
+     IT READS THE DOM, NOT A SNAPSHOT. Every field in this app is rendered
+     with its answer already in the markup, so the browser is holding the
+     original for us: defaultValue, defaultChecked, defaultSelected. There
+     is nothing to register when a window opens and nothing to tear down
+     when it closes, which is the only reason one function can cover the
+     opportunity window, the task window and every other window in the app
+     without a single module opting in. */
+
+  /* Rich-text notes are contenteditable divs, and contenteditable has no
+     defaultValue — the one thing the DOM does not remember for us, and
+     exactly where the most typing is lost. Snapshot on the way in (focus
+     always comes before typing) and compare on the way out, so a note
+     typed and then undone reads as untouched, the same answer a plain
+     input would give. The fallback set catches the odd path that reaches
+     an editor without focusing it first (a dropped selection). Weak
+     collections, so a window's editors are forgotten the instant its
+     markup is thrown away — no cleanup, no leak. */
+  const rtWas = new WeakMap();
+  const rtTouched = new WeakSet();
+  const rtSeen = (e) => (e.target && e.target.closest) ? e.target.closest('[contenteditable="true"]') : null;
+
+  // Has this one field moved since the markup was drawn?
+  function fieldDirty(el) {
+    if (el.disabled || el.readOnly) return false;
+    /* A tick that carries a data-action is a control, not a field: it
+       writes the moment it is clicked and repaints itself. Reading it as
+       unsaved would make every opportunity window with a checked-off step
+       argue on the way out. */
+    if (el.dataset && el.dataset.action) return false;
+    if (el.tagName === 'SELECT') {
+      const opts = el.options;
+      if (el.multiple || el.size > 1) {
+        for (let i = 0; i < opts.length; i++) if (opts[i].selected !== opts[i].defaultSelected) return true;
+        return false;
+      }
+      /* A single select whose markup names no `selected` option still
+         shows its first one — the browser chose it, the HTML never said
+         so. Read that as the default (the last `selected` wins, per the
+         spec, otherwise the first option) or every untouched dropdown in
+         the app reports a change the instant its window opens, and this
+         whole feature ships as a nuisance. */
+      let def = -1;
+      for (let i = 0; i < opts.length; i++) if (opts[i].defaultSelected) def = i;
+      if (def < 0) def = opts.length ? 0 : -1;
+      return el.selectedIndex !== def;
+    }
+    const type = String(el.type || '').toLowerCase();
+    if (type === 'checkbox' || type === 'radio') return el.checked !== el.defaultChecked;
+    /* A button holds no answer, and a hidden input cannot tell us one. For
+       every type in HTML's "default" value mode — hidden, button, submit,
+       reset, image — .value IS the value content attribute, so writing to
+       it drags defaultValue along and the pair can never disagree. Worth
+       saying out loud because the record picker keeps its committed
+       pointer in exactly such a hidden input: asking that input whether it
+       changed always gets "no", which is how this guard first shipped
+       blind to somebody re-pointing a task at a different person. */
+    if (type === 'hidden' || type === 'button' || type === 'submit'
+        || type === 'reset' || type === 'image') return false;
+    /* So the picker is read from its visible box instead. That box does two
+       jobs: it SEARCHES while you type, and it holds the chosen record's
+       own name once you pick one — and only the second is an answer.
+       ui.pickerRec() is the widget's own account of what it points at right
+       now, so "the box reads as the record it points at, and that is not
+       the record it opened with" is a change; anything else is a query the
+       app itself throws away on blur, and nobody should be stopped for it. */
+    if (el.classList && el.classList.contains('pick-in')) {
+      if (!U || typeof U.pickerRec !== 'function') return false;
+      const rec = U.pickerRec(String(el.id || '').replace(/-in$/, ''));
+      const label = (rec && rec.label) || '';
+      return el.value === label && el.value !== el.defaultValue;
+    }
+    return el.value !== el.defaultValue;
+  }
+
+  // Is there unsaved typing anywhere inside this layer?
+  function dirtyIn(root) {
+    if (!root) return false;
+    const f = root.querySelectorAll('input,select,textarea');
+    for (let i = 0; i < f.length; i++) if (fieldDirty(f[i])) return true;
+    const eds = root.querySelectorAll('[contenteditable="true"]');
+    for (let i = 0; i < eds.length; i++) {
+      const ed = eds[i];
+      if (rtWas.has(ed)) { if (ed.innerHTML !== rtWas.get(ed)) return true; }
+      else if (rtTouched.has(ed)) return true;
+    }
+    return false;
+  }
+
+  /* The question, in the app's own furniture rather than the browser's:
+     confirm() puts the buttons in the operating system's order with the
+     operating system's words, and "OK" is a terrible name for throwing
+     away an afternoon. It needs a layer of its own — the app already
+     stacks two deep, and the thing being guarded may be either of them —
+     so it hangs off <body> in its own mount, the way toasts do, above
+     both modal layers and the raised side panel but under the toast. */
+  let guardDone = null;                      // the close waiting on an answer
+  function guardEl() {
+    let g = document.getElementById('guard-mount');
+    if (g) return g;
+    g = document.createElement('div');
+    g.id = 'guard-mount';
+    document.body.appendChild(g);
+    g.addEventListener('click', (ev) => {
+      const b = (ev.target && ev.target.closest) ? ev.target.closest('[data-guard]') : null;
+      if (!b) return;
+      ev.stopPropagation();                  // the app's own click handler has no business here
+      answerGuard(b.dataset.guard === 'discard');
+    });
+    return g;
+  }
+  function answerGuard(discard) {
+    const g = document.getElementById('guard-mount');
+    if (g) g.innerHTML = '';
+    const go = guardDone;
+    guardDone = null;
+    if (go && discard) go();
+  }
+  function askGuard() {
+    const g = guardEl();
+    g.innerHTML = `
+      <div class="scrim scrim-guard" data-guard="back"></div>
+      <div class="modal-card modal-sm modal-guard" role="dialog" aria-modal="true" aria-labelledby="guard-title">
+        <div class="modal-head">
+          <h2 id="guard-title">Unsaved changes</h2>
+          <p>Something in this window has been typed or changed and not saved. Close it now and
+             those edits are gone — the record keeps what it had before. Go back, save, and then close.</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-danger" data-guard="discard">Discard changes</button>
+          <span class="topbar-spacer"></span>
+          <button class="btn btn-gold" data-guard="back">Go back</button>
+        </div>
+      </div>`;
+    /* Focus the way back, not the way out: Enter on a dialog nobody read
+       should return you to your work. Escape means the same — see peelTop. */
+    const back = g.querySelector('[data-guard="back"].btn');
+    if (back && back.focus) back.focus();
+  }
+
+  /* Close `root`, asking first if there is anything in it worth keeping.
+     Returns true if the close already happened; false means the question
+     is on screen and the answer arrives by callback. */
+  function closeGuarded(root, proceed) {
+    if (guardDone) return false;             // already asking — a second Escape is not a second answer
+    if (!dirtyIn(root)) { proceed(); return true; }
+    guardDone = proceed;
+    askGuard();
+    return false;
+  }
+  // Which modal layer a close-modal click is actually aiming at — the same
+  // answer closeModal() gives itself, so the guard reads the layer it peels.
+  function topModal() {
+    const m2 = $('#modal-mount-2');
+    if (m2 && m2.firstElementChild) return m2;
+    return $('#modal-mount');
+  }
+
   /* Close the topmost thing on screen, one layer at a time, and say
      whether there was anything to close. Escape and the phone's Back
      button both mean "put this away", so they ask the same question. */
   function peelTop() {
+    /* While it is up, the unsaved-changes question IS the top layer, and
+       Escape on it means "go back to the window", never "discard". */
+    if (guardDone) { answerGuard(false); return true; }
     const dm = $('#drawer-mount');
-    if (dm && dm.firstElementChild) { closeDrawer(); return true; }
+    if (dm && dm.firstElementChild) { closeGuarded(dm, closeDrawer); return true; }
     const m2 = $('#modal-mount-2');
-    if (m2 && m2.firstElementChild) { closeModal(); return true; }
+    if (m2 && m2.firstElementChild) { closeGuarded(m2, closeModal); return true; }
     const m1 = $('#modal-mount');
-    if (m1 && m1.firstElementChild) { closeModal(); return true; }
+    if (m1 && m1.firstElementChild) { closeGuarded(m1, closeModal); return true; }
     const open = document.querySelectorAll('.pop-panel:not([hidden])');
     if (open.length) { open.forEach(p => p.hidden = true); return true; }
     let had = false;
@@ -887,6 +1065,14 @@ RWG.app = (function () {
 
   // ────────────────────────── event wiring
   function handleAction(a, el, e) {
+    /* A hand on the way out. The ✕, the scrim and every Cancel button in
+       the app carry one of these two actions, so this single pair of lines
+       is the whole clicked-it-closed path — which is why no module needs a
+       flag, a snapshot or a line of its own. Everything below (and every
+       closeModal() a save calls once its write is away) is unguarded on
+       purpose: see the unsaved-changes guard above peelTop(). */
+    if (a === 'close-modal') { closeGuarded(topModal(), closeModal); return; }
+    if (a === 'close-drawer') { closeGuarded($('#drawer-mount'), closeDrawer); return; }
     // A module that claims this action owns it. Everything below is the
     // kernel's core set plus the legacy Leads actions (to be extracted later).
     const owner = RWG.modules.actionOwner(a);
@@ -1183,7 +1369,16 @@ RWG.app = (function () {
       if (f.dataset.action === 'do-login') doLogin(f);
       else if (f.dataset.action === 'do-signup') doSignup(f);
     });
+    /* The unsaved-changes guard's one piece of bookkeeping, and it is two
+       lines: a rich-text note remembers what it held when the caret first
+       arrived, because contenteditable has no defaultValue to fall back on. */
+    document.addEventListener('focusin', e => {
+      const ed = rtSeen(e);
+      if (ed && !rtWas.has(ed)) rtWas.set(ed, ed.innerHTML);
+    });
     document.addEventListener('input', e => {
+      const ed = rtSeen(e);                              // typed into without ever being focused
+      if (ed && !rtWas.has(ed)) rtTouched.add(ed);
       if (e.target.classList.contains('pop-search')) {   // narrow a column's value checklist
         const q = e.target.value.toLowerCase(), panel = e.target.closest('.pop-panel');
         if (panel) panel.querySelectorAll('.pop-list .pop-row').forEach(r => { r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none'; });

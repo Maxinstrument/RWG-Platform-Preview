@@ -11,7 +11,8 @@
        that IS "new business written" on the scorecard
      · backward: allowed, but no stamp is ever cleared
      · into Won: blocked — closing goes through the close review
-     · Lost: not a column; the ✕ on a card asks for a reason
+     · Lost: not a column; the ✕ Lost button on a card asks for a
+       reason, and so does the one in the opportunity window
 
    Reuses the leads board's CSS (.board / .board-col) but its own
    drag wiring, scoped to .pl-card + data-plstage so the kernel's
@@ -94,6 +95,16 @@ window.RWG = window.RWG || {};
     const prevDone = di > 0 ? doneCols[di - 1] : null;
     // At the last working stage, the arrow's place is taken by the push to Won.
     const lastStop = canMove && !next && stage.bucket === 'Submitted';
+    /* Carlos, 22 Aug '26: "I do see that some opportunities are lost, but I
+       don't know where I can put them to lost." He had the power the whole
+       time — canMove below is a STAGE test, not a role test, and every agent
+       has passed it since the board shipped. What he did not have was
+       anything that said so: a bare ✕ sitting between two arrows reads as
+       "dismiss this card", if it reads as anything. So it keeps the glyph,
+       in the same place, and adds the word — nobody who already found it has
+       to relearn it, and everybody else can now see it. The row wraps
+       (.pl-card-foot) rather than overflow on the one card that also carries
+       Delivery ›. */
     return `<div class="card tight pl-card${canMove ? '' : ' pl-done'}" ${canMove ? 'draggable="true"' : ''} data-case="${esc(c.recordId)}"
         style="cursor:pointer;border-left:3px solid ${closed ? 'var(--good)' : (stage.bucket === 'Submitted' ? 'var(--gold)' : 'var(--line-strong)')}">
       <div class="flex" style="justify-content:space-between;gap:8px;align-items:flex-start" data-action="cs-open" data-id="${esc(c.recordId)}">
@@ -104,7 +115,7 @@ window.RWG = window.RWG || {};
         ${c.householdId ? `<button class="btn btn-quiet btn-sm" data-action="hh-goto" data-id="${esc(c.householdId)}" title="Open the household" style="padding:2px 7px">${U().icon('household','ic-sm')}</button>` : ''}
       </div>
       <div class="serif" style="font-size:16px;color:var(--navy);margin-top:6px" data-action="cs-open" data-id="${esc(c.recordId)}">${U().money(money)}</div>
-      <div class="flex" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+      <div class="flex pl-card-foot" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
         ${closed ? (stage.bucket === 'Closed' && stage.id !== 'won'
               ? (isAdmin
@@ -125,7 +136,9 @@ window.RWG = window.RWG || {};
           ${lastStop ? (firstClosedIsDelivery(c)
             ? `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Initial premium collected — move to Delivery Requirements. A partner verifies before it counts." data-action="pl-won" data-id="${esc(c.recordId)}">Delivery ›</button>`
             : `<button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Push to Won — a partner verifies before it counts" data-action="pl-won" data-id="${esc(c.recordId)}">Won ✓</button>`) : ''}
-          <button class="btn btn-quiet btn-sm" style="padding:2px 8px" title="Mark lost…" data-action="pl-lost" data-id="${esc(c.recordId)}">✕</button>`
+          <button class="btn btn-quiet btn-sm pl-lost-x" style="padding:2px 8px;font-size:11px" aria-label="Mark lost"
+            title="Not going ahead? Asks for a reason, then files it under lost — it stays browsable in All cases"
+            data-action="pl-lost" data-id="${esc(c.recordId)}">✕ Lost</button>`
         : closed && nextDone ? `
           <button class="btn btn-gold btn-sm" style="padding:2px 8px;font-size:11px" title="Delivery receipt signed — nothing else owed on this one" data-action="pl-move" data-id="${esc(c.recordId)}" data-stage="${esc(nextDone.id)}">Signed ✓</button>`
         : closed && prevDone ? `
@@ -189,14 +202,46 @@ window.RWG = window.RWG || {};
   }
 
   // ── lost modal ────────────────────────────────────────────
+  /* Where this opens. It used to be layer 1 and nothing else, which was
+     fine while the board was the only door. The opportunity window is a
+     door now, and the window is itself a modal on layer 1 — writing over
+     it would throw away whatever was half-typed in it, and Cancel would
+     leave the person staring at a screen they never asked to close. So:
+     layer 2 when layer 1 is occupied, exactly the way a task opened from
+     the opportunity window stacks. Opened from the board, layer 1 is empty
+     and this is the same modal it always was. */
+  const lostMount = () => {
+    const m1 = document.getElementById('modal-mount');
+    const m2 = document.getElementById('modal-mount-2');
+    if (m2 && m1 && m1.firstElementChild) return m2;
+    return m1;
+  };
   function lostModal(recordId) {
     const c = SD().caseById(recordId); if (!c) return;
+    /* Asked twice. The board never draws a lost card and the window never
+       offers the button on one, so this is the stale copy — a second tab, a
+       window left open since before somebody else marked it. Saying so beats
+       re-stamping: markLost writes lostReason, lostAt and lostFromStage
+       fresh, so a second pass would quietly rewrite why and when and where
+       the business actually died, and the leak report reads all three. */
+    if (c.state === 'Lost') {
+      U().toast('Already lost' + (c.lostReason ? ' — ' + esc(String(c.lostReason).split(' — ')[0]) : '')
+        + (c.lostAt ? ', on ' + U().fmtDate(Date.parse(c.lostAt)) : ''));
+      return;
+    }
+    /* And closed business is not lost business. Marking it would leave
+       closedAt standing — counted on somebody's week, paid on somebody's
+       statement — while the board dropped the card and the funnel counted a
+       leak. If a close was wrong, the close review is where it gets undone. */
+    if (c.closedAt) { U().toast('This one is closed and counted — a wrong close is fixed in the close review'); return; }
+    const mt = lostMount(); if (!mt) return;
     const opts = P().lostReasons().map(r => `<option>${esc(r)}</option>`).join('');
-    document.getElementById('modal-mount').innerHTML = `
+    mt.innerHTML = `
       <div class="scrim" data-action="close-modal"></div>
       <div class="modal-card">
         <div class="modal-head"><h2>Mark lost</h2>
-          <p>${esc(c.clientName || '')} · ${esc(SC().productName(c.product))}. Lost reasons are the only honest record of why business does not close.</p></div>
+          <p>${esc(c.title || c.clientName || '')}${c.title && c.clientName ? ' · ' + esc(c.clientName) : ''} · ${esc(SC().productName(c.product))}.
+            Lost reasons are the only honest record of why business does not close. It leaves the board and stays browsable in All cases.</p></div>
         <div class="modal-body">
           <div class="field-group"><label class="lbl">Reason</label><select id="pl-lost-reason">${opts}</select></div>
           <div class="field-group"><label class="lbl">Note (optional)</label><input id="pl-lost-note" placeholder="e.g. going with employer coverage"></div>
@@ -206,6 +251,20 @@ window.RWG = window.RWG || {};
           <button class="btn btn-danger" data-action="pl-lost-save" data-id="${esc(recordId)}">Mark lost</button>
         </div>
       </div>`;
+  }
+
+  /* Both layers go, and that is a decision rather than tidiness. Marked
+     from the opportunity window, the window underneath is now describing a
+     case that no longer exists in that shape — and its Save still holds the
+     state and the stage the case had a second ago, so pressing it would
+     write 'Opened' and the old stageId straight back over the loss, leaving
+     lostReason and lostAt on a case nobody would ever see as lost again.
+     Closing it is the only honest answer. From the board there is nothing
+     on layer 1 but the lost modal itself, so this is the same clear it
+     always did. */
+  function closeBothLayers() {
+    const m2 = document.getElementById('modal-mount-2'); if (m2) m2.innerHTML = '';
+    const m1 = document.getElementById('modal-mount'); if (m1) m1.innerHTML = '';
   }
 
   // ── edge auto-scroll while dragging ───────────────────────
@@ -538,7 +597,7 @@ window.RWG = window.RWG || {};
         const reason = (document.getElementById('pl-lost-reason') || {}).value || 'Other';
         const note = (document.getElementById('pl-lost-note') || {}).value || '';
         SD().markLost(el.dataset.id, reason, note.trim())
-          .then(() => { document.getElementById('modal-mount').innerHTML = ''; RWG.app.renderMain(); U().toast('Marked lost — it stays browsable in All Cases', true); })
+          .then(() => { closeBothLayers(); RWG.app.renderMain(); U().toast('Marked lost — it stays browsable in All cases', true); })
           .catch(err => U().toast('Could not save: ' + err.message));
       }
     },

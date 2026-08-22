@@ -559,6 +559,19 @@ table.data tbody tr:last-child td{border-bottom:none;}
    tier-high is the green of "Closed ✓", and open work is not that. */
 .chip.cs-task.is-late{background:rgba(178,58,72,.12);color:var(--bad);border:1px solid rgba(178,58,72,.35);}
 
+/* The unsaved-changes question, over whichever layer it is asking about.
+   Above BOTH modal mounts and above a side panel raised over them, and
+   still under the toast at 300 — a question outranks everything except
+   the app telling you what just happened. Dropped clear of the window's
+   own head: pinned at the usual 24px it landed over the title and read as
+   REPLACING the window rather than asking about it, which is the one
+   thing it must not do — you cannot weigh abandoning something you can no
+   longer see. Clamped so it stays off the top edge on a phone without
+   drifting into the middle of a tall monitor. */
+.scrim.scrim-guard{z-index:180;}
+.modal-card.modal-guard{z-index:190;top:clamp(64px,20vh,200px);}
+.modal-card.modal-guard .modal-head{border-bottom:0;}
+
 .cell-name{font-weight:600;color:var(--navy);}
 .cell-sub{color:var(--muted);font-size:12px;}
 /* All Cases' Details preview. The JS already clips the note to 50
@@ -1786,3 +1799,36 @@ input::placeholder,textarea::placeholder,.rt-body:empty::before{color:var(--ink-
   .rec-rail{flex-direction:row;flex-wrap:wrap;}
   .rec-rail > *{flex:1 1 300px;}
 }
+
+
+/* ── The open-work badge, now a control ──────────────────────
+   Carlos, 22 Aug '26: "if I click the bubble, to see the tasks associated
+   with that opportunity." So the badge is a real <button>, not the <span>
+   it shipped as. This strips only what the browser adds to a button;
+   everything it LOOKS like still comes from .chip / .cs-task / the tier
+   class. No background, colour or border is declared here, tempting as a
+   reset is: this selector is (0,2,1) and would out-specify .tier-low,
+   .tier-medium and .chip.cs-task.is-late at (0,1,0) and (0,2,0) — which
+   would flatten the grey→amber→red ramp the badge exists for. */
+button.chip.cs-task{-webkit-appearance:none;appearance:none;font-family:inherit;line-height:1.45;cursor:pointer;}
+/* It sits inside a row that is itself clickable, so it has to say "I am a
+   different target from the row underneath me". */
+button.chip.cs-task:hover{filter:brightness(.94);}
+button.chip.cs-task:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--navy);}
+
+/* The board card's action row. The ✕ nobody could read now says "✕ Lost",
+   which is ~30px more on a 290px column — and on the one card that also
+   carries "Delivery ›" that is close enough to the edge to be worth not
+   gambling on. Wrapping is a better failure than a button sliding under
+   the card's border. */
+.pl-card-foot{flex-wrap:wrap;row-gap:6px;}
+
+/* Both lost doors — the board card's "✕ Lost" and the opportunity
+   window's "✕ Mark lost…" — stay btn-quiet, because neither one IS the
+   commit: each opens the reason modal, and the reason modal's own button
+   is the btn-danger. The hover is the only place they admit what they
+   lead to, which is what keeps a full-strength red button off a card
+   somebody scrolls past forty times a morning.
+   This ties .btn-quiet:hover on specificity, so it wins by arriving
+   later — keep it at the end of the file. */
+.pl-lost-x:hover,.cs-lost-btn:hover{background:rgba(178,58,72,.10);color:var(--bad);}

@@ -639,9 +639,21 @@ window.RWG = window.RWG || {};
         }).catch(e => {
           /* Offline, refused by the rules, or somebody else added a word
              in the same second — all three deserve one more click, so what
-             they typed stays exactly where they typed it. */
+             they typed stays exactly where they typed it.
+
+             Carlos, 21 Aug '26: his agents reported they could not add a
+             category, and the toast said "Missing or insufficient
+             permissions" — true, and useless. Nothing in this app gates
+             the ＋ by role; a refusal here can only mean the rule that
+             opens config/taskcategories to the team has not been published
+             in the Firebase console yet. An agent cannot fix that and
+             should not be left guessing, so the message names the person
+             who can. */
           if (el) el.disabled = false;
-          U().toast('Could not add it — ' + ((e && e.message) || 'try again'));
+          const msg = String((e && e.message) || '');
+          U().toast(/permission|insufficient|PERMISSION_DENIED/i.test(msg)
+            ? 'Not allowed yet — adding categories needs Carlos to publish the updated rules. Ask him, then try again.'
+            : 'Could not add it — ' + (msg || 'try again'));
           if (box) box.focus();
         });
       },
