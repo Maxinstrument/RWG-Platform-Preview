@@ -619,7 +619,14 @@ window.RWG = window.RWG || {};
       n.createdAt, n.authorName, 'said', n.relatedLabel || '',
       { body: n.bodyHtml || n.body, noteId: n.id, mine: !!(me && n.authorUid === me.id) || ctx.isAdmin }));
     ev.sort((a, b) => b.ts - a.ts);
-    const top = ev.slice(0, 9);
+    /* Fifteen, not nine (Carlos, 22 Aug '26). Nine was set when the feed
+       reported four kinds of event; it now reports eleven, so the same
+       nine rows covered a good deal less of the day. The dashboard flows
+       its widgets into balanced columns rather than a fixed grid, so a
+       taller card rebalances the columns instead of leaving a hole beside
+       a short one — which is why this can simply be a longer list rather
+       than a short list with a scrollbar in it. */
+    const top = ev.slice(0, 15);
     if (!top.length) return card('Team activity', 'last 30 days', emptyRow('Quiet so far — moves, closes and completed steps land here as they happen.'));
     /* Clickable, because "what is that?" is the question this list
        provokes and it had no answer. Each row carries the record it is
