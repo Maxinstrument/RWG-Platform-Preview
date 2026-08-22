@@ -194,7 +194,8 @@ window.RWG = window.RWG || {};
         <button class="btn btn-sm btn-ghost" data-action="nav" data-view="cases"
           title="Every case on every track, as a table — including lost ones">☰ All cases</button>
         <span class="topbar-spacer"></span>
-        ${lost ? `<span class="chip tier-low" title="Lost cases on this track — browse them in All cases">Lost · ${lost}</span>` : ''}
+        ${lost ? `<button class="chip tier-low pl-lost-chip" data-action="cs-lost-list"
+          title="The opportunities on this track that did not close — opens the list">Lost · ${lost}</button>` : ''}
         <select id="pl-owner" class="fbar-select" style="width:auto"><option value="">All owners</option>${ownerOpts}</select>
         <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
       </div>

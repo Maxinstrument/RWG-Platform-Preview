@@ -1832,3 +1832,11 @@ button.chip.cs-task:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),
    This ties .btn-quiet:hover on specificity, so it wins by arriving
    later — keep it at the end of the file. */
 .pl-lost-x:hover,.cs-lost-btn:hover{background:rgba(178,58,72,.10);color:var(--bad);}
+
+/* The board's Lost count is a way in now, not a label (Carlos, 22 Aug '26:
+   "where do I now see the lost opportunities?"). It keeps the quiet grey
+   chip it always was — it is a count, not an alarm — and only admits it is
+   clickable under the cursor. */
+.pl-lost-chip{-webkit-appearance:none;appearance:none;font-family:inherit;cursor:pointer;}
+.pl-lost-chip:hover{border-color:var(--gold);color:var(--navy);}
+.pl-lost-chip:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--navy);}

@@ -1180,6 +1180,25 @@ window.RWG = window.RWG || {};
          twice. It replaces this window with a fresh one, so what was
          typed and not saved here does not come along; the tooltip says so
          before the click. */
+      /* Where the lost ones live.
+         Carlos, 22 Aug '26: "where do I now see the lost opportunities?"
+         They were always in this table — the Stage column reads "Lost" and
+         filters like any other — but "always there if you know which ▾ to
+         open" is not an answer, and the board's Lost chip was a dead span
+         that TOLD you to come here without bringing you.
+
+         viewAll goes on with it, deliberately: a case lost in June is not
+         active in this week, so landing on the lost list still scoped to a
+         week would show an empty table and read as "there are none". */
+      'cs-lost-list': () => {
+        const st = RWG.modules.get('cases').state;
+        st.search = '';
+        st.viewAll = true;
+        st.colf = { state: ['Lost'] };
+        st.sortKey = 'closedWeek';
+        RWG.app.nav('cases');
+      },
+
       'cs-dup': (el) => oppWindow({ copyOf: el.dataset.id }),
 
       /* Reopen. Confirmed rather than instant: it is rare, it rewrites a
@@ -1266,6 +1285,11 @@ window.RWG = window.RWG || {};
       const all = D().cases();
       const rows = filtered(st);
       const weekOpts = recentWeeks(20).map(w => `<option value="${w}" ${w === st.week ? 'selected' : ''}>Week ending ${w}${w === S().currentWeekEnding() ? ' (this week)' : ''}</option>`).join('');
+      /* The lost, counted once for the toolbar. The button doubles as the
+         count, so the answer to "are we losing much?" is on the screen
+         rather than behind the filter that answers it. */
+      const lostN = all.filter(x => x.state === 'Lost').length;
+      const onlyLost = ((st.colf && st.colf.state) || []).join() === 'Lost';
 
       // The same header the board wears, so the two read as one area with
       // two ways of looking at it rather than two unrelated screens.
@@ -1288,6 +1312,8 @@ window.RWG = window.RWG || {};
           <span class="cell-sub" id="cs-count" style="flex:none">${rows.length} of ${all.length}</span>
           <span id="cs-chips" class="flex" style="gap:6px;flex-wrap:wrap;min-width:0">${csChips(st)}</span>
           <span class="topbar-spacer"></span>
+          ${lostN ? `<button class="btn btn-quiet btn-sm${onlyLost ? ' btn-navy' : ''}" data-action="${onlyLost ? 'cs-clear' : 'cs-lost-list'}"
+            title="${onlyLost ? 'Back to every case' : 'Only the opportunities that did not close'}">✕ Lost · ${lostN}</button>` : ''}
           <button class="btn btn-quiet btn-sm" data-action="cs-clear">Clear</button>
           <button class="btn btn-ghost btn-sm" data-action="cs-export">⬇ Export</button>
         </div>`;
