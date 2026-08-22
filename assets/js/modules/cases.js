@@ -457,6 +457,18 @@ window.RWG = window.RWG || {};
     if (note) s += ' — “' + note + '”';
     return s;
   }
+  /* A case that came back. The loss stops counting the moment it is
+     reopened — it did not happen — but it stays legible, because "why did
+     this one nearly die" is worth as much as "why did it". */
+  function reopenLine(c) {
+    if (!c || !c.reopenedAt) return '';
+    const u = c.reopenedBy && RWG.data && RWG.data.user ? RWG.data.user(c.reopenedBy) : null;
+    const when = lostWhen(c.reopenedAt);
+    const was = String(c.reopenedFrom || '').split(' — ')[0].trim();
+    return 'Reopened' + (when ? ' ' + when : '') + (u && u.name ? ' by ' + u.name.split(' ')[0] : '')
+      + (was ? ' — had been lost: ' + was : '');
+  }
+
   const FAM = (p) => (p === 'wl' || p === 'term' || p === 'di') ? 'ins' : (p === 'annuity' ? 'ann' : (p === 'inv' ? 'inv' : 'flat'));
 
   // The note editor and its scrubber are shared (ui.js) — the opportunity
@@ -669,7 +681,11 @@ window.RWG = window.RWG || {};
         : '<span class="chip tier-high">Closed ✓ — confirmed by a partner</span>' + reviewBtn)
       : pending ? '<span class="chip tier-medium">Awaiting partner confirm</span>' + reviewBtn
       : lost ? `<span class="chip tier-low">Lost${c.lostReason ? ' · ' + esc(String(c.lostReason).split(' — ')[0]) : ''}</span>
-           <div class="hint" style="margin-top:6px">${esc(lostLine(c))}</div>` : '';
+           <div class="hint" style="margin-top:6px">${esc(lostLine(c))}</div>`
+      /* Back from the dead, and saying so. Not a warning — a reopened case
+         is a perfectly ordinary live case — just the one fact its stage
+         alone cannot tell you. */
+      : (c && c.reopenedAt) ? `<div class="hint" style="margin-top:6px">${esc(reopenLine(c))}</div>` : '';
 
     /* Carlos, 22 Aug '26: "I would like for admin and agents to have the
        ability to move cases to 'Lost Opportunities'. I do see that some
@@ -693,6 +709,22 @@ window.RWG = window.RWG || {};
     const lostBtn = c && !stageLocked
       ? `<button class="btn btn-quiet cs-lost-btn" data-action="pl-lost" data-id="${esc(c.recordId)}"
           title="Not going ahead? Asks for a reason, then files it under lost — it stays browsable in All cases. This window closes with it, so anything unsaved here is not carried over.">✕ Mark lost…</button>`
+      : '';
+
+    /* Carlos, 22 Aug '26: "please yes, create a Reopen option for
+       partners only. If someone puts it to lost, and we are able to
+       revive it, I would like to have the opportunity to do it."
+
+       Partners only, and that is the whole reason it is not beside
+       "Mark lost" in openness. Losing is an advisor's call — they are the
+       one on the phone, and the firm wants that recorded honestly and
+       without friction. UN-losing edits the record of a decision already
+       made, and the partner inbox's 30-day loss review is the only audit
+       the firm keeps of why business does not close. So: anyone can say
+       it died; a partner says it did not. */
+    const reopenBtn = c && lost && isAdmin
+      ? `<button class="btn btn-quiet cs-reopen-btn" data-action="cs-reopen" data-id="${esc(c.recordId)}"
+          title="Put this back on the board at the stage it was lost from. The reason it was lost is kept on the record.">↩ Reopen</button>`
       : '';
 
     const L = MONEY_LABELS[form.fam];
@@ -788,6 +820,7 @@ window.RWG = window.RWG || {};
         <div class="modal-foot">
           ${c && isAdmin ? `<button class="btn btn-danger" data-action="cs-delete" data-id="${esc(c.recordId)}">Delete</button>` : ''}
           ${lostBtn}
+          ${reopenBtn}
           ${c ? `<button class="btn btn-quiet" data-action="cs-dup" data-id="${esc(c.recordId)}"
             title="Start another opportunity pre-filled from this one. Anything unsaved here is not carried over.">⧉ Duplicate</button>` : ''}
           <span class="topbar-spacer"></span>
@@ -1148,6 +1181,31 @@ window.RWG = window.RWG || {};
          typed and not saved here does not come along; the tooltip says so
          before the click. */
       'cs-dup': (el) => oppWindow({ copyOf: el.dataset.id }),
+
+      /* Reopen. Confirmed rather than instant: it is rare, it rewrites a
+         decision somebody else recorded, and an accidental click here is
+         exactly the accident it exists to undo. The window is rebuilt from
+         the reopened case rather than closed, because the next thing you
+         want after reviving a case is usually to move it. */
+      'cs-reopen': (el) => {
+        const id = el.dataset.id;
+        const c = D().caseById(id);
+        if (!c) { U().toast('That opportunity is no longer here'); return; }
+        if (c.state !== 'Lost') { U().toast('That one is not lost'); return; }
+        if (!RWG.auth.isAdmin || !RWG.auth.isAdmin()) { U().toast('Reopening is a partner’s call'); return; }
+        const was = String(c.lostReason || '').split(' — ')[0].trim();
+        if (!confirm('Reopen this opportunity?' + String.fromCharCode(10, 10)
+            + 'It goes back on the board at the stage it was lost from'
+            + (was ? ', and stops counting as lost for “' + was + '”.' : '.')
+            + String.fromCharCode(10, 10)
+            + 'The reason it was lost is kept on the record.')) return;
+        D().reopenCase(id).then(() => {
+          U().toast('Back on the board', true);
+          RWG.app.renderMain();
+          const still = D().caseById(id);
+          if (still) oppWindow({ id: id });
+        }).catch(e => U().toast('Could not reopen it — ' + ((e && e.message) || 'try again')));
+      },
       /* Ticking a step inside the opportunity window. The window holds
          half-typed money fields, so a full re-render would eat them —
          only the steps block repaints. The chain guard and the chained
@@ -1283,7 +1341,7 @@ window.RWG = window.RWG || {};
     fitTable();   // a chip appearing can push the table down a line
   }
 
-  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, taskState, buildTaskIdx, lostLine,
+  RWG._casesModule = { filtered, toCSV, columns, applyMoney, moneyInit, cleanHtml, detailsText, detailsPreview, clip, taskState, buildTaskIdx, lostLine, reopenLine,
     taskTip, taskPanelRows, taskPanelSub, tasksOn,
     _setTaskIdx: (v) => { taskIdx = v; }, _form: () => form };
 })();

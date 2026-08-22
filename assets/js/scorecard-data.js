@@ -39,13 +39,16 @@ RWG.scorecardData = (function () {
     'contactId', 'householdId', 'stageId', 'stageAt', 'lostReason', 'pendingClose',
     // money detail + the close (phase 2, slice 2)
     'rate', 'premiumAnnual', 'benefit', 'renewalAnnual', 'applied',
-    'pendingCloseAt', 'closeNote', 'a360Recorded', 'lostBy', 'lostAt'];
+    'pendingCloseAt', 'closeNote', 'a360Recorded', 'lostBy', 'lostAt',
+    // the reopen trail (22 Aug '26) — see reopenCase()
+    'reopenedAt', 'reopenedBy', 'reopenedFrom'];
 
   // Passed through buildCase untouched (null when absent), so no edit
   // modal anywhere can silently strip them.
   const PASSTHROUGH = ['contactId', 'householdId', 'stageId', 'stageAt', 'lostReason', 'rate', 'premiumAnnual',
     'benefit', 'renewalAnnual', 'applied', 'pendingCloseAt', 'closeNote',
     'a360Recorded', 'lostBy', 'lostAt', 'lostFromStage',
+    'reopenedAt', 'reopenedBy', 'reopenedFrom',
     'title', 'sourceNote', 'details'];   // the opportunity window (phase 5.6)
 
   const cache = { cases: [], weeks: [], agents: {} };
@@ -237,6 +240,61 @@ RWG.scorecardData = (function () {
     onChange();
     return db().collection('cases').doc(recordId).set(row)
       .catch(e => { console.error('mark lost:', e && e.message); throw e; });
+  }
+
+  /* Bringing one back.
+     Carlos, 22 Aug '26: "if someone puts it to lost, and we are able to
+     revive it, I would like the opportunity to do it." Clients do change
+     their minds, and until now a wrong click was permanent — worse than
+     permanent, actually: moving a lost case's stage was never refused, it
+     just left the case invisible on the board AND absent from the lost
+     list, which is the quietest way a record can disappear.
+
+     It goes back to the stage it died on, and to the state that stage
+     implies rather than a guessed one — a case lost during underwriting
+     comes back submitted, not reopened from scratch.
+
+     What it does NOT do is erase the loss. The partner inbox's 30-day
+     review is the firm's only audit of why business does not close, and
+     it reads exactly the fields this clears; a silent un-lost would
+     delete the row that review is made of. So the reason is kept as
+     reopenedFrom, with who brought it back and when, and the opportunity
+     window says so. The loss stops counting, which is right — it did not
+     happen — but it stays legible, which is also right.
+
+     Untouched throughout: openedWeek, submittedAt and closedAt. Those are
+     write-once stamps and the scorecard counts from them; a case coming
+     back from lost must not mint one it never earned. */
+  function reopenCase(recordId) {
+    const existing = caseById(recordId);
+    if (!existing) return Promise.reject(new Error('case not found: ' + recordId));
+    if (existing.state !== 'Lost') return Promise.reject(new Error('that case is not lost'));
+
+    const P = RWG.pipelines;
+    const back = existing.lostFromStage || null;
+    /* The state the stage implies. bucketOf answers for a real stage;
+       with no lostFromStage (a case lost before that was recorded) the
+       honest fallback is the start of the board, because guessing
+       "submitted" would hand the case a status nobody gave it. */
+    const bucket = (back && P && P.bucketOf) ? P.bucketOf(existing.product, back) : null;
+    const state = bucket === 'Submitted' ? 'Submitted' : 'Opened';
+
+    const row = Object.assign({}, existing, {
+      stageId: back || null,
+      stageAt: nowISO(),
+      state: state,
+      pendingClose: false,
+      lostReason: null, lostAt: null, lostBy: null, lostFromStage: null,
+      reopenedAt: nowISO(),
+      reopenedBy: (me && me.id) || null,
+      reopenedFrom: existing.lostReason || 'Lost',
+      updatedAt: nowISO()
+    });
+    const i = cache.cases.findIndex(c => c.recordId === recordId);
+    if (i >= 0) cache.cases[i] = row;
+    onChange();
+    return db().collection('cases').doc(recordId).set(row)
+      .catch(e => { console.error('reopen case:', e && e.message); throw e; });
   }
 
   // ── the close (phase 2, slice 2) ──────────────────────────
@@ -465,7 +523,7 @@ RWG.scorecardData = (function () {
     cases, casesWithMoney, casesForAgent, caseById, withMoney,
     weeks, weekFor, weeksForWeek, weekId,
     agentsConfig, agentConfig,
-    buildCase, saveCase, setCaseState, setPipelineStage, markLost,
+    buildCase, saveCase, setCaseState, setPipelineStage, markLost, reopenCase,
     pushWon, confirmClose, sendBack, deleteCase, adminSetStamps,
     saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek, healNames,
     CASE_FIELDS, _cache: cache
