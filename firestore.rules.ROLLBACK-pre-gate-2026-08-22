@@ -1,47 +1,49 @@
+// ╔════════════════════════════════════════════════════════════╗
+// ║  ROLLBACK COPY — NOT THE CURRENT RULES                            ║
+// ╚════════════════════════════════════════════════════════════╝
+//
+// This is firestore.rules EXACTLY as it stood before 22 Aug 2026, kept
+// only so the gate change can be undone in one paste if it misbehaves.
+//
+// It has the open gate in it. Every data collection here answers to
+// signedIn(), which means "has any Firebase account at all" — so with
+// this published, anyone who can create an account can read the whole
+// client book. Publishing it is a deliberate step backwards, correct
+// ONLY as a temporary measure while something is diagnosed.
+//
+// If you are here because the CRM has gone blank: paste this, get the
+// team working, then turn OFF new sign-ups in
+//   Firebase → Authentication → Settings → User actions
+// so the open gate is not also an open door, and say so.
+//
+// Once the new rules are confirmed working, DELETE THIS FILE. Git
+// history keeps it: git show <commit>:firestore.rules
+//
 rules_version = '2';
 // RWG Platform — Firestore security rules
 // Paste these into: Firebase Console → Firestore Database → Rules → Publish.
 //
-// ── The one idea in this file ───────────────────────────────────────
-// A rule is the only thing standing between the client book and the
-// open internet. The app is not: it draws what it chooses to draw, and
-// anyone holding a token can skip it entirely and talk to the API.
-//
-// So every collection below asks isActive() — "an approved member of
-// the firm, still here" — and not signedIn(), which asks only whether
-// Firebase has heard of you. Until 22 Aug '26 the data collections
-// asked the second question. Sign-up was open, so an account made on
-// the login page one minute ago (status 'pending', shown a waiting
-// screen by the app, and still holding a perfectly good token) could
-// read every household, case and note, and write to most of them.
-//
-// One place still asks signedIn(), and it is the bootstrap: a brand new
-// account must be able to CREATE its own pending user document, and to
-// READ that one document back to be told it is waiting. It can reach
-// nothing else. See match /users below.
+// This is a SUPERSET of the live CRM rules. The users / leads / deleted_leads /
+// reports / config blocks are byte-for-byte the CRM's, so publishing this does
+// not change any CRM behavior. It only ADDS the scorecard collections
+// (cases, weeks). config/agents is covered by the existing config block.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Firebase has heard of them. That is ALL this means, and on its own
-    // it is not a permission — see the note at the top of the file.
     function signedIn() { return request.auth != null; }
-
-    // Approved and still here. A self-created account sits at status
-    // 'pending' until a partner lets it in, and a removed one keeps its
-    // token until it expires. This is what "the team" means, everywhere.
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    // Approved and still here. signedIn() only means Firebase knows them:
+    // a self-created account sits at status 'pending' until a partner lets
+    // it in, and a removed one keeps its token until it expires. Anywhere
+    // the team as a whole may write, this is what "the team" means.
     function isActive() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
-    }
-
-    // A partner who is still here. Status is checked as well as role
-    // (22 Aug '26) so removing a partner actually removes their reach —
-    // a token outlives the click that revoked it, and role alone would
-    // have kept letting them purge the Trash until it expired.
-    function isAdmin() {
-      return isActive()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // The owner account is allowed to bootstrap itself as an active admin on first login.
@@ -51,21 +53,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // Two different reads, and they are not the same permission.
-      //
-      // Your OWN document, always: a new account has to fetch the record
-      // it just created to learn that it is pending, and the app does
-      // exactly that — a direct get of users/<my uid>, never a query.
-      //
-      // The ROSTER — everybody's names and roles — only once approved.
-      // Every "who is on this?" list in the app needs it, and a firm of
-      // five does not keep its own names from itself; but it is a list of
-      // the staff, and somebody who signed up this morning is not staff.
-      // Firestore evaluates a query against the rule as a whole, so this
-      // OR resolves the way it should: an active user's collection
-      // listener passes on isActive(), while a pending account can still
-      // get its own document by id and can list nothing at all.
-      allow read: if signedIn() && (request.auth.uid == uid || isActive());
+      // The roster is team-readable (2026-08-20): names and roles of the
+      // people you work beside, which every "who is on this?" list in the
+      // app needs. Approving, promoting and removing stay partner-only,
+      // below — reading a teammate's name is not editing their account.
+      allow read: if signedIn();
       // First-login self-create: agents start pending; the owner email may create itself as active admin.
       allow create: if signedIn() && request.auth.uid == uid && (
         (request.resource.data.role == 'agent' && request.resource.data.status == 'pending')
@@ -76,9 +68,9 @@ service cloud.firestore {
     }
 
     match /leads/{id} {
-      allow read:   if isActive() && (isAdmin() || resource.data.assignedTo == request.auth.uid);
-      allow create: if isActive() && (isAdmin() || request.resource.data.assignedTo == request.auth.uid);
-      allow update: if isActive() && (isAdmin() || resource.data.assignedTo == request.auth.uid);
+      allow read:   if signedIn() && (isAdmin() || resource.data.assignedTo == request.auth.uid);
+      allow create: if signedIn() && (isAdmin() || request.resource.data.assignedTo == request.auth.uid);
+      allow update: if signedIn() && (isAdmin() || resource.data.assignedTo == request.auth.uid);
       allow delete: if isAdmin();
     }
 
@@ -115,7 +107,7 @@ service cloud.firestore {
     // OR'ed, so this block only ever ADDS permission. Deleting the doc, and
     // every kind of edit that is not an append, remain a partner's.
     match /config/taskcategories {
-      allow read: if isActive();
+      allow read: if signedIn();
       allow create: if isActive()
         && request.resource.data.value is list
         && request.resource.data.value.size() <= 60
@@ -129,7 +121,7 @@ service cloud.firestore {
     }
 
     match /config/{doc} {
-      allow read:  if isActive();
+      allow read:  if signedIn();
       allow write: if isAdmin();
     }
 
@@ -147,9 +139,9 @@ service cloud.firestore {
     // write closedAt. Every week's totals stay permanent, and a close stays
     // a partner's confirmation. Admins can still correct a case.
     match /cases/{id} {
-      allow read:   if isActive();
-      allow create: if isActive();
-      allow update: if isActive() && (
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn() && (
         isAdmin() || (
           request.resource.data.get('openedWeek', '') == resource.data.get('openedWeek', '')
           && (resource.data.get('submittedAt', null) == null
@@ -165,7 +157,7 @@ service cloud.firestore {
     // reassign it — visibility is open by decision, and Kathy manages
     // every case's tasks. Delete stays admin (done is the normal end).
     match /tasks/{id} {
-      allow read, create, update: if isActive();
+      allow read, create, update: if signedIn();
       allow delete: if isAdmin();
     }
 
@@ -184,11 +176,11 @@ service cloud.firestore {
     // percentages will get their OWN collection with a partner-only
     // rule in phase 2, precisely because rules are per-document.
     match /households/{id} {
-      allow read, create, update: if isActive();
+      allow read, create, update: if signedIn();
       allow delete: if isAdmin();
     }
     match /contacts/{id} {
-      allow read, create, update: if isActive();
+      allow read, create, update: if signedIn();
       allow delete: if isAdmin();
     }
 
@@ -199,10 +191,10 @@ service cloud.firestore {
     // Removing one goes through the Trash, so the author or a partner
     // may delete, and a partner can always put it back.
     match /notes/{id} {
-      allow read: if isActive();
-      allow create: if isActive() && request.resource.data.authorUid == request.auth.uid;
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.authorUid == request.auth.uid;
       allow update: if isAdmin();
-      allow delete: if isActive() && (isAdmin() || resource.data.authorUid == request.auth.uid);
+      allow delete: if signedIn() && (isAdmin() || resource.data.authorUid == request.auth.uid);
     }
 
     // ── Trash: deleted records, waiting on a partner ────────────
@@ -216,7 +208,7 @@ service cloud.firestore {
     // is guarded to a snapshot of a real record.
     match /trash/{id} {
       allow read, delete: if isAdmin();
-      allow create: if isActive()
+      allow create: if signedIn()
         && request.resource.data.coll is string
         && request.resource.data.originalId is string
         && request.resource.data.deletedBy == request.auth.uid;
@@ -227,38 +219,11 @@ service cloud.firestore {
     // Aggregate production, team-readable. Doc id is agentUid_weekEnding, so an
     // agent may only write a doc whose agentUid is their own account.
     match /weeks/{id} {
-      allow read:   if isActive();
-      allow create, update: if isActive() && (
+      allow read:   if signedIn();
+      allow create, update: if signedIn() && (
         isAdmin() || request.resource.data.agentUid == request.auth.uid
       );
       allow delete: if isAdmin();
-    }
-
-    // ── Library: the weekly brief and the training manuals ──────
-    // Carlos, 22 Aug '26: the Sunday brief and the agent courses, where
-    // the team already is, and "behind login pages because I don't want
-    // just anyone having access to it."
-    //
-    // Which is the whole reason these documents live HERE and not in the
-    // repository beside guide.html: GitHub Pages serves files to anyone
-    // who asks and has no idea what a login is. A rule does.
-    //
-    // Split in two because they are read at different moments. `library`
-    // is the catalogue — a title, a date, a section, a size — a kilobyte
-    // for the whole shelf, listed every time the screen opens. The pages
-    // themselves run a few hundred kilobytes each and are fetched one at
-    // a time, by id, only when somebody opens one.
-    //
-    // Publishing is a partner's. Reading is the firm's, and stops being
-    // the firm's the moment somebody leaves — which an emailed
-    // attachment or a public URL could never do.
-    match /library/{id} {
-      allow read:  if isActive();
-      allow write: if isAdmin();
-    }
-    match /library_docs/{id} {
-      allow read:  if isActive();
-      allow write: if isAdmin();
     }
   }
 }
