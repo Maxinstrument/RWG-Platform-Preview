@@ -31,7 +31,16 @@ window.RWG = window.RWG || {};
   const LIB = () => RWG.library;
   const U = () => RWG.ui;
   const esc = (s) => U().esc(s);
-  const isAdmin = () => !!(RWG.auth && RWG.auth.isAdmin && RWG.auth.isAdmin());
+  /* effectiveRole(), not auth.isAdmin(). auth.isAdmin() answers for the
+     account that signed in, so a partner using "View as agent" kept
+     seeing their own Publish and Remove buttons sitting in an agent's
+     cockpit — which is the one thing that view exists NOT to do. Real
+     agents were never shown them, and the rule on library/ would have
+     refused the write regardless; the damage was to the only tool a
+     partner has for checking what their team can actually see. */
+  const isAdmin = () => (RWG.app && RWG.app.effectiveRole)
+    ? RWG.app.effectiveRole() === 'admin'
+    : !!(RWG.auth && RWG.auth.isAdmin && RWG.auth.isAdmin());
 
   const st = { rows: null, loading: false, err: '', busy: {}, picked: null };
 

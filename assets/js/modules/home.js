@@ -76,7 +76,25 @@ window.RWG = window.RWG || {};
 
     const known = seen || [];
     const fresh = def.filter(id => known.indexOf(id) < 0 && saved.indexOf(id) < 0);
-    st.on = saved.concat(fresh);
+    /* Placed, not appended (22 Aug '26). DEFAULT_ON is an argument about
+       where a card reads best — "This week" belongs above Team activity,
+       not under everything — and concat() threw that away for everyone
+       who had ever dragged a widget, which is precisely the people who
+       use this screen. So each new card lands just after whichever
+       widget precedes it in the default order and the person actually
+       has; if none of them survive, it belongs at the top. Their own
+       arrangement is never reordered, only opened up. */
+    const placed = saved.slice();
+    fresh.forEach(id => {
+      const at = def.indexOf(id);
+      let put = 0;
+      for (let i = at - 1; i >= 0; i--) {
+        const p = placed.indexOf(def[i]);
+        if (p >= 0) { put = p + 1; break; }
+      }
+      placed.splice(put, 0, id);
+    });
+    st.on = placed;
     st.seen = allWidgetIds();
     if (fresh.length || !seen) saveLayout(user);
     return st.on;
