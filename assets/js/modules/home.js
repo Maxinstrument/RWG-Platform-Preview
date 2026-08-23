@@ -1251,16 +1251,46 @@ window.RWG = window.RWG || {};
     // (A two-column grid made every row as tall as its tallest widget,
     // so a short card left a hole the height of the funnel beside it.)
     const on = layout(eff, ctx.isAdmin ? 'admin' : 'agent');
-    const full = [], flow = [];
+    const full = [], flow = [], flowIds = [];
     on.forEach(id => {
       const w = widget(id);
       if (!w || (w.admin && !ctx.isAdmin)) return;
       const html = w.render(ctx);
       if (!html) return;
-      (w.full ? full : flow).push(html);
+      if (w.full) { full.push(html); return; }
+      flow.push(html); flowIds.push(id);
     });
+
+    /* ── Cards that travel together ───────────────────────────
+       Carlos, 22 Aug '26: "This week" should sit directly above Team
+       activity on the agent's Home the way it does on the partner's.
+
+       It already came directly before it in the order, on both. The
+       difference was the COLUMN BREAK: .hm-grid is a balanced CSS
+       multi-column, so where it splits depends on how tall the cards
+       happen to be that day. A partner with a full week pushed "This
+       week" over to start the second column; an agent with a quieter one
+       left room for it at the foot of the first. Same order, two
+       different-looking pages, and nothing about the order to fix.
+
+       Rendering the two as a single grid child settles it: a column break
+       cannot fall between them, so the brief is always the thing sitting
+       on top of the feed. Only applied when they are genuinely next to
+       each other — somebody who drags them apart meant to. */
+    const RIDES_WITH = { library: 'activity' };
+    const cells = [];
+    for (let i = 0; i < flow.length; i++) {
+      const wants = RIDES_WITH[flowIds[i]];
+      if (wants && flowIds[i + 1] === wants) {
+        cells.push(`<div class="hm-pair">${flow[i]}${flow[i + 1]}</div>`);
+        i++;
+      } else {
+        cells.push(`<div>${flow[i]}</div>`);
+      }
+    }
+
     const body = (full.length ? `<div class="hm-full">${full.join('')}</div>` : '')
-      + (flow.length ? `<div class="hm-grid">${flow.map(h => `<div>${h}</div>`).join('')}</div>` : '');
+      + (cells.length ? `<div class="hm-grid">${cells.join('')}</div>` : '');
 
     return `
       <div class="flex" style="align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap">

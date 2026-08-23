@@ -1919,3 +1919,13 @@ button.chip.cs-task:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),
 @media (prefers-reduced-motion:reduce){
   .lib-row,.lib-del{transition:none;}
 }
+
+/* Two cards rendered as one column item (Carlos, 22 Aug '26) — see
+   RIDES_WITH in home.js. The grid gives every child a bottom margin and
+   display:block; a pair needs the same gap BETWEEN its two cards, so it
+   is a flex column instead. Selector is > .hm-pair rather than .hm-pair
+   so it beats `.hm-grid > *` on specificity rather than on source order. */
+.hm-grid > .hm-pair{
+  display:flex;flex-direction:column;gap:var(--s4);
+  break-inside:avoid;-webkit-column-break-inside:avoid;
+}
