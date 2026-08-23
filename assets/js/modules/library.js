@@ -38,6 +38,36 @@ window.RWG = window.RWG || {};
   const DAY = 86400000;
   const isNew = (r) => r.publishedAt && (Date.now() - r.publishedAt) < 7 * DAY;
 
+  /* The sidebar is drawn by the kernel on a full render, and renderMain()
+     — what a module normally calls — repaints only the main panel. So the
+     flag is also painted directly when it changes, rather than waiting for
+     the next Firestore snapshot to redraw the shell around it. */
+  function paintBadge() {
+    const btn = document.querySelector('.nav-item[data-view="library"]');
+    if (!btn) return;
+    const has = btn.querySelector('.badge');
+    const want = LIB().isUnread();
+    if (want && !has) {
+      const s = document.createElement('span');
+      s.className = 'badge';
+      s.textContent = 'New';
+      btn.appendChild(s);
+    } else if (!want && has) {
+      has.remove();
+    }
+  }
+
+  /* Asked by the sidebar on every full render. It doubles as the thing
+     that loads the shelf: somebody who never opens the Library would
+     otherwise never have a catalogue to check, and so would never be told
+     there is a brief waiting. warm() only ever fires once. */
+  function navBadge() {
+    const L = RWG.library;
+    if (!L) return 0;
+    if (!L.cached()) { L.warm(paintBadge); return 0; }
+    return L.isUnread() ? 'New' : 0;
+  }
+
   function load() {
     st.loading = true; st.err = '';
     LIB().list()
@@ -76,6 +106,14 @@ window.RWG = window.RWG || {};
   }
 
   function openDoc(id, title) {
+    /* Recorded on the click, not on a successful load: the question the
+       flag answers is "have you been to this yet", and a reader whose tab
+       was eaten by a pop-up blocker has still been told it is there.
+       Marking an older edition is harmless — only the newest one is ever
+       asked about. */
+    LIB().markSeen(id);
+    setTimeout(paintBadge, 0);
+
     // Synchronously, inside the click — see the note at the top.
     const w = window.open('', '_blank');
     if (!w) {
@@ -276,7 +314,7 @@ window.RWG = window.RWG || {};
     title: 'Library',
     enabled: true,
     roles: ['admin', 'agent'],
-    nav: [{ view: 'library', label: 'Library', icon: 'book' }],
+    nav: [{ view: 'library', label: 'Library', icon: 'book', badge: navBadge }],
     meta: { library: { t: 'Library', s: 'The weekly brief, past editions, and agent training' } },
     state: st,
 

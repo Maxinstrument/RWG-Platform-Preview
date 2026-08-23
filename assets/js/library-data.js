@@ -102,6 +102,52 @@ RWG.library = (function () {
   // The newest edition of the brief, or null before the first one lands.
   const latestWeekly = () => (rows || []).filter(r => r.section === 'weekly')[0] || null;
 
+  /* ── Read, and how long that stays interesting ─────────────
+     Kept in localStorage, like the home layout and the morning
+     reminder: it is one person's own place in one browser, nobody else
+     needs it, and it is not worth a Firestore write per click. The cost
+     is that reading Sunday's brief at home still shows the flag at the
+     office on Monday, which is the same behaviour the daily reminder
+     already has and has never bothered anyone.
+
+     Recorded per EDITION rather than as a single "last seen" date, so
+     that next Sunday's publish raises the flag again on its own — there
+     is nothing to clear and no way to forget to clear it. */
+  const SEEN_GRACE = 24 * 60 * 60 * 1000;
+  const seenKey = () => { const u = me(); return 'rwg.lib.seen.' + ((u && u.id) || 'anon'); };
+
+  function seenMap() {
+    try { return JSON.parse(localStorage.getItem(seenKey()) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function markSeen(id) {
+    if (!id) return;
+    try {
+      const m = seenMap();
+      m[id] = Date.now();
+      /* Only the newest edition is ever asked about, so the rest is
+         history nobody reads. Trimmed to the last 40 so a weekly brief
+         cannot grow this entry without limit for years. */
+      const keys = Object.keys(m).sort((a, b) => m[b] - m[a]).slice(0, 40);
+      const keep = {};
+      keys.forEach(k => { keep[k] = m[k]; });
+      localStorage.setItem(seenKey(), JSON.stringify(keep));
+    } catch (e) { /* private windows have no localStorage; the flag just stays up */ }
+  }
+
+  /* Is the newest brief still worth flagging?
+       never opened      -> yes, however long it has been there
+       opened < 24h ago  -> yes, still this week's
+       opened > 24h ago  -> no
+     Only the weekly is asked about. Training does not arrive on a
+     schedule, so a permanent flag on it would become furniture. */
+  function isUnread() {
+    const r = latestWeekly();
+    if (!r) return false;
+    const at = seenMap()[r.id];
+    return !at || (Date.now() - at) < SEEN_GRACE;
+  }
+
   function page(id) {
     if (!db()) return Promise.reject(new Error('no database'));
     return db().collection('library_docs').doc(id).get().then(d => {
@@ -162,5 +208,6 @@ RWG.library = (function () {
 
 
   return { list, page, publish, remove, idFor, bytesOf, MAX_BYTES, SECTIONS,
-           cached, warm, latestWeekly, forget };
+           cached, warm, latestWeekly, forget,
+           markSeen, isUnread, seenMap, SEEN_GRACE };
 })();
