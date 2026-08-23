@@ -49,8 +49,8 @@ window.RWG = window.RWG || {};
   // rest. Full-width widgets keep this order among themselves; the flow
   // widgets fill the columns underneath in the order listed here.
   const DEFAULT_ON = {
-    admin: ['pace', 'funnel', 'closedmix', 'stale', 'dates', 'activity'],
-    agent: ['mytasks', 'pace', 'funnel', 'closedmix', 'stale', 'dates', 'activity']
+    admin: ['pace', 'funnel', 'closedmix', 'stale', 'dates', 'library', 'activity'],
+    agent: ['mytasks', 'pace', 'funnel', 'closedmix', 'stale', 'dates', 'library', 'activity']
   };
   // v2: the funnels became one full-width card holding all three tracks and
   // moved under the week's numbers, and "Where cases sit" went away. A saved
@@ -553,6 +553,47 @@ window.RWG = window.RWG || {};
      one of the other events — writing a case moves it to Application, and
      the feed should say "wrote", once, not "wrote" and "moved to
      Application" a second apart. */
+  /* ── This week's brief ────────────────────────────────────
+     Carlos, 22 Aug '26. The Library holds every edition; this holds the
+     one that matters on a Monday, because a sidebar entry is somewhere
+     you go when you already have a reason to and a card is something you
+     are handed.
+
+     The row carries lib-open, which the Library module owns -- actions
+     are dispatched by name across the whole app, so Home does not need
+     to know how a document is fetched or why it opens in its own tab. */
+  function wLibrary(ctx) {
+    const L = RWG.library;
+    if (!L) return '';
+    const shelf = L.cached();
+    if (!shelf) {
+      L.warm(RWG.app.renderMain);
+      return card('This week', 'The Resilient Weekly', emptyRow('Opening the Library…'));
+    }
+    const r = L.latestWeekly();
+    const go = `<button class="btn btn-quiet btn-sm" data-action="home-open" data-view="library">Library →</button>`;
+    if (!r) return card('This week', 'The Resilient Weekly',
+      emptyRow('No brief has been published yet. Sunday’s will appear here.'), go);
+
+    const fresh = r.publishedAt && (Date.now() - r.publishedAt) < 7 * dayMs;
+    const when = (function () {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.date || ''));
+      if (!m) return '';
+      return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US',
+        { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    })();
+
+    const row = `<div class="list-row lib-row" data-action="lib-open"
+        data-id="${esc(r.id)}" data-title="${esc(r.title)}" title="Open in a new tab">
+      <div class="lib-mark">${U().icon('book', 'ic-inline')}</div>
+      <div class="lib-main">
+        <div class="cell-name">${esc(r.title)}${fresh ? '<span class="lib-new">New</span>' : ''}</div>
+        <div class="cell-sub">${esc(when)}</div>
+      </div>
+    </div>`;
+    return card('This week', 'The Resilient Weekly', row, go);
+  }
+
   function wActivity(ctx) {
     const ev = [];
     const cutoff = Date.now() - 30 * dayMs;
@@ -1074,6 +1115,7 @@ window.RWG = window.RWG || {};
     { id: 'funnel',      title: 'Opportunity funnels',  render: wFunnel, full: true },
     { id: 'stale',       title: 'Needs help moving',    render: wStale },
     { id: 'dates',       title: 'Important dates',      render: wDates },
+    { id: 'library',     title: 'This week’s brief',    render: wLibrary },
     { id: 'activity',    title: 'Team activity',        render: wActivity },
     { id: 'mytasks',     title: 'My tasks today',       render: wMyTasks },
     { id: 'forecast',    title: 'Pipeline forecast',    render: wForecast },

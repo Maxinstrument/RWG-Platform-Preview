@@ -100,6 +100,7 @@ RWG.ui = (function () {
      somebody else's weight, and on Windows it renders larger and
      brighter than the navy text beside it. ─────────────────── */
   const ICON_PATHS = {
+    book:      '<path d="M12 6.6C10.6 5.1 8.6 4.5 6 4.5H3.2v13H6c2.6 0 4.6.6 6 2"/><path d="M12 6.6c1.4-1.5 3.4-2.1 6-2.1h2.8v13H18c-2.6 0-4.6.6-6 2"/><line x1="12" y1="6.6" x2="12" y2="19.5"/>',
     dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     leads:     '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/>',
     team:      '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.2 3.2 0 0 1 0 7"/><path d="M18 20c0-2.5-1-4.5-2.5-5.6"/>',

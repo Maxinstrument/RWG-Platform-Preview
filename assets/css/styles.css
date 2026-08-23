@@ -1848,3 +1848,74 @@ button.chip.cs-task:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),
 .pl-lost-chip{-webkit-appearance:none;appearance:none;font-family:inherit;cursor:pointer;}
 .pl-lost-chip:hover{border-color:var(--gold);color:var(--navy);}
 .pl-lost-chip:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--navy);}
+
+/* ============================================================
+   Library (Carlos, 22 Aug '26)
+
+   A shelf, not a table. These rows are read one at a time and chosen by
+   title and date, so they get room rather than density — the opposite
+   call from All Cases, where the whole point is scanning forty at once.
+
+   The week's brief is drawn larger than the editions under it because it
+   is the thing most people came for; everything else is an archive they
+   are glad exists.
+
+   Prefixed lib- and not lb-, which the leaderboard has owned since long
+   before this screen existed.
+   ============================================================ */
+.lib-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:14px;
+}
+.lib-blurb{color:var(--muted);font-size:12.5px;margin:0;}
+.lib-shelf{margin-bottom:16px;padding-bottom:4px;}
+.lib-shelf .card-head{margin-bottom:10px;flex-direction:column;align-items:flex-start;gap:2px;}
+
+/* The row opens the document, so it says so the way every other
+   clickable row in the app does — a quiet ground shift under the
+   cursor, not a link colour fighting the title's own weight. */
+.lib-row{
+  align-items:center;cursor:pointer;border-radius:10px;
+  transition:background .15s ease;
+}
+.lib-row:hover{background:rgba(194,161,77,.07);}
+.lib-row:last-child{border-bottom:none;}
+.lib-main{flex:1;min-width:0;}
+.lib-main .cell-name{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+.lib-mark{
+  flex:none;display:grid;place-items:center;width:34px;height:34px;
+  border-radius:9px;background:rgba(194,161,77,.12);color:var(--gold);
+}
+.lib-row-big{padding-top:var(--s3);padding-bottom:var(--s3);}
+.lib-row-big .lib-mark{width:44px;height:44px;border-radius:11px;}
+.lib-row-big .cell-name{font-size:16px;}
+.lib-row-big .lib-mark .ic{width:22px;height:22px;}
+
+/* "New" earns its colour for seven days and then stops. A badge that is
+   always on is not a badge, it is decoration. */
+.lib-new{
+  font-size:11px;font-weight:700;letter-spacing:var(--track-caps);text-transform:uppercase;
+  color:var(--navy);background:var(--gold-soft);
+  border-radius:999px;padding:2px 8px;
+}
+.lib-note{margin-top:2px;font-style:italic;}
+
+/* Remove sits inside a row that opens on click. The dispatcher takes the
+   innermost data-action, so this never opens what it is removing — but
+   it stays quiet until the row is hovered, because it is not the reason
+   anybody came to this screen. */
+.lib-del{opacity:0;transition:opacity .15s ease;}
+.lib-row:hover .lib-del,.lib-del:focus-visible{opacity:1;}
+
+.lib-over{color:var(--bad);}
+.lib-empty,.lib-foot{padding-top:var(--s2);}
+.lib-foot{margin-top:-4px;}
+
+@media (max-width:760px){
+  .lib-del{opacity:1;}          /* nothing to hover on a touchscreen */
+  .lib-bar{align-items:flex-start;flex-direction:column;}
+}
+@media (prefers-reduced-motion:reduce){
+  .lib-row,.lib-del{transition:none;}
+}
