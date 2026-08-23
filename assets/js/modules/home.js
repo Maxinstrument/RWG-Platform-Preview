@@ -64,44 +64,79 @@ window.RWG = window.RWG || {};
   // from then on obeys whatever they do with it. `seen` is what makes "once"
   // possible: without it, switching a new widget off would just turn it back
   // on at the next load.
+  /* Where a card belongs in somebody's own arrangement (22 Aug '26).
+     DEFAULT_ON is an argument about where a card reads best — "This week"
+     belongs above Team activity, not under everything — so a new one lands
+     just after whichever widget precedes it in the default order and this
+     person actually has. If none of them survive, it belongs at the top.
+     Their arrangement is never reordered, only opened up. */
+  function placeInto(list, def, id) {
+    const at = def.indexOf(id);
+    let put = 0;
+    for (let i = at - 1; i >= 0; i--) {
+      const p = list.indexOf(def[i]);
+      if (p >= 0) { put = p + 1; break; }
+    }
+    list.splice(put, 0, id);
+  }
+
+  /* Cards that were let onto the page in the wrong spot and get ONE
+     correction each. The Library shipped a few hours before placeInto()
+     existed, so every layout saved in between has "This week" appended at
+     the bottom — and once a widget is in `seen`, nothing ever places it
+     again. Lifting it out and re-placing it once fixes that; recording the
+     id in `fixes` is what stops this from becoming an annual argument with
+     anyone who deliberately drags it back down.
+
+     Only ever add an id here for a card that was placed by a BUG. Where
+     somebody put something is theirs. */
+  const REPLACE_ONCE = ['library'];
+
   function layout(user, role) {
     if (st.on) return st.on;
-    let saved = null, seen = null;
+    let saved = null, seen = null, fixes = null;
     try {
       const raw = localStorage.getItem(lsKey(user.id));
-      if (raw) { const o = JSON.parse(raw) || {}; saved = o.on || null; seen = o.seen || null; }
+      if (raw) {
+        const o = JSON.parse(raw) || {};
+        saved = o.on || null; seen = o.seen || null; fixes = o.fixes || null;
+      }
     } catch (e) {}
     const def = (DEFAULT_ON[role] || DEFAULT_ON.agent).slice();
-    if (!saved) { st.on = def; st.seen = allWidgetIds(); return st.on; }
+    if (!saved) {
+      st.on = def; st.seen = allWidgetIds(); st.fixes = REPLACE_ONCE.slice();
+      return st.on;
+    }
 
     const known = seen || [];
+    const done = fixes || [];
     const fresh = def.filter(id => known.indexOf(id) < 0 && saved.indexOf(id) < 0);
-    /* Placed, not appended (22 Aug '26). DEFAULT_ON is an argument about
-       where a card reads best — "This week" belongs above Team activity,
-       not under everything — and concat() threw that away for everyone
-       who had ever dragged a widget, which is precisely the people who
-       use this screen. So each new card lands just after whichever
-       widget precedes it in the default order and the person actually
-       has; if none of them survive, it belongs at the top. Their own
-       arrangement is never reordered, only opened up. */
     const placed = saved.slice();
-    fresh.forEach(id => {
-      const at = def.indexOf(id);
-      let put = 0;
-      for (let i = at - 1; i >= 0; i--) {
-        const p = placed.indexOf(def[i]);
-        if (p >= 0) { put = p + 1; break; }
-      }
-      placed.splice(put, 0, id);
+    fresh.forEach(id => placeInto(placed, def, id));
+
+    // the one-time corrections, for anybody who has not had them yet
+    const owed = REPLACE_ONCE.filter(id => done.indexOf(id) < 0);
+    owed.forEach(id => {
+      const at = placed.indexOf(id);
+      if (at < 0) return;              // switched off — that is a choice, leave it off
+      placed.splice(at, 1);
+      placeInto(placed, def, id);
     });
+
     st.on = placed;
     st.seen = allWidgetIds();
-    if (fresh.length || !seen) saveLayout(user);
+    st.fixes = done.concat(owed);
+    if (fresh.length || owed.length || !seen || !fixes) saveLayout(user);
     return st.on;
   }
   function saveLayout(user) {
     try {
-      localStorage.setItem(lsKey(user.id), JSON.stringify({ on: st.on, seen: st.seen || allWidgetIds() }));
+      localStorage.setItem(lsKey(user.id), JSON.stringify({
+        on: st.on,
+        seen: st.seen || allWidgetIds(),
+        // which one-time placement corrections this person has already had
+        fixes: st.fixes || []
+      }));
     } catch (e) {}
   }
 
