@@ -187,6 +187,20 @@ window.RWG = window.RWG || {};
     const latest = weekly[0];
     const earlier = weekly.slice(1);
 
+    /* The partner shelf. list() hands an agent nothing from it — the query
+       is never made — so this is empty for them and the shelf below is not
+       drawn at all. The isAdmin() guard is for the second reader: a partner
+       in "View as agent", who should see the agent's Library and not a
+       partners-only heading sitting in it.
+
+       Grouped by the week it covers rather than listed flat. Each Monday
+       publishes a pair, and by November a single list is twenty rows deep
+       with no seam between one meeting and the next. */
+    const eos = rows.filter(r => r.section === 'eos');
+    const eosWeek = eos.length ? String(eos[0].date || '') : '';
+    const eosNow = eos.filter(r => String(r.date || '') === eosWeek);
+    const eosPast = eos.filter(r => String(r.date || '') !== eosWeek);
+
     const publish = isAdmin()
       ? `<button class="btn btn-gold btn-sm" data-action="lib-publish">Publish a document</button>` : '';
 
@@ -212,6 +226,15 @@ window.RWG = window.RWG || {};
       ${shelf('Training', 'Agent courses and manuals',
         training.map(r => docRow(r)).join(''),
         'No training has been published yet.')}
+
+      ${isAdmin() ? shelf('EOS Weekly Reports',
+        'Partners only · the Monday agenda and last week’s numbers',
+        eosNow.map(r => docRow(r)).join(''),
+        'No EOS report has been published yet.') : ''}
+
+      ${isAdmin() && eosPast.length ? shelf('Earlier weeks',
+        eosPast.length + (eosPast.length === 1 ? ' report' : ' reports') + ' kept, newest first',
+        eosPast.map(r => docRow(r)).join(''), '') : ''}
 
       <p class="list-hint lib-foot">Documents open in a new tab and are readable only while you are
         signed in — they are not files on a web address anyone could reach.</p>`;
