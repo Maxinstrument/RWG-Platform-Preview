@@ -984,7 +984,14 @@ window.RWG = window.RWG || {};
       // stage move (add: from Uncovered to the chosen start; edit: if changed)
       const sel = g('op2-stage');
       const P = RWG.pipelines;
-      if (sel && sel !== P.stageForCase(row)) {
+      // Compare against what is STORED, not what the board draws. A legacy
+      // case has no stageId and stageForCase() renders it in the first stage
+      // of its bucket; the picker shows that same fallback as if it were set.
+      // Comparing to the fallback meant confirming the stage a case already
+      // appeared to be in wrote nothing, and it stayed stage-less forever.
+      // Comparing to row.stageId makes that confirmation materialise the
+      // stage, which is what the person clicking Save believes they did.
+      if (sel && sel !== row.stageId) {
         // Picking Delivery Requirements is a claim that the premium is in —
         // that is the close's door, so it walks the same path as the board's
         // push: blockers, the premium question, then the partner.

@@ -410,15 +410,48 @@ window.RWG = window.RWG || {};
     </div>`;
   }
 
+  /* ══ maintenance ═══════════════════════════════════════════
+     One-off repairs. Everything here is idempotent and reports what it
+     would touch before it touches it. */
+  function maintenanceTab() {
+    const pending = SD().isStarted()
+      ? SD().cases().filter(c => !c.stageId && c.state !== 'Closed' && c.state !== 'Lost') : [];
+    const byState = pending.reduce((m, c) => (m[c.state] = (m[c.state] || 0) + 1, m), {});
+    const detail = Object.entries(byState).map(([k, v]) => v + ' ' + k.toLowerCase()).join(', ');
+    return `<div class="card" style="padding:18px 20px;max-width:760px">
+      <h3 style="margin:0 0 6px">Write down where the board already shows a case</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">
+        Cases brought over from the old system never had a stage stored. The board still draws them —
+        an open case in the first Opened stage, a submitted one in the first Submitted stage — so they
+        look placed, but nothing was saved. That is why the funnel over-reads its first column.
+      </p>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">
+        This writes down exactly where each one is already drawn. It does not move anything, it never
+        touches a case somebody placed by hand, and running it twice changes nothing the second time.
+        The "in this stage since" date is set to when the case entered its bucket — the day it was
+        submitted, or the day it was created — so nothing looks newer than it is.
+      </p>
+      ${pending.length
+        ? `<div style="background:var(--paper,#F4F1E9);border-radius:8px;padding:11px 13px;margin-bottom:13px">
+             <b>${pending.length} case${pending.length === 1 ? '' : 's'} to stamp</b>
+             ${detail ? `<span class="muted"> — ${esc(detail)}</span>` : ''}
+           </div>
+           <button class="btn btn-gold" data-action="set-backfill-stages">Stamp ${pending.length} case${pending.length === 1 ? '' : 's'}</button>`
+        : `<p style="color:var(--good,#2f6b46);font-weight:600;margin:0">Nothing to do — every open and submitted case has a stage stored.</p>`}
+    </div>`;
+  }
+
   function screenHtml() {
     const tabs = [['pipelines', 'Pipelines'], ['workflows', 'Workflows'], ['rates', 'Rates'],
-      ['reasons', 'Lost reasons'], ['categories', 'Task categories'], ['scoring', 'Lead scoring']]
+      ['reasons', 'Lost reasons'], ['categories', 'Task categories'], ['scoring', 'Lead scoring'],
+      ['maintenance', 'Maintenance']]
       .map(t => `<button class="btn btn-sm ${st.tab === t[0] ? 'btn-navy' : 'btn-ghost'}" data-action="set-tab" data-tab="${t[0]}">${t[1]}</button>`).join('');
     const body = st.tab === 'workflows' ? workflowsTab()
       : st.tab === 'rates' ? ratesTab()
       : st.tab === 'reasons' ? reasonsTab()
       : st.tab === 'categories' ? categoriesTab()
       : st.tab === 'scoring' ? scoringTab()
+      : st.tab === 'maintenance' ? maintenanceTab()
       : pipelinesTab();
     return `<div class="flex" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">${tabs}</div>${body}`;
   }
@@ -692,6 +725,22 @@ window.RWG = window.RWG || {};
         saveDoc('workflows', d)
           .then(() => { st.dirty.w = false; st.dW = null; RWG.app.renderMain(); U().toast('Published — future launches use the new steps', true); })
           .catch(err => U().toast('Could not save: ' + err.message));
+      },
+
+      // maintenance — stamp the drawn stage onto cases that never stored one
+      'set-backfill-stages': (el) => {
+        const btn = el; if (btn) { btn.disabled = true; btn.textContent = 'Stamping…'; }
+        SD().backfillStages()
+          .then(r => {
+            RWG.app.renderMain();
+            U().toast(r.written
+              ? r.written + ' case' + (r.written === 1 ? '' : 's') + ' stamped with the stage they were already showing'
+              : 'Nothing needed stamping', true);
+          })
+          .catch(err => {
+            if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
+            U().toast('Could not stamp: ' + err.message);
+          });
       },
 
       // rates

@@ -183,6 +183,52 @@ RWG.scorecardData = (function () {
   }
 
   // ── granular pipeline moves (phase 2) ─────────────────────
+  /* ── one-off: write down where the board is already drawing a case ──
+     Migrated cases have no stageId. stageForCase() renders them in the
+     first stage of their bucket, so the board has always LOOKED right —
+     but nothing was stored, so every stage column was a guess and the
+     funnel over-read its first stage.
+
+     For these cases the drawn position IS the truth: an open case really
+     is at Uncovered, and a submitted one really is at Application. This
+     writes that down.
+
+     stageAt is NOT stamped "now". Now would be a lie and it would reset
+     the how-long-has-this-been-sitting-here clock on every case at once.
+     The moment a case entered its bucket is already known — submittedAt
+     for submitted work, createdAt for open work — so the stamp is honest
+     and aging survives.
+
+     Only ever touches cases with no stageId, so it is idempotent and it
+     can never move a case somebody placed deliberately. Closed and Lost
+     are skipped: their stage is implied by state and the close review is
+     the only writer of closedAt. */
+  function backfillStages(opts) {
+    const P = RWG.pipelines;
+    const targets = cache.cases.filter(c =>
+      !c.stageId && c.state !== 'Closed' && c.state !== 'Lost');
+    if (opts && opts.dryRun) return Promise.resolve({ count: targets.length, cases: targets });
+    if (!targets.length) return Promise.resolve({ written: 0 });
+
+    let batch = db().batch(), n = 0, written = 0;
+    const commits = [];
+    targets.forEach(c => {
+      const stageId = P.stageForCase(c);                 // the drawn position
+      const stageAt = c.state === 'Submitted'
+        ? (c.submittedAt || c.createdAt || nowISO())
+        : (c.createdAt || nowISO());
+      const row = Object.assign({}, c, { stageId: stageId, stageAt: stageAt, updatedAt: nowISO() });
+      const i = cache.cases.findIndex(x => x.recordId === c.recordId);
+      if (i >= 0) cache.cases[i] = row;
+      batch.set(db().collection('cases').doc(c.recordId), row);
+      written++;
+      if (++n === 400) { commits.push(batch.commit()); batch = db().batch(); n = 0; }
+    });
+    if (n) commits.push(batch.commit());
+    onChange();
+    return Promise.all(commits).then(() => ({ written: written }));
+  }
+
   // Move a case to a stage on its track. Entering a Submitted-bucket
   // stage stamps submittedAt exactly once — the same write-once stamp
   // the weekly numbers already run on. Moving backward never clears a
@@ -523,7 +569,7 @@ RWG.scorecardData = (function () {
     cases, casesWithMoney, casesForAgent, caseById, withMoney,
     weeks, weekFor, weeksForWeek, weekId,
     agentsConfig, agentConfig,
-    buildCase, saveCase, setCaseState, setPipelineStage, markLost, reopenCase,
+    buildCase, saveCase, setCaseState, setPipelineStage, backfillStages, markLost, reopenCase,
     pushWon, confirmClose, sendBack, deleteCase, adminSetStamps,
     saveWeek, saveDaily, saveAgentsConfig, importCase, importWeek, healNames,
     CASE_FIELDS, _cache: cache
