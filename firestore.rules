@@ -260,5 +260,27 @@ service cloud.firestore {
       allow read:  if isActive();
       allow write: if isAdmin();
     }
+
+    // ── The partners' shelf ─────────────────────────────────────
+    // The EOS weekly pack: the numbers by person, who did not file, which
+    // cases are stalled and whose desk they sit on. Management's read of
+    // the week, not the firm's — so isAdmin() to READ, not only to write.
+    //
+    // It is a SEPARATE PAIR of collections rather than a flag on a row in
+    // `library`, and that is not tidiness. Firestore refuses a list query
+    // outright if any document it could return fails the rule, and the
+    // Library fetches its whole catalogue in one query when the screen
+    // opens. Partner-only rows sitting in `library` would therefore not be
+    // hidden from an agent — they would break the Library for every agent.
+    // Kept apart, an agent's query never touches a document it cannot have.
+    //
+    // Client names still never go here. The shelf is narrower, the rule
+    // that keeps client information out of the Library is not.
+    match /library_eos/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /library_eos_docs/{id} {
+      allow read, write: if isAdmin();
+    }
   }
 }

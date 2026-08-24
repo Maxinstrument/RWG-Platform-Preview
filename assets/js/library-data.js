@@ -47,10 +47,35 @@ RWG.library = (function () {
   const MAX_BYTES = 1000000;
   const bytesOf = (s) => new Blob([String(s == null ? '' : s)]).size;
 
+  /* `admin: true` means the shelf is partners-only, and that is enforced in
+     the rules, not here. The reason it needs a SEPARATE PAIR OF COLLECTIONS
+     rather than a field on the row: Firestore denies a list query in full if
+     any document it could return fails the rule. Mixing partner-only rows
+     into `library` would not hide them from an agent — it would break the
+     whole Library screen for every agent, because the one query that fetches
+     the shelf would be refused outright.
+
+     The EOS pack is the reason this exists. It names who did not file, which
+     cases are stalled and whose desk they sit on: management's read of the
+     week, not the firm's. */
   const SECTIONS = {
     weekly:   { label: 'The Resilient Weekly', order: 1 },
-    training: { label: 'Training',             order: 2 }
+    training: { label: 'Training',             order: 2 },
+    eos:      { label: 'EOS Weekly Reports',   order: 3, admin: true }
   };
+  const adminSection = (s) => !!(SECTIONS[s] && SECTIONS[s].admin);
+
+  /* Ids carry their shelf, so every read routes without consulting the
+     catalogue first — the same derived-id trick that makes re-publishing
+     replace rather than duplicate. */
+  const EOS_PREFIX = 'eos__';
+  const isEosId = (id) => String(id || '').indexOf(EOS_PREFIX) === 0;
+  const catalogueOf = (id) => isEosId(id) ? 'library_eos' : 'library';
+  const docsOf = (id) => isEosId(id) ? 'library_eos_docs' : 'library_docs';
+
+  // Answers for the account. The rules answer again, and theirs is the one
+  // that counts — this only decides whether we bother asking.
+  const amAdmin = () => !!(RWG.auth && RWG.auth.isAdmin && RWG.auth.isAdmin());
 
   const slug = (s) => String(s || '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -59,9 +84,9 @@ RWG.library = (function () {
      re-publishing Sunday's brief after fixing a typo should replace
      Sunday's brief. */
   function idFor(section, date, title) {
-    return section === 'weekly'
-      ? 'weekly__' + String(date || '').slice(0, 10)
-      : 'training__' + slug(title);
+    if (section === 'weekly') return 'weekly__' + String(date || '').slice(0, 10);
+    if (section === 'eos')    return EOS_PREFIX + String(date || '').slice(0, 10) + '__' + slug(title);
+    return 'training__' + slug(title);
   }
 
   // ── reading ────────────────────────────────────────────────
@@ -88,8 +113,15 @@ RWG.library = (function () {
   function list(force) {
     if (!db()) return Promise.reject(new Error('no database'));
     if (rows && !force) return Promise.resolve(rows);
-    return db().collection('library').get().then(s =>
-      s.docs.map(d => Object.assign({ id: d.id }, d.data()))
+    const read = (name) => db().collection(name).get()
+      .then(s => s.docs.map(d => Object.assign({ id: d.id }, d.data())));
+    /* The partner shelf is only asked for by a partner, and a refusal is
+       swallowed rather than thrown. An agent never queries it; a partner
+       whose rules have not been pasted yet gets the ordinary shelf instead
+       of an empty screen. Availability degrades, access does not. */
+    const eos = amAdmin() ? read('library_eos').catch(() => []) : Promise.resolve([]);
+    return Promise.all([read('library'), eos])
+      .then(([open, partner]) => open.concat(partner)
         .sort((a, b) => {
           const sa = (SECTIONS[a.section] || {}).order || 9;
           const sb = (SECTIONS[b.section] || {}).order || 9;
@@ -101,6 +133,8 @@ RWG.library = (function () {
 
   // The newest edition of the brief, or null before the first one lands.
   const latestWeekly = () => (rows || []).filter(r => r.section === 'weekly')[0] || null;
+  // Home's card and the sidebar's New flag both hang off latestWeekly, which
+  // is section-scoped — so an EOS publish never raises a flag for the firm.
 
   /* ── Read, and how long that stays interesting ─────────────
      Kept in localStorage, like the home layout and the morning
@@ -150,7 +184,7 @@ RWG.library = (function () {
 
   function page(id) {
     if (!db()) return Promise.reject(new Error('no database'));
-    return db().collection('library_docs').doc(id).get().then(d => {
+    return db().collection(docsOf(id)).doc(id).get().then(d => {
       if (!d.exists) throw new Error('That document is no longer in the Library.');
       return d.data().html || '';
     });
@@ -192,8 +226,8 @@ RWG.library = (function () {
        appear on the shelf is only written once the document itself is
        safely there. The reverse order could put a title on the shelf
        with nothing behind it. */
-    return db().collection('library_docs').doc(id).set({ html: String(html), bytes: bytes })
-      .then(() => db().collection('library').doc(id).set(row))
+    return db().collection(docsOf(id)).doc(id).set({ html: String(html), bytes: bytes })
+      .then(() => db().collection(catalogueOf(id)).doc(id).set(row))
       .then(() => { forget(); return Object.assign({ id: id }, row); });
   }
 
@@ -201,13 +235,13 @@ RWG.library = (function () {
     if (!db()) return Promise.reject(new Error('no database'));
     // Catalogue first here, for the same reason: off the shelf before it
     // is off the disk, so nothing is ever listed and unreadable.
-    return db().collection('library').doc(id).delete()
-      .then(() => db().collection('library_docs').doc(id).delete())
+    return db().collection(catalogueOf(id)).doc(id).delete()
+      .then(() => db().collection(docsOf(id)).doc(id).delete())
       .then(() => forget());
   }
 
 
-  return { list, page, publish, remove, idFor, bytesOf, MAX_BYTES, SECTIONS,
+  return { list, page, publish, remove, idFor, bytesOf, MAX_BYTES, SECTIONS, adminSection,
            cached, warm, latestWeekly, forget,
            markSeen, isUnread, seenMap, SEEN_GRACE };
 })();

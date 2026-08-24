@@ -237,7 +237,10 @@ window.RWG = window.RWG || {};
           <select id="lib-section">
             <option value="weekly">The Resilient Weekly</option>
             <option value="training">Training</option>
-          </select></div>
+            <option value="eos">EOS Weekly Reports — partners only</option>
+          </select>
+          <div class="cell-sub mt-8">EOS reports go on a shelf only partners can open. Everything
+            on the other two shelves is read by the whole firm.</div></div>
         <div class="field-group"><label class="lbl">Title</label>
           <input id="lib-title" type="text" placeholder="The Resilient Weekly"></div>
         <div class="field-group"><label class="lbl">Date</label>
