@@ -761,21 +761,56 @@ RWG.app = (function () {
     U.toast('Lead added', true);
   }
 
+  /* ── Moving somebody's login to a different address ─────────
+     Two steps, and the CRM can only do the second one.
+
+     The address a person actually signs in with lives in Firebase
+     Authentication. The browser SDK can change it for the account that is
+     currently signed in and for nobody else, so no web app — this one
+     included — can move a colleague's login without a server holding admin
+     credentials. What this modal stores is the CRM's COPY: what the roster
+     displays, and where the reset link below is sent.
+
+     What it used to say was worse than saying nothing: remove the account
+     and have them re-register with the new address. Re-registering mints a
+     NEW uid, and every case (agentUid) and lead (assignedTo) still points
+     at the old one. Following that advice would have quietly orphaned a
+     producer's entire book. */
+  const firebaseUsersUrl = () =>
+    'https://console.firebase.google.com/project/' + (RWG.PROJECT_ID || '_') + '/authentication/users';
+
   function buildEditUserModal(userId) {
     const u = D.user(userId); if (!u) return '';
     const isOwner = (u.email || '').toLowerCase() === (RWG.OWNER_EMAIL || '').toLowerCase();
     return `
     <div class="scrim" data-action="close-modal"></div>
     <div class="modal-card" role="dialog" aria-label="Edit team member">
-      <div class="modal-head"><h2>Edit team member</h2><p>Update their name or send a password-reset link.</p></div>
+      <div class="modal-head"><h2>Edit team member</h2><p>Update their name, or move their login to a different email address.</p></div>
       <div class="modal-body">
         <div class="field-group"><label class="lbl">Name</label><input id="eu-name" type="text" value="${U.esc(u.name || '')}"></div>
+
         <div class="field-group"><label class="lbl">Login email</label>
-          <input type="email" value="${U.esc(u.email || '')}" disabled>
-          <div class="cell-sub mt-8">The login email is their sign-in credential and can't be changed from here. To change it, they update it themselves, or remove this account and have them re-register with the new email${isOwner ? ' (this is the owner account)' : ''}.</div></div>
+          <div class="cell-sub">Signs in today with <b>${U.esc(u.email || '—')}</b></div>
+          ${isOwner ? `<div class="cell-sub mt-8" style="color:var(--red)"><b>This is the owner account.</b>
+            Its address is also written into the security rules (<code>isOwnerEmail</code>) and into
+            <code>firebase-init.js</code> as <code>RWG.OWNER_EMAIL</code>. Changing it in Firebase and here is
+            not enough — both of those have to change as well, or the owner bootstrap and the
+            "the owner can't be removed" guard stop recognising you.</div>` : ''}
+          <div class="cell-sub mt-8"><b>Step 1.</b>
+            <button class="btn btn-ghost btn-sm" data-action="open-fb-users" data-email="${U.esc(u.email || '')}">📋 Copy address &amp; open Firebase</button></div>
+          <div class="cell-sub mt-8"><b>Step 2.</b> In <b>Authentication → Users</b>, paste it into the search box, then
+            <b>⋮ → Edit user</b>, type the new address and Save. Their password, their account id, and every case
+            and lead they own all stay exactly as they are.</div>
+          <div class="cell-sub mt-8"><b>Step 3.</b> Come back and record it here, so the CRM agrees with Firebase:</div>
+          <input id="eu-email" type="email" value="${U.esc(u.email || '')}" placeholder="name@example.com">
+          <div class="cell-sub mt-8">Typing here does not change the login. It changes what the CRM shows and where
+            the reset link below is sent — Firebase is the only place the sign-in address really lives.</div></div>
+
         <div class="field-group"><label class="lbl">Password</label>
           <button class="btn btn-ghost btn-sm" data-action="admin-reset-pass" data-email="${U.esc(u.email || '')}">✉ Send password-reset link</button>
-          <div class="cell-sub mt-8">Emails them a secure link to set a new password. (Admins can't directly set someone's password.)</div></div>
+          <div class="cell-sub mt-8">Emails a secure link to the address recorded above. If it comes back
+            "No account found", that is step 2 having been missed: the CRM and Firebase disagree about
+            where this person signs in.</div></div>
         <p class="gate-error" id="eu-err"></p>
       </div>
       <div class="modal-foot">
@@ -784,10 +819,31 @@ RWG.app = (function () {
       </div>
     </div>`;
   }
+
   function saveUser(id) {
+    const u = D.user(id);
+    const err = $('#eu-err');
+    const fail = (m) => { if (err) err.textContent = m; };
     const name = $('#eu-name') ? $('#eu-name').value.trim() : '';
-    if (!name) { const e = $('#eu-err'); if (e) e.textContent = 'Name cannot be empty.'; return; }
-    D.setUserName(id, name); closeModal(); renderMain(); U.toast('Saved', true);
+    const email = $('#eu-email') ? $('#eu-email').value.trim().toLowerCase() : '';
+    if (!name) return fail('Name cannot be empty.');
+    if (!email) return fail('Email cannot be empty — it is how they sign in.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('That does not look like an email address.');
+
+    const was = (u && (u.email || '')).toLowerCase();
+    const moved = email !== was;
+    /* Asked once, plainly, because the failure it prevents is silent from
+       here: the CRM would look right and the person would still be signing
+       in somewhere else. */
+    if (moved && !confirm('Record ' + email + ' as ' + ((u && u.name) || 'this person') + "'s email?\n\n" +
+        'This updates the CRM only. If you have not already changed it in Firebase Authentication, they will ' +
+        'still sign in with ' + (was || 'their old address') + ' and the reset link will fail.')) return;
+
+    if (name !== (u && u.name)) D.setUserName(id, name);
+    if (!moved) { closeModal(); renderMain(); U.toast('Saved', true); return; }
+    D.setUserEmail(id, email)
+      .then(() => { closeModal(); renderMain(); U.toast('Recorded — check Firebase says the same', true); })
+      .catch(e => fail((e && e.message) || 'That did not save.'));
   }
 
   const appBaseUrl = () => location.origin + location.pathname;   // e.g. https://crm.yourresilientwealth.com/
@@ -1245,6 +1301,20 @@ RWG.app = (function () {
       }
       case 'edit-user': if (RWG.auth.isAdmin()) openModal(buildEditUserModal(el.dataset.id)); break;
       case 'save-user': if (RWG.auth.isAdmin()) saveUser(el.dataset.id); break;
+      case 'open-fb-users': {
+        if (!RWG.auth.isAdmin()) break;
+        /* Tab first, inside the click. Opening it after awaiting the
+           clipboard would cost the gesture that justifies it and browsers
+           would block it as a pop-up — the same ordering the Library needs. */
+        window.open(firebaseUsersUrl(), '_blank', 'noopener');
+        const em = el.dataset.email || '';
+        if (em && navigator.clipboard && navigator.clipboard.writeText)
+          navigator.clipboard.writeText(em).then(
+            () => U.toast('Copied ' + em + ' — paste it into the Firebase search box', true),
+            () => U.toast('Search Firebase for ' + em));
+        else if (em) U.toast('Search Firebase for ' + em);
+        break;
+      }
       case 'admin-reset-pass': {
         if (!RWG.auth.isAdmin()) break;
         const email = el.dataset.email;

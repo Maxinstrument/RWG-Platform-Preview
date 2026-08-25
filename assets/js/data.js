@@ -178,6 +178,20 @@ RWG.data = (function () {
       const u = cache.users.find(x => x.id === id); if (u) { u.name = name; onChange(); }
       db().collection('users').doc(id).update({ name: name }).catch(e => console.error('rename:', e));
     },
+    /* The CRM's COPY of the sign-in address — not the address itself, which
+       lives in Firebase Authentication and cannot be written from a browser
+       for anyone but yourself. This is what the roster shows and where the
+       admin reset link is sent; buildEditUserModal() is explicit that
+       Firebase has to be changed too, and in that order.
+
+       Returns the promise, unlike its neighbours: a rename that fails
+       quietly is a cosmetic annoyance, an email that fails quietly leaves
+       the roster pointing somewhere nobody can sign in. */
+    setUserEmail(id, email) {
+      email = String(email || '').trim().toLowerCase();
+      const u = cache.users.find(x => x.id === id); if (u) { u.email = email; onChange(); }
+      return db().collection('users').doc(id).update({ email: email });
+    },
 
     // ── reads ──
     leads: () => cache.leads.map(withScore),
