@@ -326,6 +326,40 @@ RWG.tasks = (function () {
     return persist(t).then(() => spawned);
   }
 
+  /* ── Move every task off a profile that no longer signs in ──
+     Somebody who re-registers under a new email gets a NEW uid, and their
+     tasks keep pointing at the old one. Nothing looks wrong from across the
+     room: the row still reads the right name, because assigneeName is
+     stored beside the uid. But "Assigned to me" matches on the uid, so the
+     person sees none of their own work — and the task window cannot repair
+     it either, since its assignee list offers active profiles only and the
+     dead one it is bound to is not in the dropdown.
+
+     Both fields move together. Moving the uid and leaving the name would
+     trade an invisible break for a visible lie.
+
+     createdBy and doneBy stay where they are, deliberately. Those record
+     who did a thing, which is history; assigneeUid records who still has
+     to do it, which is the only part that is wrong. */
+  function reassign(fromUid, toUid, toName) {
+    if (!fromUid || !toUid || fromUid === toUid) return Promise.resolve({ moved: 0, open: 0 });
+    const mine = cache.tasks.filter(t => t.assigneeUid === fromUid);
+    if (!mine.length) return Promise.resolve({ moved: 0, open: 0 });
+    const stamp = now();
+    const chunks = [];                      // a Firestore batch caps at 500
+    for (let i = 0; i < mine.length; i += 400) chunks.push(mine.slice(i, i + 400));
+    return chunks.reduce((p, ch) => p.then(() => {
+      const b = db().batch();
+      ch.forEach(t => b.update(db().collection('tasks').doc(t.id),
+        { assigneeUid: toUid, assigneeName: toName || '', updatedAt: stamp }));
+      return b.commit();
+    }), Promise.resolve()).then(() => {
+      mine.forEach(t => { t.assigneeUid = toUid; t.assigneeName = toName || ''; t.updatedAt = stamp; });
+      onChange();
+      return { moved: mine.length, open: mine.filter(t => t.status === 'open').length };
+    });
+  }
+
   function removeTask(id) {   // admin only (rules)
     const t = task(id);
     cache.tasks = cache.tasks.filter(x => x.id !== id);
@@ -338,7 +372,7 @@ RWG.tasks = (function () {
   return {
     init, teardown, isStarted,
     all, task, open, openFor, groupByDue, dueCount, doneThisWeek, todayKey,
-    addTask, saveTask, toggleDone, removeTask,
+    addTask, saveTask, toggleDone, removeTask, reassign,
     categories, addCategory, CATEGORY_MAX,
     nextDue, DEFAULT_CATEGORIES, PRIORITIES, REPEATS,
     repairCategories,   // the retired-word migration, exposed so it can be pinned

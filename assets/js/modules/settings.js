@@ -32,6 +32,7 @@ window.RWG = window.RWG || {};
   const SD = () => RWG.scorecardData;
   const SC = () => RWG.scorecard;
   const D  = () => RWG.data;
+  const T  = () => RWG.tasks;
   const U  = () => RWG.ui;
   const esc = (s) => U().esc(s);
 
@@ -413,12 +414,67 @@ window.RWG = window.RWG || {};
   /* ══ maintenance ═══════════════════════════════════════════
      One-off repairs. Everything here is idempotent and reports what it
      would touch before it touches it. */
+  /* Work still bound to a profile that cannot sign in. This is what a
+     re-registration leaves behind: Firebase issues a NEW uid for the new
+     address, and everything already pointing at the old one keeps pointing
+     there. Nothing in the ordinary screens can put it right — the assignee
+     picker offers active profiles only, so the dead one is not even in the
+     list to select away from. */
+  function strandedProfiles() {
+    if (!T().isStarted()) return [];
+    const users = D().users();
+    const tasks = T().all();
+    return users.filter(u => u.status !== 'active').map(u => {
+      const held = tasks.filter(t => t.assigneeUid === u.id);
+      return {
+        u: u, held: held,
+        open: held.filter(t => t.status === 'open').length,
+        // Same name, still here — nearly always the account they came back on.
+        twin: users.find(x => x.status === 'active' && x.name === u.name) || null
+      };
+    }).filter(r => r.held.length);
+  }
+
+  function strandedCard() {
+    const rows = strandedProfiles();
+    if (!rows.length) return '';
+    const actives = D().users().filter(u => u.status === 'active');
+    return `<div class="card" style="padding:18px 20px;max-width:760px;margin-bottom:16px">
+      <h3 style="margin:0 0 6px">Tasks left behind by a closed profile</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">
+        When somebody re-registers under a different email, Firebase gives them a brand new account id.
+        Their old tasks keep pointing at the old one. The rows still show the right name — that is stored
+        beside the id — so nothing looks broken, but <b>“Assigned to me” matches on the id</b>, and they
+        see none of their own work.
+      </p>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">
+        This cannot be fixed by opening a task: the assignee list only offers people who can still sign in,
+        so the closed profile it is bound to is not in the dropdown to change away from.
+      </p>
+      ${rows.map(r => `<div style="background:var(--paper,#F4F1E9);border-radius:8px;padding:11px 13px;margin-bottom:11px">
+        <b>${esc(r.u.name)}</b> <span class="muted">— ${esc(r.u.email || 'no email')}, ${esc(r.u.status)}</span><br>
+        <span style="font-size:13px">holds <b>${r.held.length} task${r.held.length === 1 ? '' : 's'}</b>${r.open ? ', ' + r.open + ' still open' : ', all done'}</span>
+        <div class="flex" style="gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
+          <span class="muted" style="font-size:13px">move them to</span>
+          <select id="mv-${esc(r.u.id)}">
+            ${actives.map(a => `<option value="${esc(a.id)}" ${r.twin && a.id === r.twin.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-gold btn-sm" data-action="set-move-tasks" data-from="${esc(r.u.id)}">Move ${r.held.length} task${r.held.length === 1 ? '' : 's'}</button>
+        </div>
+      </div>`).join('')}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">
+        Only who the task is <i>assigned to</i> moves. Who created it and who ticked it off stay as they were —
+        that is history, and it was never wrong.
+      </p>
+    </div>`;
+  }
+
   function maintenanceTab() {
     const pending = SD().isStarted()
       ? SD().cases().filter(c => !c.stageId && c.state !== 'Closed' && c.state !== 'Lost') : [];
     const byState = pending.reduce((m, c) => (m[c.state] = (m[c.state] || 0) + 1, m), {});
     const detail = Object.entries(byState).map(([k, v]) => v + ' ' + k.toLowerCase()).join(', ');
-    return `<div class="card" style="padding:18px 20px;max-width:760px">
+    return strandedCard() + `<div class="card" style="padding:18px 20px;max-width:760px">
       <h3 style="margin:0 0 6px">Write down where the board already shows a case</h3>
       <p class="muted" style="font-size:13px;margin:0 0 12px">
         Cases brought over from the old system never had a stage stored. The board still draws them —
@@ -725,6 +781,32 @@ window.RWG = window.RWG || {};
         saveDoc('workflows', d)
           .then(() => { st.dirty.w = false; st.dW = null; RWG.app.renderMain(); U().toast('Published — future launches use the new steps', true); })
           .catch(err => U().toast('Could not save: ' + err.message));
+      },
+
+      // maintenance — hand a closed profile's tasks to the account they came back on
+      'set-move-tasks': (el) => {
+        const from = el.dataset.from;
+        const sel = document.getElementById('mv-' + from);
+        const to = sel ? sel.value : '';
+        const dest = to ? D().user(to) : null;
+        const held = T().all().filter(t => t.assigneeUid === from);
+        const gone = D().user(from);
+        if (!dest || !held.length) return;
+        if (!confirm('Move ' + held.length + ' task' + (held.length === 1 ? '' : 's') + ' from ' +
+          ((gone && gone.name) || 'that profile') + ' to ' + dest.name + '?\n\n' +
+          'They appear under "Assigned to me" for ' + dest.name.split(' ')[0] + ' straight away. ' +
+          'Nothing else about the tasks changes.')) return;
+        const btn = el; if (btn) { btn.disabled = true; btn.textContent = 'Moving…'; }
+        T().reassign(from, to, dest.name)
+          .then(r => {
+            RWG.app.renderMain();
+            U().toast(r.moved + ' task' + (r.moved === 1 ? '' : 's') + ' moved to ' + dest.name +
+              (r.open ? ' — ' + r.open + ' still open' : ''), true);
+          })
+          .catch(err => {
+            if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
+            U().toast('Could not move them: ' + err.message);
+          });
       },
 
       // maintenance — stamp the drawn stage onto cases that never stored one
