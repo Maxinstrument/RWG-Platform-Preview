@@ -20,10 +20,6 @@ window.RWG = window.RWG || {};
   // The master/owner account — signs in with full admin access automatically.
   RWG.OWNER_EMAIL = "temperan.carlos@gmail.com";
 
-  // Taken from the config above rather than typed again, so the console link
-  // on the Team screen cannot drift from the project the app is talking to.
-  RWG.PROJECT_ID = firebaseConfig.projectId;
-
   if (!window.firebase || !firebase.initializeApp) {
     console.error("Firebase SDK failed to load — check your internet connection.");
     RWG.fb = null;

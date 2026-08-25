@@ -776,8 +776,6 @@ RWG.app = (function () {
      NEW uid, and every case (agentUid) and lead (assignedTo) still points
      at the old one. Following that advice would have quietly orphaned a
      producer's entire book. */
-  const firebaseUsersUrl = () =>
-    'https://console.firebase.google.com/project/' + (RWG.PROJECT_ID || '_') + '/authentication/users';
 
   function buildEditUserModal(userId) {
     const u = D.user(userId); if (!u) return '';
@@ -791,17 +789,22 @@ RWG.app = (function () {
 
         <div class="field-group"><label class="lbl">Login email</label>
           <div class="cell-sub">Signs in today with <b>${U.esc(u.email || '—')}</b></div>
+          <div class="cell-sub mt-8">The sign-in address lives in Firebase Authentication, not in the CRM. No web page
+            can change it for somebody else — that needs an admin credential, and a credential inside a browser is a
+            credential everyone has. The Firebase console cannot edit it either; its ⋮ menu only resets, disables
+            and deletes.</div>
           ${isOwner ? `<div class="cell-sub mt-8" style="color:var(--red)"><b>This is the owner account.</b>
             Its address is also written into the security rules (<code>isOwnerEmail</code>) and into
             <code>firebase-init.js</code> as <code>RWG.OWNER_EMAIL</code>. Changing it in Firebase and here is
             not enough — both of those have to change as well, or the owner bootstrap and the
             "the owner can't be removed" guard stop recognising you.</div>` : ''}
-          <div class="cell-sub mt-8"><b>Step 1.</b>
-            <button class="btn btn-ghost btn-sm" data-action="open-fb-users" data-email="${U.esc(u.email || '')}">📋 Copy address &amp; open Firebase</button></div>
-          <div class="cell-sub mt-8"><b>Step 2.</b> In <b>Authentication → Users</b>, paste it into the search box, then
-            <b>⋮ → Edit user</b>, type the new address and Save. Their password, their account id, and every case
-            and lead they own all stay exactly as they are.</div>
-          <div class="cell-sub mt-8"><b>Step 3.</b> Come back and record it here, so the CRM agrees with Firebase:</div>
+          <div class="cell-sub mt-8"><b>Step 1.</b> Run the tool in <code>EOS Second Brain\_Tools</code>:</div>
+          <div class="cell-sub"><code>node rwg-set-email.js ${U.esc(u.email || 'old@address')} new@address.com --yes</code>
+            <button class="btn btn-ghost btn-sm" data-action="copy-text" data-text="node rwg-set-email.js ${U.esc(u.email || 'old@address')} new@address.com --yes">📋 Copy</button></div>
+          <div class="cell-sub mt-8">Without <code>--yes</code> it shows what it would do and changes nothing. Their
+            password, their account id, and every case and lead they own are untouched — only the address moves.</div>
+          <div class="cell-sub mt-8"><b>Step 2.</b> Only if the tool reported it could not update the CRM copy,
+            record the new address here:</div>
           <input id="eu-email" type="email" value="${U.esc(u.email || '')}" placeholder="name@example.com">
           <div class="cell-sub mt-8">Typing here does not change the login. It changes what the CRM shows and where
             the reset link below is sent — Firebase is the only place the sign-in address really lives.</div></div>
@@ -1301,18 +1304,11 @@ RWG.app = (function () {
       }
       case 'edit-user': if (RWG.auth.isAdmin()) openModal(buildEditUserModal(el.dataset.id)); break;
       case 'save-user': if (RWG.auth.isAdmin()) saveUser(el.dataset.id); break;
-      case 'open-fb-users': {
-        if (!RWG.auth.isAdmin()) break;
-        /* Tab first, inside the click. Opening it after awaiting the
-           clipboard would cost the gesture that justifies it and browsers
-           would block it as a pop-up — the same ordering the Library needs. */
-        window.open(firebaseUsersUrl(), '_blank', 'noopener');
-        const em = el.dataset.email || '';
-        if (em && navigator.clipboard && navigator.clipboard.writeText)
-          navigator.clipboard.writeText(em).then(
-            () => U.toast('Copied ' + em + ' — paste it into the Firebase search box', true),
-            () => U.toast('Search Firebase for ' + em));
-        else if (em) U.toast('Search Firebase for ' + em);
+      case 'copy-text': {
+        const txt = el.dataset.text || '';
+        if (txt && navigator.clipboard && navigator.clipboard.writeText)
+          navigator.clipboard.writeText(txt).then(() => U.toast('Copied', true), () => U.toast(txt));
+        else if (txt) U.toast(txt);
         break;
       }
       case 'admin-reset-pass': {
