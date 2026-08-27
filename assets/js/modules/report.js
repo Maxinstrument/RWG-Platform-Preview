@@ -82,6 +82,32 @@ window.RWG = window.RWG || {};
     return '';
   }
 
+  /* What a product is, in the terms that decide its numbers: the one figure
+     an agent types for it, how revenue is derived from that figure, and
+     whether it carries FYC, premium credit and the Club. Composed from
+     INPUTS and the product sets for the same reason metricWhy is — a rate
+     restated in prose is a rate that goes quietly wrong. */
+  function productWhy(id) {
+    const sc = S();
+    const inp = sc.inputFor(id);
+    const out = ['On a ' + sc.productName(id) + ' case the agent enters one number — '
+      + String(inp.label).toLowerCase() + ' — and everything else is derived from it.'];
+    if (id === 'annuity') out.push('Revenue is ' + pctOf(sc.ANNUITY_REVENUE_RATE) + ' of that deposit.');
+    else if (id === 'inv') out.push('Revenue is ' + pctOf(sc.INVESTMENT_REVENUE_RATE) + ' of those assets.');
+    else out.push('The number entered IS the revenue — no rate is applied.');
+    if (sc.PREMIUM_PRODUCTS.indexOf(id) >= 0)
+      out.push('It carries FYC and premium credit: annualized premium is that amount divided by '
+        + pctOf(sc.COMMISSION_RATE) + '.');
+    else
+      out.push('It carries no FYC and no premium credit, so it adds nothing to either of those rows.');
+    out.push(sc.countsForClub(id)
+      ? 'It counts toward the Chairman\u2019s Club.'
+      : 'It does not count toward the Chairman\u2019s Club.');
+    if (!sc.placedOn(id)) out.push('There is no "amount placed" on this product — the client places money '
+      + 'only into an annuity or an investment account, so that column reads "—" here.');
+    return out.join(' ');
+  }
+
   /* One bucket per case per week, and the furthest milestone wins — which is
      why a case that opened AND closed in the same week appears only under
      Closed, and why the three columns never double-count each other. */
@@ -207,10 +233,12 @@ window.RWG = window.RWG || {};
       : `<td class="num muted">·</td>`;
     const tr = order.map(id => {
       const p = byP[id];
-      return `<tr><td>${esc(sc.productName(id))}</td>${cell(p.o, id, 'Opened')}${cell(p.s, id, 'Submitted')}${cell(p.cl, id, 'Closed')}
+      return `<tr><td class="rp-click" data-action="rp-drill" data-who="${esc(who)}" data-bucket="all" data-product="${esc(id)}"${coAttr}
+          title="What this product counts, and every case in it"><span class="rp-n">${esc(sc.productName(id))}</span></td>${cell(p.o, id, 'Opened')}${cell(p.s, id, 'Submitted')}${cell(p.cl, id, 'Closed')}
         <td class="num rp-click" data-action="rp-drill" data-who="${esc(who)}" data-bucket="all" data-product="${esc(id)}" data-metric="rev"${coAttr}><span class="rp-n">${money(p.rev)}</span></td></tr>`;
     }).join('');
-    return `<div class="card"><div class="card-head"><h3>Product mix</h3><span class="sub">Click a figure for the cases</span></div>
+    return `<div class="card"><div class="card-head"><h3>Product mix</h3>
+        <span class="sub">Click a figure for its cases, or a product name for what it counts</span></div>
       <div class="table-wrap"><table class="data"><thead><tr><th>Product</th><th class="num">Opened</th><th class="num">Submitted</th><th class="num">Closed</th><th class="num">Revenue</th></tr></thead><tbody>${tr}</tbody></table></div></div>`;
   }
 
@@ -391,6 +419,29 @@ window.RWG = window.RWG || {};
      Rows carry the cases module's own cs-open — actions are resolved by name
      across every module, not per screen, so this opens the real case window
      rather than a second, thinner copy of it living here. */
+  /* Who worked the case. The OWNER is whose scorecard it counts on, and it
+     is read from the roster rather than from the name stored on the case —
+     the same reason the rest of this screen does. Co-credited teammates
+     follow, and they are why a case can appear on somebody's own view
+     without appearing on their row in the by-agent table.
+
+     Worth showing on every list here: the by-agent table answers "whose
+     number is this", but the moment a figure is opened the next question is
+     "who was actually on it", and the two are genuinely different. */
+  function agentsOf(c) {
+    const owner = nameFor(caseKey(c), c.agentName);
+    const co = S().coCredit(c).filter(nm => nm && nm !== owner);
+    return { owner: owner, co: co };
+  }
+  function agentsCell(c) {
+    const a = agentsOf(c);
+    const title = a.co.length
+      ? a.owner + ' owns this case; ' + a.co.join(' and ') + ' co-credited'
+      : a.owner + ' owns this case';
+    return `<td title="${esc(title)}">${esc(a.owner)}${
+      a.co.length ? `<span class="muted"> + ${esc(a.co.join(', '))}</span>` : ''}</td>`;
+  }
+
   function caseTable(list, label, m) {
     if (!list.length) return '';
     const sc = S();
@@ -399,6 +450,7 @@ window.RWG = window.RWG || {};
       <tr class="rp-click" data-action="cs-open" data-id="${esc(c.recordId || c._id || c.id || '')}" title="Open this case">
         <td>${esc(c.clientName || '(no name)')}</td>
         <td>${esc(sc.productName(c.product))}</td>
+        ${agentsCell(c)}
         <td class="num">${sc.placed(c) == null ? '—' : money(sc.placed(c))}</td>
         <td class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</td>
         <td class="num">${money(sc.deriveCase(c).revenue)}</td>
@@ -408,7 +460,7 @@ window.RWG = window.RWG || {};
       ? `<div class="card-head" style="margin:18px 0 10px"><h3 style="font-size:15px">${esc(label)}</h3><span class="sub">${list.length}</span></div>`
       : '';
     return head + `<div class="table-wrap"><table class="data">
-      <thead><tr><th>Client</th><th>Product</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th>${extra}</tr></thead>
+      <thead><tr><th>Client</th><th>Product</th><th>Agents</th><th class="num">Amount / AUM</th><th class="num">Ann. premium</th><th class="num">Revenue</th>${extra}</tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
 
@@ -432,6 +484,7 @@ window.RWG = window.RWG || {};
         <p>${esc(String(list.length))} case${list.length === 1 ? '' : 's'} ${esc(what)} by ${esc(whoLabel)} in the week ending ${esc(week)}${total != null ? ' · ' + money(total) : ''}</p></div>
       <div class="modal-body">
         <div class="rp-why">
+          ${product ? `<p><b>${esc(sc.productName(product))}.</b> ${esc(productWhy(product))}</p>` : ''}
           ${m ? `<p><b>${esc(m.label)}.</b> ${esc(metricWhy(m))}</p>` : ''}
           <p><b>Which cases are here.</b> ${esc(bucketWhy(bucket, week))}${
             co ? ' Cases this person is co-credited on are included, as they are in the cards above.'
