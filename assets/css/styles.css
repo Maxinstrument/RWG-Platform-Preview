@@ -1235,6 +1235,12 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 .rp-click:hover .rp-n{text-decoration:underline;text-underline-offset:3px;}
 tr.rp-click:hover td:first-child{color:var(--navy);}
 .rp-drill-sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;}
+/* The rule behind the number, above the list it produced. */
+.rp-why{background:var(--field);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px 14px;margin:0 0 16px;}
+.rp-why p{color:var(--ink);font-size:13px;line-height:1.55;margin:0;}
+.rp-why p + p{margin-top:8px;}
+.rp-why b{color:var(--navy);}
 .rp-club-num{font-family:'Fraunces',serif;font-size:34px;color:var(--navy);margin:6px 0 10px;}
 
 /* ── All Cases browser ───────────────────────────────────── */

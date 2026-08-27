@@ -49,6 +49,52 @@ window.RWG = window.RWG || {};
   ];
   const metricBy = (id) => METRICS.filter(m => m.id === id)[0] || null;
 
+  /* ── Why these cases, and why this number ───────────────────
+     Carlos asked to be able to see "what determines those cases showing".
+     Two separate rules decide it, and neither is visible on the page:
+     which cases are in the week at all, and which of them a given metric
+     counts anything for.
+
+     Both explanations are COMPOSED from the live config — the rates, the
+     product sets, the commission rate — rather than written out in prose.
+     A sentence that repeats a number is a sentence that goes stale the
+     first time the number changes, and this one would go stale silently. */
+  const pctOf = (r) => String(Number((r * 100).toFixed(3))) + '%';
+  const prodList = (ids) => ids.map(id => S().productName(id)).join(', ');
+
+  function metricWhy(m) {
+    const sc = S();
+    if (m.id === 'ann') return 'The annual premium the client pays — the amount entered divided by the '
+      + pctOf(sc.COMMISSION_RATE) + ' commission rate. Only ' + prodList(sc.PREMIUM_PRODUCTS)
+      + ' carry premium credit; every other product contributes nothing to this figure.';
+    if (m.id === 'fyc') return 'First-year commission — the amount entered, as typed, on '
+      + prodList(sc.FYC_PRODUCTS) + ' only. LTC is deliberately excluded, and annuities, '
+      + 'investments and financial plans have no FYC.';
+    if (m.id === 'rev') return 'What the firm actually earns: an annuity pays '
+      + pctOf(sc.ANNUITY_REVENUE_RATE) + ' of the deposit, an investment '
+      + pctOf(sc.INVESTMENT_REVENUE_RATE) + ' of the assets, and on '
+      + prodList(sc.FYC_PRODUCTS) + ', LTC and financial plans the amount entered IS the revenue. '
+      + 'A case carrying its own rate overrides these.';
+    if (m.id === 'aum') return 'Assets brought in, as entered on the case. Investment cases record '
+      + 'assets instead of an amount, so in practice this figure is theirs alone.';
+    if (m.id === 'dep') return 'The deposit on annuity cases only — the amount entered. It is the '
+      + 'money placed, not the money earned; the revenue row shows the ' + pctOf(sc.ANNUITY_REVENUE_RATE) + ' on it.';
+    return '';
+  }
+
+  /* One bucket per case per week, and the furthest milestone wins — which is
+     why a case that opened AND closed in the same week appears only under
+     Closed, and why the three columns never double-count each other. */
+  function bucketWhy(bucket, week) {
+    const base = 'A case counts once in a week, under the furthest milestone it reached that week: '
+      + 'closed beats submitted beats opened. Weeks run to the Friday, ' + week + '.';
+    if (bucket === 'all') return base + ' This list is every case that reached any of the three.';
+    if (bucket === 'Closed') return base + ' These closed in the week — whenever they were opened.';
+    if (bucket === 'Submitted') return base + ' These were submitted in the week and had not closed by the Friday.';
+    if (bucket === 'Opened') return base + ' These were opened in the week and neither submitted nor closed within it.';
+    return base;
+  }
+
   const BUCKETS = ['Opened', 'Submitted', 'Closed'];
 
   /* The cases behind a number. Same filter the totals use, so what opens is
@@ -132,12 +178,13 @@ window.RWG = window.RWG || {};
          title="Open the ${bucket === 'all' ? '' : bucket.toLowerCase() + ' '}cases behind this"><span class="rp-n">${money(val)}</span></td>`;
     const tr = METRICS.map(m => {
       const o = sum(b.Opened, m.fn), s = sum(b.Submitted, m.fn), cl = sum(b.Closed, m.fn);
-      return `<tr><td>${m.label}</td>${cell(o, 'Opened', m)}${cell(s, 'Submitted', m)}${cell(cl, 'Closed', m)}
+      return `<tr><td class="rp-click" data-action="rp-drill" data-who="${esc(who)}" data-bucket="all" data-metric="${m.id}"${coAttr}
+          title="What this figure counts, and every case in it"><span class="rp-n">${m.label}</span></td>${cell(o, 'Opened', m)}${cell(s, 'Submitted', m)}${cell(cl, 'Closed', m)}
         <td class="num rp-click" data-action="rp-drill" data-who="${esc(who)}" data-bucket="all" data-metric="${m.id}"${coAttr}
           title="Open every case behind this"><b class="rp-n">${money(o + s + cl)}</b></td></tr>`;
     }).join('');
     return `<div class="card"><div class="card-head"><h3>This week at a glance</h3>
-        <span class="sub">Click any figure to see the cases behind it</span></div>
+        <span class="sub">Click a figure for its cases, or a metric name for what it counts</span></div>
       <div class="table-wrap"><table class="data"><thead><tr><th>Metric</th><th class="num">Opened</th><th class="num">Submitted</th><th class="num">Closed</th><th class="num">Total</th></tr></thead><tbody>${tr}</tbody></table></div></div>`;
   }
 
@@ -384,10 +431,16 @@ window.RWG = window.RWG || {};
       <div class="modal-head"><h2>${esc(prodLabel + title)}</h2>
         <p>${esc(String(list.length))} case${list.length === 1 ? '' : 's'} ${esc(what)} by ${esc(whoLabel)} in the week ending ${esc(week)}${total != null ? ' · ' + money(total) : ''}</p></div>
       <div class="modal-body">
+        <div class="rp-why">
+          ${m ? `<p><b>${esc(m.label)}.</b> ${esc(metricWhy(m))}</p>` : ''}
+          <p><b>Which cases are here.</b> ${esc(bucketWhy(bucket, week))}${
+            co ? ' Cases this person is co-credited on are included, as they are in the cards above.'
+               : (who !== '__team__' ? ' Counted by owner — co-credited cases sit on the owner\u2019s row.' : '')}</p>
+        </div>
         ${list.length
           ? caseTable(list, null, m) + `<p class="rp-drill-sub" style="margin:12px 0 0">Click any row to open the case.</p>`
           : `<div class="empty" style="padding:26px"><div class="ec">🗂</div><h3>Nothing here</h3>
-               <p>No case matched that figure for this week.</p></div>`}
+               <p>No case reached that milestone in this week.</p></div>`}
       </div>
       <div class="modal-foot"><span class="topbar-spacer"></span>
         <button class="btn btn-gold" data-action="close-modal">Close</button></div>
