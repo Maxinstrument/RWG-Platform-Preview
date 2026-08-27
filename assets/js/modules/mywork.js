@@ -197,6 +197,11 @@ window.RWG = window.RWG || {};
             title="Moves to the Trash — a partner can restore it">Delete</button>` : ''}
           <span class="topbar-spacer"></span>
           <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+          ${t ? (t.status === 'done'
+            ? `<button class="btn btn-quiet" data-action="tk-save-done" data-id="${esc(t.id)}"
+                 title="Keeps your changes and puts it back on the list">↺ Reopen</button>`
+            : `<button class="btn btn-navy" data-action="tk-save-done" data-id="${esc(t.id)}"
+                 title="Saves what you have typed and ticks it off — no need to close and find it again">✓ Complete</button>`) : ''}
           <button class="btn btn-gold" data-action="tk-save" ${t ? `data-id="${esc(t.id)}"` : ''}>${t ? 'Save' : 'Add task'}</button>
         </div>
       </div>`;
@@ -518,6 +523,47 @@ window.RWG = window.RWG || {};
     </div>`;
   }
 
+  /* Reading the window, shared by Save and by Complete.
+
+     Complete has to write what was typed BEFORE it changes the status. The
+     note somebody just finished writing is the single most losable thing in
+     this box, and it is the whole reason the button exists: you write down
+     what happened on the call, and then you want to tick the thing off.
+     Making them two journeys is how notes go missing.
+
+     Returns null when the window is not answerable, having already said so. */
+  function readTaskFields(el) {
+    const title = g('tk-title').trim();
+    if (!title) { U().toast('What needs doing?'); return null; }
+    if (!U().pickerSettle('tk-rel')) return null;   // a typed-but-unchosen name is not an answer
+    const uid = g('tk-assignee');
+    const u = D().user(uid) || RWG.auth.currentUser();
+    // The select says what this is about; everything else is derived.
+    // A lead pointer has no entry in the list (leads are worked in their
+    // own screen), so an untouched select must not silently detach one.
+    const t0 = el.dataset.id ? T().task(el.dataset.id) : null;
+    const picked = U().pickerValue('tk-rel');
+    const keepLead = t0 && t0.relatedType === 'lead' && !picked.type;
+    const r = keepLead
+      ? { type: 'lead', id: t0.relatedId, label: t0.relatedLabel || '',
+          contactId: t0.contactId || null, householdId: t0.householdId || null }
+      : U().pickResolve(picked.type, picked.id);
+    return {
+      title: title, note: U().noteRead('tk-note'),
+      assigneeUid: uid || u.id, assigneeName: u.name || '',
+      dueDate: g('tk-due') || T().todayKey(),
+      category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
+      relatedType: r.type, relatedId: r.id, relatedLabel: r.label,
+      // Who it is for. An opportunity not yet linked to a person keeps
+      // whoever the task already knew — the person you opened it from —
+      // rather than losing them. Re-pointing at a household clears it,
+      // because a household task is nobody's in particular.
+      contactId: r.contactId
+        || (r.type === 'case' ? (g('tk-relcontact') || (t0 && t0.contactId) || null) : null),
+      householdId: r.householdId || null
+    };
+  }
+
   RWG.modules.register({
     id: 'mywork',
     title: 'Tasks',
@@ -695,41 +741,52 @@ window.RWG = window.RWG || {};
         U().toast('Moved to the Trash — restorable from there', true);
       },
       'tk-save': (el) => {
-        const title = g('tk-title').trim();
-        if (!title) { U().toast('What needs doing?'); return; }
-        if (!U().pickerSettle('tk-rel')) return;   // a typed-but-unchosen name is not an answer
-        const uid = g('tk-assignee');
-        const u = D().user(uid) || RWG.auth.currentUser();
-        // The select says what this is about; everything else is derived.
-        // A lead pointer has no entry in the list (leads are worked in their
-        // own screen), so an untouched select must not silently detach one.
-        const t0 = el.dataset.id ? T().task(el.dataset.id) : null;
-        const picked = U().pickerValue('tk-rel');
-        const keepLead = t0 && t0.relatedType === 'lead' && !picked.type;
-        const r = keepLead
-          ? { type: 'lead', id: t0.relatedId, label: t0.relatedLabel || '',
-              contactId: t0.contactId || null, householdId: t0.householdId || null }
-          : U().pickResolve(picked.type, picked.id);
-        const fields = {
-          title: title, note: U().noteRead('tk-note'),
-          assigneeUid: uid || u.id, assigneeName: u.name || '',
-          dueDate: g('tk-due') || T().todayKey(),
-          category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
-          relatedType: r.type, relatedId: r.id, relatedLabel: r.label,
-          // Who it is for. An opportunity not yet linked to a person keeps
-          // whoever the task already knew — the person you opened it from —
-          // rather than losing them. Re-pointing at a household clears it,
-          // because a household task is nobody's in particular.
-          contactId: r.contactId
-            || (r.type === 'case' ? (g('tk-relcontact') || (t0 && t0.contactId) || null) : null),
-          householdId: r.householdId || null
-        };
+        const fields = readTaskFields(el);
+        if (!fields) return;
         if (el.dataset.id) T().saveTask(Object.assign({ id: el.dataset.id }, fields));
         else T().addTask(fields);
         closeTop();
         if (RWG.refreshOppSteps) RWG.refreshOppSteps();   // the window underneath follows
         RWG.app.renderMain();
         U().toast(el.dataset.id ? 'Saved' : 'Task added — it is on ' + (fields.assigneeName || 'their') + "'s list", true);
+      },
+      /* Write it down and tick it off, in one press.
+         Carlos, 25 Aug '26: "I put the notes and I want to complete it, I
+         don't have a Complete option until I leave the window and check the
+         box."
+
+         The save always happens first, and it happens even when the tick
+         cannot — a chained step whose predecessor is still open refuses to
+         complete, and refusing to keep what was typed as well would punish
+         somebody for writing a good note. So: save, then either complete
+         and close, or stay open and say what is in the way. */
+      'tk-save-done': (el) => {
+        const id = el.dataset.id;
+        const fields = readTaskFields(el);
+        if (!fields) return;
+        T().saveTask(Object.assign({ id: id }, fields));
+
+        const t = T().task(id);
+        const reopening = t && t.status === 'done';
+        // No CMI without a signed application. Un-ticking is always free,
+        // so the gate is only asked about on the way to done.
+        const blocked = !reopening && RWG.wf && RWG.wf.waitingOn ? RWG.wf.waitingOn(t) : null;
+        if (blocked) {
+          RWG.app.renderMain();
+          U().toast('Saved — but not done yet. First: ' + (blocked.title || 'the step before it'));
+          return;                                   // window stays open, note is safe
+        }
+
+        const willRepeat = !!(t && t.repeat && t.repeat !== 'none' && !reopening && !t.spawnedNext);
+        const p = T().toggleDone(id);
+        closeTop();
+        if (RWG.refreshOppSteps) RWG.refreshOppSteps();
+        RWG.app.renderMain();
+        if (reopening) { U().toast('Reopened', true); return; }
+        U().toast('Done', true);
+        if (willRepeat && p && p.then) p.then(next => {
+          if (next) U().toast('The next one is set for ' + U().fmtDate(Date.parse(next.dueDate + 'T12:00:00')), true);
+        });
       },
       /* The person this task is about, beside the window instead of
          instead of it. Read from the picker at CLICK time, not at render
