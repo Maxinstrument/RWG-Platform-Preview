@@ -1219,9 +1219,22 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
 }
 
 /* ── Report module ───────────────────────────────────────── */
-.rp-glance{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:18px;}
+/* The report is a stack of cards, and .card carries no margin of its own —
+   so every card the view concatenated sat flush against the next while the
+   one or two that happened to have an ad-hoc margin stood apart. One flow
+   container spaces all of them the same, on the same 18px rhythm as .grid,
+   instead of each card remembering to space itself. */
+.rp-flow{display:grid;gap:var(--s4);}
+.rp-glance{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
 .rp-total td{border-top:2px solid var(--line-strong);font-weight:700;background:var(--field);}
-.rp-club{margin-top:18px;}
+
+/* A number you can open. Underlined on hover rather than coloured always,
+   so a table of figures still reads as figures. */
+.rp-click{cursor:pointer;}
+.rp-click:hover{background:var(--field);}
+.rp-click:hover .rp-n{text-decoration:underline;text-underline-offset:3px;}
+tr.rp-click:hover td:first-child{color:var(--navy);}
+.rp-drill-sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;}
 .rp-club-num{font-family:'Fraunces',serif;font-size:34px;color:var(--navy);margin:6px 0 10px;}
 
 /* ── All Cases browser ───────────────────────────────────── */
