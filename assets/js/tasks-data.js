@@ -266,16 +266,20 @@ RWG.tasks = (function () {
     const t = Object.assign({
       id: ref.id, title: '', note: '',
       assigneeUid: (me && me.id) || null, assigneeName: (me && me.name) || '',
-      /* No date unless somebody chooses one. Carlos, 30 Aug '26.
+      /* No date unless the caller gives one. Carlos, 30 Aug '26.
          Defaulting to today made the due date a timestamp of when the task
          was typed rather than a decision about when it is wanted, and once
          everything is due today "overdue" stops meaning late and starts
          meaning "written a few days ago" — which is how 22 of 68 open tasks
-         could be past their date with nobody alarmed. A blank date is
-         honest: it says nobody has scheduled this yet, which is a question
-         somebody can answer. The callers that compute a REAL date — a
-         workflow step's schedule, a birthday three days out, a service
-         request — pass one in and are untouched by this. */
+         could be past their date with nobody alarmed.
+
+         Every window that creates a task now REQUIRES one (readTaskFields,
+         sv-save, the key-date reminder), so in practice nothing arrives
+         here undated. This stays null rather than guessing at today anyway:
+         if a future caller ever forgets, an undated task is something the
+         No date group and the weekly report both show, where one silently
+         stamped today would look exactly like work somebody planned. A
+         wrong answer is harder to find than no answer. */
       dueDate: null, status: 'open', doneAt: null, doneBy: null,
       // relatedType/Id is what the task is ABOUT — a contact, an opportunity,
       // a household or a lead. contactId is who it is FOR: the person. It is

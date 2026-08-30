@@ -195,7 +195,7 @@ window.RWG = window.RWG || {};
           <div class="field-row">
             <div class="field-group"><label class="lbl">Who does it</label>
               <select id="rm-who">${whoOpts}</select></div>
-            <div class="field-group"><label class="lbl">Due</label>
+            <div class="field-group"><label class="lbl">Due <span style="color:var(--bad)">*</span></label>
               <input id="rm-due" type="date" value="${esc(due)}">
               ${U().dateQuick('rm-due', due)}</div>
           </div>
@@ -226,6 +226,10 @@ window.RWG = window.RWG || {};
       U().toast('This date already has a reminder');
       return;
     }
+    // Prefilled three days before the date itself, which is when a card has
+    // to go out to arrive. Cleared, it asks rather than guessing at today.
+    const rmDue = g('rm-due');
+    if (!rmDue) { U().toast('When is this due?'); return; }
     const uid = g('rm-who');
     const u = D().user(uid);
     const hh = el.dataset.hh && H().isStarted() ? H().household(el.dataset.hh) : null;
@@ -239,7 +243,7 @@ window.RWG = window.RWG || {};
       keyDateKey: el.dataset.key || null,   // what makes "already reminded" answerable
       assigneeUid: uid,
       assigneeName: (u && u.name) || '',
-      dueDate: g('rm-due') || t.todayKey(),
+      dueDate: rmDue,
       category: g('rm-cat') || '',
       relatedType: hh ? 'household' : null,
       relatedId: hh ? hh.id : null,
@@ -249,7 +253,7 @@ window.RWG = window.RWG || {};
     RWG.app.renderMain();
     const me = RWG.auth.currentUser();
     const whose = (uid === (me && me.id)) ? 'your' : (((u && u.name) || 'their').split(' ')[0] + '’s');
-    U().toast('“' + title + '” is on ' + whose + ' Tasks, due ' + (g('rm-due') || 'today'), true);
+    U().toast('“' + title + '” is on ' + whose + ' Tasks, due ' + rmDue, true);
   }
 
   // ── custom-date modal (from here or a household's card) ───

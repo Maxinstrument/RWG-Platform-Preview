@@ -40,12 +40,14 @@ window.RWG = window.RWG || {};
      a morning list should open on what is now.
 
      No date used to start shut beside it, on the same reasoning. It does
-     not any more (30 Aug '26): since a new task is born without a date,
-     this group is no longer "not now", it is "nobody has said when" — the
-     one pile on the screen that is waiting on a decision rather than on
-     work. Shut, it would be exactly the drawer things get lost in, which
-     is the fair objection to blank dates in the first place. Anyone who
-     disagrees can still fold it, and the choice sticks. */
+     not any more (30 Aug '26). Every window now refuses to save a task
+     without a date, so this group should sit empty — and that is exactly
+     why it stays open. It is the check on the rule rather than a place to
+     put work: anything that appears in it got past a gate, whether that is
+     a legacy row or a future caller that forgot, and a group folded shut
+     is the one place nobody would look. Empty, it costs a heading; not
+     empty, it is telling you something. Anyone who disagrees can fold it,
+     and the choice sticks. */
   /* Key bumped with the change. The old default was written into everyone's
      storage the first time they folded ANY group — saveFold persists the
      whole object — so a person who once collapsed Future is carrying a
@@ -168,7 +170,7 @@ window.RWG = window.RWG || {};
           <div class="field-row">
             <div class="field-group"><label class="lbl">Assigned to</label>
               <select id="tk-assignee">${assigneeOpts}</select></div>
-            <div class="field-group"><label class="lbl">Due <span class="hint" style="font-weight:400">optional</span></label>
+            <div class="field-group"><label class="lbl">Due <span style="color:var(--bad)">*</span></label>
               <input id="tk-due" type="date" value="${esc(v('dueDate', ''))}">
               ${U().dateQuick('tk-due', v('dueDate', ''))}</div>
           </div>
@@ -549,6 +551,21 @@ window.RWG = window.RWG || {};
   function readTaskFields(el) {
     const title = g('tk-title').trim();
     if (!title) { U().toast('What needs doing?'); return null; }
+    /* Blank to open, required to save. Carlos, 30 Aug '26.
+
+       These are two halves of one rule and neither works alone. Pre-filling
+       today made the date a record of when somebody typed rather than a
+       decision about when the work is wanted, which is how "overdue" came
+       to mean nothing. Leaving it merely optional fixed the guess and
+       opened a way to say nothing at all, and a task nobody has scheduled
+       is a task nobody has to be late on.
+
+       So the box opens empty — no answer is put in anyone's mouth — and it
+       will not save until somebody has given one. The question is asked
+       once, here, because this is the gate both Save and Complete pass
+       through; putting it on the button would let the other door past. */
+    const due = g('tk-due');
+    if (!due) { U().toast('When is this due? A task nobody has dated is one nobody can be late on'); return null; }
     if (!U().pickerSettle('tk-rel')) return null;   // a typed-but-unchosen name is not an answer
     const uid = g('tk-assignee');
     const u = D().user(uid) || RWG.auth.currentUser();
@@ -565,9 +582,7 @@ window.RWG = window.RWG || {};
     return {
       title: title, note: U().noteRead('tk-note'),
       assigneeUid: uid || u.id, assigneeName: u.name || '',
-      // Blank stays blank. An empty box is somebody saying "not scheduled",
-      // and quietly filling it with today would put the guess back.
-      dueDate: g('tk-due') || null,
+      dueDate: due,
       category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
       relatedType: r.type, relatedId: r.id, relatedLabel: r.label,
       // Who it is for. An opportunity not yet linked to a person keeps

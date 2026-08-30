@@ -63,7 +63,7 @@ window.RWG = window.RWG || {};
             <input id="sv-title" placeholder="e.g. Update beneficiary to the new trust"></div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Assigned to</label><select id="sv-who">${userOpts}</select></div>
-            <div class="field-group"><label class="lbl">Due</label><input id="sv-due" type="date" value="${esc(due)}">
+            <div class="field-group"><label class="lbl">Due <span style="color:var(--bad)">*</span></label><input id="sv-due" type="date" value="${esc(due)}">
               ${U().dateQuick('sv-due', due)}</div>
           </div>
           <div class="field-group"><label class="lbl">Note <span class="pill-soft" style="font-size:10.5px">optional</span></label>
@@ -175,6 +175,11 @@ window.RWG = window.RWG || {};
         const hhId = g('sv-hh'), type = g('sv-type');
         const title = g('sv-title').trim() || type;
         if (!hhId) { U().toast('Which household is this for?'); return; }
+        // Prefilled at +3 days, but a cleared box is still a cleared box —
+        // and falling back to today would be the same guess the task window
+        // stopped making. One rule: a task carries a date somebody chose.
+        const svDue = g('sv-due');
+        if (!svDue) { U().toast('When is this due?'); return; }
         const h = H().household(hhId); if (!h) return;
         const uid = g('sv-who');
         const u = D().user(uid) || RWG.auth.currentUser();
@@ -182,7 +187,7 @@ window.RWG = window.RWG || {};
           kind: 'service', serviceType: type, waiting: false,
           title: title, note: U().noteRead('sv-note'),
           assigneeUid: uid || u.id, assigneeName: u.name || '',
-          dueDate: g('sv-due') || T().todayKey(),
+          dueDate: svDue,
           relatedType: 'household', relatedId: h.id, relatedLabel: h.name
         });
         mount().innerHTML = '';
