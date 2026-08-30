@@ -39,7 +39,7 @@ window.RWG = window.RWG || {};
      the screens whose numbers need it. */
   const colMoney = (n) => U().money(n);
 
-  const st = { pl: 'insurance', owner: '' };
+  const st = { pl: 'insurance', agent: '' };
 
   const BUCKET_DOT = { Opened: '#5C6B7E', Submitted: '#C2A14D', Closed: '#2E7D5B' };
   const dayMs = 86400000;
@@ -48,15 +48,32 @@ window.RWG = window.RWG || {};
     return t ? Math.max(0, Math.floor((Date.now() - t) / dayMs)) : 0;
   };
 
+  /* The name picker narrows to EVERYONE on a case, not just its owner.
+     Carlos, 30 Aug '26: "when you select from the drop down the name of an
+     agent, it only shows the cases that the main agent is in. I would like
+     for all the agents, if they are involved in a particular case, to show
+     when they select their names."
+
+     It matters more than it sounds: 113 of the 162 cases in the book carry
+     somebody besides the owner, and the paperwork on every annuity and
+     investment sits with Alejandro whoever owns the file. Filtered the old
+     way his board showed 16 insurance cases against the 38 he is actually
+     on, and the ones missing were, by definition, the ones he was working
+     for someone else.
+
+     SC().involves is the single definition of "on this case" — the All
+     Cases table filters through the same one, so the two screens cannot
+     drift apart. Ownership still decides money and week: the scorecard,
+     the by-agent production table and the credit split are untouched. */
+  const onCase = (c) => SC().involves(c, st.agent);
+
   function casesFor(plId) {
-    let rows = SD().cases().filter(c => P().pipelineForProduct(c.product).id === plId && c.state !== 'Lost');
-    if (st.owner) rows = rows.filter(c => c.agentName === st.owner);
-    return rows;
+    return SD().cases().filter(c => P().pipelineForProduct(c.product).id === plId
+      && c.state !== 'Lost' && onCase(c));
   }
   function lostCount(plId) {
-    let rows = SD().cases().filter(c => P().pipelineForProduct(c.product).id === plId && c.state === 'Lost');
-    if (st.owner) rows = rows.filter(c => c.agentName === st.owner);
-    return rows.length;
+    return SD().cases().filter(c => P().pipelineForProduct(c.product).id === plId
+      && c.state === 'Lost' && onCase(c)).length;
   }
 
   const firstClosedIsDelivery = (c) => {
@@ -74,6 +91,16 @@ window.RWG = window.RWG || {};
       : k.left <= 45 ? 'style="font-size:10.5px;background:rgba(176,105,31,.10);color:var(--warn);border-color:rgba(176,105,31,.3)"'
       : 'style="font-size:10.5px"';
     return `<span class="chip tier-low" ${cls} title="Signed delivery receipt due inside policy month 3 (day 90) or the commission charges back">receipt · ${k.left}d left</span>`;
+  }
+
+  /* Who is on the card, in words. Once the filter shows a person the
+     cases they are working for somebody else, the pill has a second job:
+     it is no longer "your card", it is whose card. Naming the owner in
+     the hover is what stops that reading as a bug. */
+  const withCount = (c) => SC().coCredit(c).length;
+  function withWhom(c) {
+    const co = SC().coCredit(c);
+    return 'Owner: ' + (c.agentName || '—') + (co.length ? ' · with ' + co.join(', ') : '');
   }
 
   function card(c, stage, isAdmin) {
@@ -116,7 +143,7 @@ window.RWG = window.RWG || {};
       </div>
       <div class="serif" style="font-size:16px;color:var(--navy);margin-top:6px" data-action="cs-open" data-id="${esc(c.recordId)}">${U().money(money)}</div>
       <div class="flex pl-card-foot" style="align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
-        <span class="pill-soft" style="font-size:11px" ${(c.coCreditNames || []).length ? `title="With ${esc((c.coCreditNames || []).join(', '))}"` : ''}>${esc(first || '—')}${(c.coCreditNames || []).length ? ' +' + c.coCreditNames.length : ''}</span>
+        <span class="pill-soft" style="font-size:11px" title="${esc(withWhom(c))}">${esc(first || '—')}${withCount(c) ? ' +' + withCount(c) : ''}</span>
         ${closed ? (stage.bucket === 'Closed' && stage.id !== 'won'
               ? (isAdmin
                   ? `<button class="chip tier-high" style="font-size:10.5px;cursor:pointer" data-action="pl-review" data-id="${esc(c.recordId)}" title="Closed and counted — click to review the final money and credit split">Closed ✓</button>`
@@ -181,10 +208,15 @@ window.RWG = window.RWG || {};
 
     const tabs = P().pipelines().map(p =>
       `<button class="btn btn-sm ${p.id === st.pl ? 'btn-navy' : 'btn-ghost'}" data-action="pl-track" data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
-    const owners = {};
-    SD().cases().forEach(c => { if (c.agentName) owners[c.agentName] = 1; });
-    const ownerOpts = Object.keys(owners).sort().map(o =>
-      `<option value="${esc(o)}" ${o === st.owner ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    /* Built from everyone on every case, not from the owners — somebody
+       who has never owned a file but is on a dozen used to have no entry
+       in the list at all, which is a filter refusing to admit they work
+       here. Every track feeds it, so switching tabs never moves a name
+       out from under the cursor. */
+    const people = {};
+    SD().cases().forEach(c => SC().involvedNames(c).forEach(n => { people[n] = 1; }));
+    const agentOpts = Object.keys(people).sort().map(o =>
+      `<option value="${esc(o)}" ${o === st.agent ? 'selected' : ''}>${esc(o)}</option>`).join('');
     const lost = lostCount(pl.id);
 
     return `
@@ -196,7 +228,8 @@ window.RWG = window.RWG || {};
         <span class="topbar-spacer"></span>
         ${lost ? `<button class="chip tier-low pl-lost-chip" data-action="cs-lost-list"
           title="The opportunities on this track that did not close — opens the list">Lost · ${lost}</button>` : ''}
-        <select id="pl-owner" class="fbar-select" style="width:auto"><option value="">All owners</option>${ownerOpts}</select>
+        <select id="pl-agent" class="fbar-select" style="width:auto"
+          title="Every opportunity this person is on — the ones they own and the ones they are working alongside someone else"><option value="">All agents</option>${agentOpts}</select>
         <button class="btn btn-gold btn-sm" data-action="cs-new">＋ New opportunity</button>
       </div>
       <div class="board">${cols}</div>`;
@@ -533,7 +566,7 @@ window.RWG = window.RWG || {};
     },
 
     onChange(e) {
-      if (e.target.id === 'pl-owner') { st.owner = e.target.value; RWG.app.renderMain(); }
+      if (e.target.id === 'pl-agent') { st.agent = e.target.value; RWG.app.renderMain(); }
     },
 
     actions: {

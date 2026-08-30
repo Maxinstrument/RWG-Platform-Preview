@@ -337,8 +337,15 @@ window.RWG = window.RWG || {};
         cell: c => `<span class="num">${sc.placed(c) == null ? '—' : money(sc.placed(c))}</span>` },
       { key: 'ann', label: 'Ann. premium', num: true, val: c => sc.deriveCase(c).annualizedPremium, cell: c => `<span class="num">${sc.deriveCase(c).annualizedPremium ? money(sc.deriveCase(c).annualizedPremium) : '—'}</span>` },
       { key: 'rev', label: 'Revenue', num: true, val: c => sc.deriveCase(c).revenue, cell: c => `<span class="num">${money(sc.deriveCase(c).revenue)}</span>` },
+      /* val() is the OWNER — one name per row, which is what a sort and a
+         CSV column can each carry. vals() is everyone on the case, and it
+         is what the ▾ checklist lists and filters by, so ticking a name
+         finds the cases that person owns AND the ones they are working
+         alongside somebody else. The board's picker reads the same
+         SC().involvedNames, so the two screens answer alike. */
       { key: 'agent', label: 'Agent', val: c => c.agentName || '', str: true, filter: true,
-        cell: c => `${esc(c.agentName || '')}${(c.coCreditNames || []).length ? ` <span class="cell-sub">+${c.coCreditNames.length}</span>` : ''}` },
+        vals: c => sc.involvedNames(c),
+        cell: c => `${esc(c.agentName || '')}${sc.coCredit(c).length ? ` <span class="cell-sub" title="With ${esc(sc.coCredit(c).join(', '))}">+${sc.coCredit(c).length}</span>` : ''}` },
       { key: 'source', label: 'Source', val: c => sc.sourceLabel(c.source), str: true, hidden: true },
       { key: 'openedWeek', label: 'Opened', str: true, val: c => c.openedWeek || '', hidden: true },
       { key: 'submittedWeek', label: 'Submitted', str: true, val: c => sc.deriveWeeks(c).submittedWeek || '', hidden: true },
@@ -390,7 +397,11 @@ window.RWG = window.RWG || {};
     if (!st.viewAll) rows = rows.filter(c => sc.activeInWeek(c, st.week));
     if (st.search) {
       const q = st.search.toLowerCase();
-      rows = rows.filter(c => String(c.clientName || '').toLowerCase().indexOf(q) >= 0 || String(c.agentName || '').toLowerCase().indexOf(q) >= 0);
+      // Every name on the case, not just the owner's — typing a colleague's
+      // name into the box and getting none of the work they share was the
+      // same omission the Agent checklist had.
+      rows = rows.filter(c => String(c.clientName || '').toLowerCase().indexOf(q) >= 0
+        || sc.involvedNames(c).some(n => n.toLowerCase().indexOf(q) >= 0));
     }
     // The header checklists and the sort are the shared table helpers, the
     // same ones the scorecard's week table uses — hidden columns included,

@@ -760,18 +760,28 @@ RWG.ui = (function () {
      so what is left is the header, the checklist and the maths, which the
      All Cases table had otherwise written for itself.
 
-     A column is { key, label, val(row), num?, filter?, cell?(row) }. The
-     state bag ({ sortKey, sortDir, colf }) stays with the module, so each
-     screen keeps its own memory of how it was left; `ns` is the action
-     prefix so two tables on one screen never fight. Checkboxes carry
-     data-colf, which the module reads in onChange. */
+     A column is { key, label, val(row), num?, filter?, vals?(row),
+     cell?(row) }. The state bag ({ sortKey, sortDir, colf }) stays with
+     the module, so each screen keeps its own memory of how it was left;
+     `ns` is the action prefix so two tables on one screen never fight.
+     Checkboxes carry data-colf, which the module reads in onChange. */
+  /* One cell, one value — unless the column says otherwise. A column may
+     declare `vals(row)` returning an ARRAY, and then the checklist lists
+     every value that appears anywhere in the column and a tick keeps a row
+     if it holds that value among others. The Agent column is the reason:
+     a case has an owner and the people working it alongside them, and
+     picking a name has to find both. `val` is left alone for sorting and
+     the export, which still want one string per row. */
+  const cellVals = (col, r) => {
+    const v = col.vals ? col.vals(r) : [col.val(r)];
+    return (Array.isArray(v) ? v : [v]).map(x => String(x == null ? '' : x));
+  };
   function sheetValues(list, col) {
     const seen = {}, out = [];
-    (list || []).forEach(r => {
-      const v = String(col.val(r) == null ? '' : col.val(r));
+    (list || []).forEach(r => cellVals(col, r).forEach(v => {
       if (v === '' || seen[v]) return;
       seen[v] = 1; out.push(v);
-    });
+    }));
     return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }
   function sheetApply(list, cols, st) {
@@ -779,7 +789,7 @@ RWG.ui = (function () {
     const keys = Object.keys(st.colf || {}).filter(k => (st.colf[k] || []).length);
     let out = (list || []).filter(r => keys.every(k => {
       const c = by[k];
-      return !c || st.colf[k].indexOf(String(c.val(r))) >= 0;
+      return !c || cellVals(c, r).some(v => st.colf[k].indexOf(v) >= 0);
     }));
     const c = by[st.sortKey];
     if (c) {

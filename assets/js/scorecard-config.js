@@ -405,6 +405,38 @@ RWG.scorecard = (function () {
       .filter(s => s && s.toLowerCase() !== 'none');
   }
 
+  /* ── everyone on the case, owner first ──
+     Carlos, 30 Aug '26: picking his name on the Opportunity board showed
+     him the cases he OWNS and nothing else — so the 45 cases Alejandro is
+     working but does not own were invisible under the filter with his name
+     on it. Ownership is the right answer for a scorecard (one case, one
+     week, one person's number) and the wrong answer for "show me my work",
+     and the board is the second question.
+
+     One list, defined once, because every screen that answers "is this
+     person on this case" has to answer it the same way — a board saying 38
+     and a table saying 16 for the same name is a bug whichever one you
+     believe.
+
+     Names, not uids, deliberately. The same person has carried two
+     accounts through a re-register, and the dropdown this feeds shows one
+     entry per person; matching on the name keeps a case found no matter
+     which account was on it the day it was written. De-duped and
+     blank-free: a co-credit tick that outlived an owner change would
+     otherwise list somebody twice. */
+  function involvedNames(c) {
+    const out = [], seen = {};
+    [c.agentName].concat(coCredit(c)).forEach(n => {
+      const s = String(n == null ? '' : n).trim();
+      if (!s || seen[s]) return;
+      seen[s] = 1; out.push(s);
+    });
+    return out;
+  }
+  // Is this person on the case at all — as owner or alongside? No name is
+  // no filter, so callers can hand the select's value straight through.
+  const involves = (c, name) => !name || involvedNames(c).indexOf(String(name)) >= 0;
+
   return {
     PRODUCTS, SOURCES, STATES, SOURCE_PREMIUM,
     productName, productId, sourceLabel, sourceId,
@@ -420,6 +452,6 @@ RWG.scorecard = (function () {
     placed, placedOn,
     weekEndingFor, currentWeekEnding, fridaysOfYear,
     easternDateKey, todayKey, weekDays,
-    deriveWeeks, bucketForWeek, activeInWeek, coCredit
+    deriveWeeks, bucketForWeek, activeInWeek, coCredit, involvedNames, involves
   };
 })();

@@ -64,7 +64,10 @@ window.RWG = window.RWG || {};
   /* ── Field declarations ───────────────────────────────────
      type drives the operators and the comparison:
        text | number | date | enum | bool
-     get(row) returns the comparable value; fmt(v) the display. */
+     get(row) returns the comparable value; fmt(v) the display.
+     `list: true` says get() hands back SEVERAL values at once — the
+     people on a case — and every comparison then runs member by
+     member, so the operators and the picker stay exactly as they are. */
   const FIELDS = {
     cases: () => {
       const stages = [];
@@ -81,7 +84,16 @@ window.RWG = window.RWG || {};
           options: () => stages },
         { k: 'state',      label: 'State',         type: 'enum',   get: c => c.state || '',
           options: () => ['Opened', 'Submitted', 'Closed', 'Lost'] },
-        { k: 'agentName',  label: 'Advisor',       type: 'enum',   get: c => c.agentName || '', options: userNames },
+        { k: 'agentName',  label: 'Advisor (owner)', type: 'enum', get: c => c.agentName || '', options: userNames },
+        /* The owner is one name; a case is often several people. This is
+           the field for "everything Alejandro is on", where Advisor (owner)
+           is the field for "everything that counts on Alejandro's week" —
+           two different questions that used to have one answer between
+           them. Reads the same SC().involvedNames the Opportunity board and
+           the All Cases checklist filter by. */
+        { k: 'involved',   label: 'Anyone involved', type: 'enum', list: true,
+          get: c => SC().involvedNames(c), options: userNames,
+          fmt: v => (v || []).join(', ') },
         { k: 'source',     label: 'Source',        type: 'enum',   get: c => { const s = (SC().SOURCES || []).find(x => x.id === c.source); return s ? s.label : (c.source || ''); },
           options: () => (SC().SOURCES || []).map(s => s.label) },
         { k: 'premium',    label: 'Premium / deposit', type: 'number', get: c => SC().deriveCase(c).annualizedPremium || Number(c.amount) || 0, fmt: money },
@@ -211,6 +223,26 @@ window.RWG = window.RWG || {};
     const t = f.type;
     const needle = String(flt.value == null ? '' : flt.value).trim();
 
+    /* A list field holds several values at once — the people on a case.
+       Every comparison below weighs one value against one needle, so a
+       list answers the same questions member by member: it IS a name when
+       any member is that name, it is NOT when none is, and it is empty
+       when the list is. Without this an array would fall through to the
+       string branch and be compared as "A,B", which matches nobody. */
+    if (f.list) {
+      const items = (Array.isArray(v) ? v : []).map(x => String(x == null ? '' : x).trim()).filter(Boolean);
+      if (flt.op === 'empty')  return !items.length;
+      if (flt.op === 'nempty') return !!items.length;
+      if (needle === '') return true;          // nothing picked is no filter
+      const n = needle.toLowerCase();
+      const some = (test) => items.some(x => test(x.toLowerCase()));
+      if (flt.op === 'is')   return some(x => x === n);
+      if (flt.op === 'isnt') return !some(x => x === n);
+      if (flt.op === 'has')  return some(x => x.indexOf(n) >= 0);
+      if (flt.op === 'nhas') return !some(x => x.indexOf(n) >= 0);
+      return true;
+    }
+
     if (flt.op === 'empty')  return v === '' || v == null;
     if (flt.op === 'nempty') return !(v === '' || v == null);
 
@@ -261,7 +293,8 @@ window.RWG = window.RWG || {};
         out.sort((a, b) => {
           const va = f.get(a), vb = f.get(b);
           if (f.type === 'number') return ((Number(va) || 0) - (Number(vb) || 0)) * st.sortDir;
-          return String(va == null ? '' : va).localeCompare(String(vb == null ? '' : vb)) * st.sortDir;
+          const txt = (x) => Array.isArray(x) ? x.join(', ') : String(x == null ? '' : x);
+          return txt(va).localeCompare(txt(vb)) * st.sortDir;
         });
       }
     }
@@ -538,6 +571,9 @@ window.RWG = window.RWG || {};
           const v = f.get(r);
           if (f.type === 'number') return Number(v) || 0;
           if (f.type === 'bool') return v ? 'yes' : 'no';
+          // Semicolons, not the array's own commas: one cell that a
+          // spreadsheet never has to be talked into keeping whole.
+          if (Array.isArray(v)) return v.join('; ');
           return v == null ? '' : String(v);
         }));
         const name = (st.loadedName || srcMeta(st.src).label).replace(/[^A-Za-z0-9]+/g, '_');
