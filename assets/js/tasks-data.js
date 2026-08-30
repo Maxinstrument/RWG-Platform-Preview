@@ -231,7 +231,12 @@ RWG.tasks = (function () {
       else if (x.dueDate <= nextEnd) g.next.push(x);
       else g.later.push(x);
     });
-    const byDue = (a, b) => String(a.dueDate).localeCompare(String(b.dueDate)) || (a.createdAt || 0) - (b.createdAt || 0);
+    // Undated sorts last on the explicit sentinel rather than on the fact
+    // that "null" happens to fall after a digit. Only the nodate bucket
+    // holds them, where they all tie and fall through to createdAt anyway —
+    // but the rule should be written down, not inferred from string order.
+    const key = (t) => t.dueDate || '9999-12-31';
+    const byDue = (a, b) => key(a).localeCompare(key(b)) || (a.createdAt || 0) - (b.createdAt || 0);
     Object.keys(g).forEach(k => g[k].sort(byDue));
     return g;
   }
@@ -261,7 +266,17 @@ RWG.tasks = (function () {
     const t = Object.assign({
       id: ref.id, title: '', note: '',
       assigneeUid: (me && me.id) || null, assigneeName: (me && me.name) || '',
-      dueDate: todayKey(), status: 'open', doneAt: null, doneBy: null,
+      /* No date unless somebody chooses one. Carlos, 30 Aug '26.
+         Defaulting to today made the due date a timestamp of when the task
+         was typed rather than a decision about when it is wanted, and once
+         everything is due today "overdue" stops meaning late and starts
+         meaning "written a few days ago" — which is how 22 of 68 open tasks
+         could be past their date with nobody alarmed. A blank date is
+         honest: it says nobody has scheduled this yet, which is a question
+         somebody can answer. The callers that compute a REAL date — a
+         workflow step's schedule, a birthday three days out, a service
+         request — pass one in and are untouched by this. */
+      dueDate: null, status: 'open', doneAt: null, doneBy: null,
       // relatedType/Id is what the task is ABOUT — a contact, an opportunity,
       // a household or a lead. contactId is who it is FOR: the person. It is
       // carried alongside so a task about a policy still surfaces on that

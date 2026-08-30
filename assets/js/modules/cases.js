@@ -496,7 +496,7 @@ window.RWG = window.RWG || {};
     if (!recordId || !T || !T.isStarted()) return '';
     const steps = T.all().filter(t => t.relatedType === 'case' && t.relatedId === recordId)
       .sort((a, b) => (a.workflowStep || 0) - (b.workflowStep || 0)
-        || String(a.dueDate).localeCompare(String(b.dueDate)));
+        || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')));
     const today = T.todayKey();
     const open = steps.filter(t => t.status !== 'done').length;
     const wfName = (steps.find(t => t.workflowName) || {}).workflowName;

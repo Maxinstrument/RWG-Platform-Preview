@@ -36,10 +36,24 @@ window.RWG = window.RWG || {};
 
   /* Which day groups are folded shut. Kept on the device, not the record:
      it is how one person likes to read the screen, not something about the
-     firm. Future and no-date start shut — they are the two groups that
-     answer "not now", and a morning list should open on what is now. */
-  const FOLD_KEY = 'rwg.tasks.folded';
-  let folded = { later: 1, nodate: 1 };
+     firm. Future starts shut — it is the group that answers "not now", and
+     a morning list should open on what is now.
+
+     No date used to start shut beside it, on the same reasoning. It does
+     not any more (30 Aug '26): since a new task is born without a date,
+     this group is no longer "not now", it is "nobody has said when" — the
+     one pile on the screen that is waiting on a decision rather than on
+     work. Shut, it would be exactly the drawer things get lost in, which
+     is the fair objection to blank dates in the first place. Anyone who
+     disagrees can still fold it, and the choice sticks. */
+  /* Key bumped with the change. The old default was written into everyone's
+     storage the first time they folded ANY group — saveFold persists the
+     whole object — so a person who once collapsed Future is carrying a
+     `nodate: 1` they never chose, and reading it back would reinstate the
+     drawer for exactly the people who use the screen most. A new key starts
+     everybody on the new default; fold it again and that choice is yours. */
+  const FOLD_KEY = 'rwg.tasks.folded.v2';
+  let folded = { later: 1 };
   try {
     const saved = localStorage.getItem(FOLD_KEY);
     if (saved) folded = JSON.parse(saved) || {};
@@ -154,9 +168,9 @@ window.RWG = window.RWG || {};
           <div class="field-row">
             <div class="field-group"><label class="lbl">Assigned to</label>
               <select id="tk-assignee">${assigneeOpts}</select></div>
-            <div class="field-group"><label class="lbl">Due</label>
-              <input id="tk-due" type="date" value="${esc(v('dueDate', T().todayKey()))}">
-              ${U().dateQuick('tk-due', v('dueDate', T().todayKey()))}</div>
+            <div class="field-group"><label class="lbl">Due <span class="hint" style="font-weight:400">optional</span></label>
+              <input id="tk-due" type="date" value="${esc(v('dueDate', ''))}">
+              ${U().dateQuick('tk-due', v('dueDate', ''))}</div>
           </div>
           <div class="field-row">
             <div class="field-group"><label class="lbl">Category</label>
@@ -551,7 +565,9 @@ window.RWG = window.RWG || {};
     return {
       title: title, note: U().noteRead('tk-note'),
       assigneeUid: uid || u.id, assigneeName: u.name || '',
-      dueDate: g('tk-due') || T().todayKey(),
+      // Blank stays blank. An empty box is somebody saying "not scheduled",
+      // and quietly filling it with today would put the guess back.
+      dueDate: g('tk-due') || null,
       category: g('tk-cat'), priority: g('tk-pri') || 'none', repeat: g('tk-rep') || 'none',
       relatedType: r.type, relatedId: r.id, relatedLabel: r.label,
       // Who it is for. An opportunity not yet linked to a person keeps
