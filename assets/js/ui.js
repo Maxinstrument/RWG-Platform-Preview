@@ -706,9 +706,48 @@ RWG.ui = (function () {
     ed.focus();
     const cmd = b.dataset.cmd;
     if (cmd === 'link') { const url = prompt('Link to:'); if (url) document.execCommand('createLink', false, url); }
-    else if (cmd === 'date') document.execCommand('insertText', false, dateStamp());
+    else if (cmd === 'date') stampTop(ed);
     else document.execCommand(cmd, false, null);
   });
+
+  /* Insert date opens a new entry on top.
+     Carlos, 29 Oct '26: "When the Insert Date is pressed, I would like to
+     create a new line and move the other notes to a lower next line so that
+     I don't have to press the enter key after I finish typing." The stamp
+     used to land wherever the caret happened to be — on an editor nobody
+     had clicked into, that is the start of the first line, glued to the
+     last entry — and the Enter that separated them was his to remember.
+
+     So the stamp always goes to the very top, whatever was clicked last,
+     and the older notes drop a line. It is the same Enter he was pressing
+     by hand, done by the browser, so the line it makes is the same kind
+     of line and Ctrl+Z still takes it back. The caret then steps back up,
+     to just after the stamp, ready for the words.
+
+     The top is found by walking to the first real text, not by aiming at
+     the editor's own first slot: that slot sits BEFORE the first line's
+     block, and a stamp typed there can end up outside it, a line of its
+     own the next Enter does not split the way it should. An empty editor
+     gets the stamp and nothing else — there is nothing to push down. */
+  function stampTop(ed) {
+    const sel = window.getSelection();
+    const hadText = !!String(ed.innerText || ed.textContent || '').replace(/ /g, ' ').trim();
+    const walk = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (n) => (n.nodeType === 3 ? n.nodeValue.trim() : n.nodeName === 'BR')
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+    });
+    const first = walk.nextNode();
+    const at = document.createRange();
+    if (!first) at.setStart(ed, 0);
+    else if (first.nodeType === 3) at.setStart(first, 0);
+    else at.setStartBefore(first);
+    at.collapse(true);
+    sel.removeAllRanges(); sel.addRange(at);
+    document.execCommand('insertText', false, dateStamp());
+    if (!hadText) return;
+    document.execCommand('insertParagraph', false, null);
+    if (sel.modify) sel.modify('move', 'backward', 'character');
+  }
 
   // ── CSV out ───────────────────────────────────────────────
   // One implementation, so every screen that exports produces a file

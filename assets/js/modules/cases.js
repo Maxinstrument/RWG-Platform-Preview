@@ -92,8 +92,26 @@ window.RWG = window.RWG || {};
      off the front, because the date is already the least surprising thing
      on the row. A note nobody stamped is just a note and comes through
      whole. If stripping leaves nothing (a stamp with no words after it),
-     fall back rather than show an empty cell. */
+     fall back rather than show an empty cell.
+
+     Carlos, 29 Oct '26: Insert date now opens the new entry at the TOP and
+     pushes the older ones down, so the bottom stopped being the latest —
+     and the book already holds months of notes written the other way, some
+     of them both ways in one case. Neither end can be trusted, so the
+     stamps decide: the entry with the latest stamp wins, wherever it sits.
+     The bottom-up walk stays for notes that carry no stamp at all. */
   const STAMP = /^\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*[AaPp]\.?[Mm]\.?)?\s*(?:·[^—]*)?—\s*/;
+  const STAMP_AT = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})\s*([AaPp]))?/;
+  // When a block's stamp was written, or -1 if it does not open with one.
+  // A date-only stamp (the kind from before the hour was added) reads as
+  // midnight, so a timed stamp from the same day counts as later — which it was.
+  function stampTime(b) {
+    if (!STAMP.test(b)) return -1;
+    const m = STAMP_AT.exec(b);
+    const y = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]);
+    const h = m[4] ? (Number(m[4]) % 12) + (/p/i.test(m[6]) ? 12 : 0) : 0;
+    return new Date(y, m[1] - 1, Number(m[2]), h, m[5] ? Number(m[5]) : 0).getTime();
+  }
   function detailsPreview(v) {
     // Blocks first, so the entries stay separable; detailsText collapses
     // them into one line, which is right for the export and wrong here.
@@ -101,6 +119,16 @@ window.RWG = window.RWG || {};
       .replace(/<\s*\/?\s*(?:p|div|br|li|ul|ol|h[1-6]|blockquote|pre|table|tr|td|th)\b[^>]*>/gi, '\n')
       .split('\n').map(b => detailsText(b)).filter(Boolean);
     if (!blocks.length) return '';
+    // Ties go to the lower block: two same-day date-only stamps were
+    // written top to bottom, back when that was the only way they came.
+    let latest = -1, at = -1;
+    blocks.forEach((b, i) => { const t = stampTime(b); if (t >= 0 && t >= latest) { latest = t; at = i; } });
+    // The newest entry's words — on its own line, or on the line after if
+    // somebody pressed Enter after the stamp — but never the next entry's.
+    for (let i = at; at >= 0 && i < blocks.length && (i === at || stampTime(blocks[i]) < 0); i++) {
+      const bare = blocks[i].replace(STAMP, '').trim();
+      if (bare) return bare;
+    }
     for (let i = blocks.length - 1; i >= 0; i--) {
       const bare = blocks[i].replace(STAMP, '').trim();
       if (bare) return bare;
