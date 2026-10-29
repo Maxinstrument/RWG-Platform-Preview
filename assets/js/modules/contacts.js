@@ -770,6 +770,8 @@ window.RWG = window.RWG || {};
             <div style="font-size:var(--fs-dense);margin-top:2px">${email || '<span class="muted">no email</span>'}</div>
             <div class="flex" style="gap:6px;margin-top:10px;justify-content:flex-end">
               <button class="btn btn-ghost btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">✎ Edit</button>
+              <button class="btn btn-ghost btn-sm" data-action="hh-person-move" data-id="${esc(c.id)}"
+                title="Move them to another household, or one of their own — their history goes with them">⇄ Move</button>
               ${ctx.isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Remove this person (admin)">Delete</button>` : ''}
             </div>
           </div>

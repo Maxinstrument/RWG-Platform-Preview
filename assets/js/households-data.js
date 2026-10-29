@@ -236,7 +236,9 @@ RWG.hh = (function () {
       .catch(e => { console.error('save contact:', e && e.message); throw e; });
   }
 
-  function addHousehold(fields) {
+  // A household's shape, in one place, for the two doors that make one:
+  // addHousehold() on its own, and moveContact() inside its batch.
+  function householdDoc(fields) {
     const ref = db().collection('households').doc();
     const h = Object.assign({
       id: ref.id, name: '', advisorUid: null, advisorName: '',
@@ -247,6 +249,10 @@ RWG.hh = (function () {
     }, fields);
     h.address = normalizeAddr(h.address);
     if (h.address && !h.addressAt) h.addressAt = new Date().toISOString();
+    return h;
+  }
+  function addHousehold(fields) {
+    const h = householdDoc(fields);
     cache.households.push(h); onChange();
     persistHousehold(h);
     return h;
@@ -383,6 +389,98 @@ RWG.hh = (function () {
     c.advisorstream = !!on; c.updatedAt = now();
     onChange();
     return persistContact(c);
+  }
+
+  /* ── Moving a person to another family ──
+     Carlos, 29 Oct '26: "I need to have a way to add and remove people in
+     the Family tab … I can only add but not be able to move Contacts to
+     other Households."
+
+     The person is the record that carries their own history: notes, key
+     dates and the activity feed already point at them and travel for
+     free. What does not travel by itself is everything that ALSO wrote
+     down the family. An opportunity carries the household beside the
+     person, and the family screens match either pointer — so one left
+     behind would show on both families at once. The tasks filed on the
+     person, or on one of their opportunities, carry it the same way.
+     All of it moves in one batch, or none of it does. Work filed on the
+     family with nobody named stays with the family.
+
+     Everyone can move people. It is the same edit anybody can already
+     make to a person, an opportunity or a task, one record at a time. */
+  function moveScope(id) {
+    const SD = RWG.scorecardData, T = RWG.tasks;
+    const caseIds = (SD && SD.isStarted())
+      ? SD.cases().filter(x => x.contactId === id).map(x => x.recordId) : [];
+    const onCase = {}; caseIds.forEach(k => { onCase[k] = 1; });
+    const taskIds = (T && T.isStarted())
+      ? T.all().filter(t => t.contactId === id
+          || (t.relatedType === 'contact' && t.relatedId === id)
+          || (t.relatedType === 'case' && onCase[t.relatedId])).map(t => t.id)
+      : [];
+    return { caseIds: caseIds, taskIds: taskIds };
+  }
+
+  /* opts: { toId } or { newName }  where they go
+           relationship             what they are to the family they join
+           keepAddress              copy the old family's address onto them
+           newPrimaryId             who stands as primary in the family they left
+     Resolves to the household they landed in. */
+  function moveContact(id, opts) {
+    const c = contact(id);
+    if (!c) return Promise.reject(new Error('That person is not in the book'));
+    opts = opts || {};
+    const fromId = c.householdId || null;
+    const from = fromId ? household(fromId) : null;
+    // A new family is created with the advisor the old one had: the same
+    // person still looks after them, they just live somewhere else now.
+    const to = opts.toId ? household(opts.toId)
+      : (opts.newName ? householdDoc({ name: opts.newName,
+          advisorUid: (from && from.advisorUid) || (me && me.id) || null,
+          advisorName: (from && from.advisorName) || (me && me.name) || '' }) : null);
+    if (!to) return Promise.reject(new Error('Pick the household they are moving to'));
+    if (to.id === fromId) return Promise.reject(new Error('They are already in that household'));
+
+    const scope = moveScope(id);
+    // One batch is what makes it all-or-nothing, and a batch holds 500.
+    // Nobody has that much filed on one person; if they ever do, say so
+    // before touching anything rather than move half of it.
+    if (scope.caseIds.length + scope.taskIds.length > 480)
+      return Promise.reject(new Error('Too much is filed on this person to move in one go'));
+    const stamp = now(), iso = new Date(stamp).toISOString();
+    const batch = db().batch();
+    if (!opts.toId) batch.set(db().collection('households').doc(to.id), stripId(to));
+
+    const patch = { householdId: to.id, relationship: opts.relationship || c.relationship || 'Other', updatedAt: stamp };
+    // Without an address of their own a person reads the family's, so the
+    // move would quietly re-house them on paper too. Kept only when asked.
+    if (opts.keepAddress && !hasAddress(c.address) && from && hasAddress(from.address)) {
+      patch.address = normalizeAddr(from.address);
+      patch.addressAt = from.addressAt || iso;
+    }
+    Object.assign(c, patch);
+    batch.update(db().collection('contacts').doc(c.id), patch);
+
+    const heir = opts.newPrimaryId ? contact(opts.newPrimaryId) : null;
+    if (heir && heir.id !== id && heir.householdId === fromId) {
+      heir.relationship = 'Primary client'; heir.updatedAt = stamp;
+      batch.update(db().collection('contacts').doc(heir.id), { relationship: 'Primary client', updatedAt: stamp });
+    }
+
+    const SD = RWG.scorecardData;
+    scope.caseIds.forEach(cid => {
+      batch.update(db().collection('cases').doc(cid), { householdId: to.id, updatedAt: iso });
+      const x = SD && SD.caseById(cid); if (x) x.householdId = to.id;
+    });
+    scope.taskIds.forEach(tid => {
+      batch.update(db().collection('tasks').doc(tid), { householdId: to.id, updatedAt: stamp });
+      const t = RWG.tasks.task(tid); if (t) t.householdId = to.id;
+    });
+
+    if (!opts.toId) cache.households.push(to);
+    onChange();
+    return batch.commit().then(() => to)
+      .catch(e => { console.error('move person:', e && e.message); throw e; });
   }
 
   function removeContact(id) {     // admin only (rules)
@@ -600,7 +698,7 @@ RWG.hh = (function () {
     findDupContact, upcomingBirthdays,
     parseTags, allTags, hasTag,
     addHousehold, saveHousehold, setA360, deleteHousehold, reattachHousehold,
-    addContact, saveContact, setAdvisorstream, removeContact,
+    addContact, saveContact, setAdvisorstream, removeContact, moveScope, moveContact,
     linkHouseholds, unlinkHouseholds,
     convertLead, createFromGrouping,
     _cache: cache

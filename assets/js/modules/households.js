@@ -221,8 +221,17 @@ window.RWG = window.RWG || {};
              style="cursor:pointer;background:rgba(14,36,64,.05);color:var(--navy);border:1px solid var(--line);font-weight:600">${esc(t.tag)}</button>`).join('')}</div>`
       : '';
 
+    // Adding to a family that already exists: the person may already be in
+    // the book under another household. Finding them here opens the move
+    // with this family chosen, rather than typing in a second copy of them.
+    const existingBlock = (!c && hhId) ? `
+      <div class="field-group"><label class="lbl">Already in the book?</label>
+        ${U().pickerHtml({ id: 'p-existing', placeholder: 'Search contacts to bring them into this family…' })}
+        <div class="hint">Pick someone and they move here with their history. Someone new? Fill in the form below.</div></div>` : '';
+
     modal(c ? 'Edit person' : 'Add a person',
       c ? '' : (needsHh ? 'Everyone belongs to a household — pick one or start a new one.' : 'Spouses, children, anyone who belongs to this family.'), `
+      ${existingBlock}
       <div class="field-row">
         <div class="field-group"><label class="lbl">First name</label><input id="p-first" value="${esc(v('firstName'))}"></div>
         <div class="field-group"><label class="lbl">Last name</label><input id="p-last" value="${esc(v('lastName'))}"></div>
@@ -298,7 +307,147 @@ window.RWG = window.RWG || {};
       hhSel.addEventListener('change', sync);
       sync();
     }
+    if (existingBlock) U().pickerInit({ id: 'p-existing', types: ['contact'], create: false,
+      onPick: (rec) => {
+        if (!rec) return;
+        const p = H().contact(rec.id);
+        if (p && p.householdId === hhId) { U().toast((H().callName(p) || 'They') + ' is already in this family'); return; }
+        moveModal(rec.id, hhId);
+      } });
     const first = document.getElementById('p-first'); if (first && !c) first.focus();
+  }
+
+  /* ── Moving a person to another family ─────────────────────
+     Carlos, 29 Oct '26: the family screens could add a person but never
+     take one out or move them, so a spouse moving out or an adult child
+     starting their own household had nowhere to go but a delete. Removing
+     someone from a family now means moving them — to another household or
+     to a new one of their own — and the record, the notes and the history
+     go with them. Deleting a person stays a partner's, and says so.
+
+     What goes along is counted from the same scope the move itself uses
+     (moveScope), so the sentence in the window is the move, not a guess.
+
+     Reached from a person's row, from their record, and from ＋ Person on
+     the family they are joining — that one arrives with the destination
+     already chosen. */
+  function moveModal(id, toId) {
+    const c = H().contact(id); if (!c) return;
+    const from = c.householdId ? H().household(c.householdId) : null;
+    const name = H().contactName(c) || 'this person';
+    const first = H().callName(c) || name;
+    const rest = from ? H().contactsFor(from.id).filter(p => p.id !== c.id) : [];
+    const heirAsk = c.relationship === 'Primary client' && rest.length > 0;
+    const heirDefault = (rest.find(p => p.relationship === 'Spouse') || rest[0] || {}).id;
+    const addrAsk = !H().hasAddress(c.address) && from && H().hasAddress(from.address);
+    const scope = H().moveScope(id);
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const items = [scope.caseIds.length ? plural(scope.caseIds.length, 'opportunity', 'opportunities') : '',
+      scope.taskIds.length ? plural(scope.taskIds.length, 'task', 'tasks') : '']
+      .filter(Boolean).concat(['their notes', 'key dates']);
+    const going = items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+    /* "Lopez Household" is the obvious name for a family of their own —
+       unless that is the family they are leaving, or any other already in
+       the book, and then two families would answer to one name. */
+    const taken = (n) => H().households().some(x => String(x.name || '').trim().toLowerCase() === n.toLowerCase());
+    const plain = (c.lastName || first) + ' Household';
+    const newName = taken(plain) ? (H().contactName(c) || first) + ' Household' : plain;
+    const relOpts = H().RELATIONSHIPS.map(r => `<option>${esc(r)}</option>`).join('');
+    const choice = (val, label, on) => `<label class="checkitem"><input type="radio" name="mv-where" value="${val}" ${on ? 'checked' : ''}> ${label}</label>`;
+
+    modal('Move ' + esc(name),
+      from ? 'Out of the ' + esc(from.name) + '.' : 'Into a household.', `
+      <div class="field-group"><label class="lbl">Where to</label>
+        <div class="checkrow" style="margin:0 0 8px">${choice('hh', 'Another household', true)}${choice('new', 'A new household of their own', false)}</div>
+        <div id="mv-hh-box">${U().pickerHtml({ id: 'mv-hh', type: toId ? 'household' : null, recordId: toId || null,
+          placeholder: 'Search households…' })}</div>
+        <div id="mv-new-box" style="display:none"><input id="mv-new" value="${esc(newName)}"></div></div>
+      <div class="field-group"><label class="lbl">What they are to the family they join</label>
+        <select id="mv-rel">${relOpts}</select></div>
+      ${heirAsk ? `<div class="field-group"><label class="lbl">Primary client of the ${esc(from.name)} from now on</label>
+        <select id="mv-heir">${rest.map(p => `<option value="${esc(p.id)}" ${p.id === heirDefault ? 'selected' : ''}>${esc(H().contactName(p) || '(no name)')}${p.relationship ? ' · ' + esc(p.relationship) : ''}</option>`).join('')}</select></div>` : ''}
+      ${addrAsk ? `<div class="field-group"><label class="checkitem"><input type="checkbox" id="mv-keepaddr">
+          Keep ${esc(H().addrLine(from.address))} as their own address</label>
+        <div class="hint">Leave it unticked and they use the address of the family they join.</div></div>` : ''}
+      <div class="hint">Going with them: ${esc(going)}.</div>`,
+      `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+       <button class="btn btn-gold" data-action="hh-move-save" data-id="${esc(c.id)}">Move ${esc(first)}</button>`);
+
+    /* The relationship follows the destination until somebody picks one.
+       Into an empty family they are its primary client; into one that has
+       people they keep what they were, unless that was primary, which the
+       family they join already has. */
+    const rel = document.getElementById('mv-rel');
+    let relTouched = false;
+    const settleRel = () => {
+      if (relTouched || !rel) return;
+      const where = (document.querySelector('input[name="mv-where"]:checked') || {}).value;
+      const p = U().pickerValue('mv-hh');
+      const n = where === 'new' ? 0 : (p.id ? H().contactsFor(p.id).length : 1);
+      rel.value = !n ? 'Primary client'
+        : (c.relationship && c.relationship !== 'Primary client' ? c.relationship : 'Other');
+    };
+    if (rel) rel.addEventListener('change', () => { relTouched = true; });
+    // Direct wiring, as personModal does: this window opens over the
+    // Contacts view too, where the kernel would not route its events here.
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="mv-where"]'), r =>
+      r.addEventListener('change', () => {
+        const isNew = r.value === 'new' && r.checked;
+        document.getElementById('mv-hh-box').style.display = isNew ? 'none' : '';
+        document.getElementById('mv-new-box').style.display = isNew ? '' : 'none';
+        if (isNew) { const n = document.getElementById('mv-new'); if (n) n.focus(); }
+        settleRel();
+      }));
+    U().pickerInit({ id: 'mv-hh', types: ['household'], create: false,
+      type: toId ? 'household' : null, recordId: toId || null, onPick: settleRel });
+    settleRel();
+  }
+
+  function doMove(id) {
+    const c = H().contact(id); if (!c) return;
+    const fromId = c.householdId || null;
+    const from = fromId ? H().household(fromId) : null;
+    const isNew = (document.querySelector('input[name="mv-where"]:checked') || {}).value === 'new';
+    const opts = {
+      relationship: g('mv-rel') || 'Other',
+      keepAddress: !!(document.getElementById('mv-keepaddr') || {}).checked,
+      newPrimaryId: g('mv-heir') || null
+    };
+    if (isNew) {
+      opts.newName = g('mv-new').trim();
+      if (!opts.newName) { U().toast('Name the new household'); return; }
+    } else {
+      if (!U().pickerSettle('mv-hh')) return;
+      opts.toId = U().pickerValue('mv-hh').id;
+      if (!opts.toId) { U().toast('Pick the household they are moving to'); return; }
+      if (opts.toId === fromId) { U().toast('They are already in that household'); return; }
+    }
+    const first = H().callName(c) || H().contactName(c) || 'They';
+    H().moveContact(id, opts).then(to => {
+      mount().innerHTML = '';
+      RWG.app.renderMain();
+      U().toast('Moved ' + first + ' to the ' + to.name, true);
+      // A family nobody is left in is a shell. A partner is offered the
+      // delete; anyone else is told, because only a partner can do it.
+      if (!from || H().contactsFor(from.id).length) return;
+      const partner = RWG.app.effectiveRole ? RWG.app.effectiveRole() === 'admin' : RWG.auth.isAdmin();
+      if (!partner) { U().toast('The ' + from.name + ' has nobody left in it — a partner can delete it'); return; }
+      const sd = RWG.scorecardData;
+      const left = (sd && sd.isStarted()) ? sd.cases().filter(x => x.householdId === from.id).length : 0;
+      if (!confirm('Nobody is left in the ' + from.name + '. Delete it?'
+        + (left ? ' ' + (left === 1 ? '1 opportunity is still filed on the family and keeps its own record.'
+          : left + ' opportunities are still filed on the family and keep their own records.') : '')
+        + ' It goes to the Trash, where it can be restored.')) return;
+      H().deleteHousehold(from.id).then(() => {
+        U().toast(from.name + ' deleted', true);
+        // Only leave the screen if it was the family just deleted. currentId
+        // outlives a visit, so the view is asked as well — a move made from
+        // the person's own record must not throw you out of it.
+        const onIt = st.currentId === from.id && RWG.app.state && RWG.app.state.view === 'household';
+        if (!onIt) { RWG.app.renderMain(); return; }
+        if (!toHouseholdList()) { st.currentId = null; RWG.app.nav('households'); }
+      }).catch(e => U().toast('Could not delete: ' + (e && e.message)));
+    }).catch(e => U().toast((e && e.message) || 'Could not move them — try again'));
   }
 
   function linkModal(hhId) {
@@ -566,7 +715,8 @@ window.RWG = window.RWG || {};
           ${c.leadId && D().lead(c.leadId) ? `<button class="btn btn-quiet btn-sm" data-action="open-lead" data-id="${esc(c.leadId)}" title="The lead record this person came from — full call history">History</button>` : ''}
           <button class="btn btn-quiet btn-sm" data-action="kd-add" data-contact="${esc(c.id)}" title="Add a key date for this person">⭐ Date</button>
           <button class="btn btn-quiet btn-sm" data-action="hh-person-edit" data-id="${esc(c.id)}">Edit</button>
-          ${isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Remove this person (admin)">✕</button>` : ''}
+          <button class="btn btn-quiet btn-sm" data-action="hh-person-move" data-id="${esc(c.id)}" title="Take them out of this family — into another household or one of their own. Their history goes with them.">Move</button>
+          ${isAdmin ? `<button class="btn btn-quiet btn-sm" data-action="hh-person-remove" data-id="${esc(c.id)}" title="Delete this person from the book (partner) — to take them out of the family instead, use Move">✕</button>` : ''}
         </td>
       </tr>`).join('');
 
@@ -966,6 +1116,8 @@ window.RWG = window.RWG || {};
       // people
       'hh-person-add': (el) => personModal(el.dataset.id, null),
       'hh-person-edit': (el) => { const c = H().contact(el.dataset.id); if (c) personModal(c.householdId, c); },
+      'hh-person-move': (el) => moveModal(el.dataset.id, el.dataset.to || null),
+      'hh-move-save': (el) => doMove(el.dataset.id),
       'hh-person-save': (el) => {
         let added = null;
         const fields = {
@@ -1023,7 +1175,10 @@ window.RWG = window.RWG || {};
       'hh-em-del': (el) => dropWayRow(el, 'p-emails', 'email'),
       'hh-person-remove': (el) => {
         const c = H().contact(el.dataset.id); if (!c) return;
-        if (!confirm(`Remove ${H().contactName(c)} from this household?`)) return;
+        // This deletes the person, and used to ask as though it only took
+        // them out of the family. Moving is the other door now; say which.
+        if (!confirm(`Delete ${H().contactName(c)} from the book? Their record goes to the Trash.`
+          + ' To take them out of this family but keep them, use Move instead.')) return;
         H().removeContact(c.id).then(() => RWG.app.renderMain());
       },
       'hh-as-toggle': (el) => {
