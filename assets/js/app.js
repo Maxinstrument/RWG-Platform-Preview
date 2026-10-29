@@ -134,8 +134,43 @@ RWG.app = (function () {
   function onAuthChange() {
     const u = RWG.auth.currentUser();
     if (!u || u.status !== 'active') { _dataReady = false; D.teardown(); render(); return; }
-    if (!_dataReady) { _dataReady = true; D.init(u, render); }   // render() re-fires on each Firestore snapshot
+    if (!_dataReady) { _dataReady = true; D.init(u, onData); }   // onData() re-fires on each Firestore snapshot
     render();
+  }
+
+  /* Somebody else's save is a repaint, not a restart.
+     Carlos, 29 Oct '26: "if another member saves … my task window closes
+     and everything that I was typing does not get saved and goes away."
+     Reproduced in a headless copy of the app: it was not their task save.
+     The users, leads and scoring listeners were wired to render(), which
+     rebuilds the whole shell — and the modal and drawer mounts are part of
+     the shell, so whatever window was open went with it, mid-sentence. A
+     partner hears every lead in the firm, so any agent logging a call
+     closed the partner's open window; an agent's own lead drawer closed
+     the same way.
+
+     render() was there for the sidebar: the pending-approval badge reads
+     the users list. The badges are now repainted in place, the page under
+     the windows repaints, and the windows are left alone. The open lead
+     drawer stays open too, and is closed only if its lead has gone. */
+  function onData() {
+    if (!$('#app')) { render(); return; }      // nothing painted yet: the first paint is the whole app
+    if (state.leadId && !D.lead(state.leadId)) closeDrawer();
+    renderMain();
+  }
+  // The nav's counts, repainted in place. Rebuilding the sidebar to change a
+  // number is what used to take every open window down with it.
+  function paintBadges() {
+    RWG.modules.navFor(effectiveRole()).forEach(n => {
+      if (!n.badge || n.where === 'user') return;
+      const item = document.querySelector('.nav-item[data-view="' + n.view + '"]');
+      if (!item) return;
+      const v = n.badge() || 0;
+      let b = item.querySelector('.badge');
+      if (!v) { if (b) b.remove(); return; }
+      if (!b) { b = document.createElement('span'); b.className = 'badge'; item.appendChild(b); }
+      b.textContent = String(v);
+    });
   }
   function bootScreen(msg) {
     return `<div id="gate"><div class="gate-card" style="text-align:center">
@@ -305,7 +340,8 @@ RWG.app = (function () {
     if (!real) return render();
     const user = effectiveUser(), role = effectiveRole();
     setMeta();
-    const ctx = { role, search: state.search, isAdmin: role === 'admin', filter: currentFilter(), columns: currentCols(), selected: state.selected, assignTarget: state.assignTarget };
+    paintBadges();   // every data layer repaints through here, so the counts keep up with all of them
+    const ctx ={ role, search: state.search, isAdmin: role === 'admin', filter: currentFilter(), columns: currentCols(), selected: state.selected, assignTarget: state.assignTarget };
     const mod = RWG.modules.moduleForView(state.view);
     const html = mod
       ? mod.render(state.view, user, ctx)
