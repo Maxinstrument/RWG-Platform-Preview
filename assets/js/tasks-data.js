@@ -379,6 +379,32 @@ RWG.tasks = (function () {
     });
   }
 
+  /* ── Move several tasks to one day ──
+     Carlos, 29 Oct '26: "move multiple tasks at once into a future day of
+     my picking." An update of the date and nothing else, not a full set of
+     each cached task: somebody else may have the same task open, and moving
+     its day is no reason to overwrite the note they just saved.
+
+     The cache moves first and the screen repaints on it, the same as a
+     delete, so the rows land in their new group the moment the button is
+     pressed; the batch settles behind it and the listener confirms it. */
+  function redate(ids, dueDate) {
+    const list = (ids || []).map(task).filter(Boolean);
+    if (!list.length || !dueDate) return Promise.resolve(0);
+    const stamp = now();
+    list.forEach(t => { t.dueDate = dueDate; t.updatedAt = stamp; });
+    onChange();
+    const chunks = [];                      // a Firestore batch caps at 500
+    for (let i = 0; i < list.length; i += 400) chunks.push(list.slice(i, i + 400));
+    return chunks.reduce((p, ch) => p.then(() => {
+      const b = db().batch();
+      ch.forEach(t => b.update(db().collection('tasks').doc(t.id), { dueDate: dueDate, updatedAt: stamp }));
+      return b.commit();
+    }), Promise.resolve())
+      .then(() => list.length)
+      .catch(e => { console.error('move tasks:', e && e.message); throw e; });
+  }
+
   function removeTask(id) {   // admin only (rules)
     const t = task(id);
     cache.tasks = cache.tasks.filter(x => x.id !== id);
@@ -391,7 +417,7 @@ RWG.tasks = (function () {
   return {
     init, teardown, isStarted,
     all, task, open, openFor, groupByDue, dueCount, doneThisWeek, todayKey,
-    addTask, saveTask, toggleDone, removeTask, reassign,
+    addTask, saveTask, toggleDone, removeTask, reassign, redate,
     categories, addCategory, CATEGORY_MAX,
     nextDue, DEFAULT_CATEGORIES, PRIORITIES, REPEATS,
     repairCategories,   // the retired-word migration, exposed so it can be pinned

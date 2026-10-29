@@ -1027,6 +1027,9 @@ button.list-group:hover{background:rgba(14,36,64,.05);}
   .user-chip{padding:4px;border:none;background:transparent;}
   .user-chip .meta{display:none;}            /* keep just the avatar on small screens */
   .card{padding:18px 16px;}
+  /* Select mode puts four controls beside the Tasks title; on a phone the
+     last two ran off the card. They take a second line instead. */
+  .tk-head{flex-wrap:wrap;row-gap:8px;}
 
   /* Comfortable tap targets (≈44px) */
   .btn{min-height:44px;}
@@ -1328,6 +1331,8 @@ th .cs-th:hover{color:var(--gold);}
 .list-toolbar .lbl,.list-toolbar .cell-sub{margin:0;white-space:nowrap;}
 /* "Filtering by [x] assigned to [y]" reads as a sentence, not a form */
 .list-toolbar .tb-word{font-size:13px;color:var(--muted);white-space:nowrap;}
+/* Today / Tomorrow sit beside the date in a toolbar, not under it as on a form. */
+.list-toolbar .dq-row{margin-top:0;}
 
 /* ── Tags ─────────────────────────────────────────────────
    A tag is a filter you can click, so it is a button everywhere

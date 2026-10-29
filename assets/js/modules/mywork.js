@@ -32,7 +32,7 @@ window.RWG = window.RWG || {};
   // who: 'me' | 'all' | a uid.  Everything stays visible either way.
   // sel: null = the ordinary list; {} = select mode, ids → 1 while picking.
   // chain: show the workflow steps that are waiting on an earlier step.
-  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '', sel: null, chain: false };
+  const st = { who: 'me', when: 'upcoming', kind: 'all', cat: '', sel: null, moveTo: '', chain: false };
 
   /* Which day groups are folded shut. Kept on the device, not the record:
      it is how one person likes to read the screen, not something about the
@@ -506,23 +506,30 @@ window.RWG = window.RWG || {};
 
     const count = st.when === 'completed' ? list.length
       : Object.keys(gps).reduce((n, k) => n + gps[k].length, 0);
+    const picked = st.sel ? Object.keys(st.sel).length : 0;
 
     return `<div class="mw-stack">
       ${rail ? `<div class="mw-top">${rail}</div>` : ''}
       <div class="card flush">
-        <div class="list-head">
+        <div class="list-head tk-head">
           <span class="t">Tasks</span>
           <span class="s">${gps.overdue.length ? gps.overdue.length + ' overdue · ' : ''}${count} shown</span>
           <span class="topbar-spacer"></span>
           ${st.sel ? `
-            <span class="cell-sub" style="font-weight:700">${Object.keys(st.sel).length} selected</span>
+            <span class="cell-sub" style="font-weight:700">${picked} selected</span>
             <button class="btn btn-quiet btn-sm" data-action="tk-sel-all">All shown</button>
-            <button class="btn btn-sm" style="background:rgba(178,58,72,.09);color:var(--bad);border:1px solid rgba(178,58,72,.35)"
-              data-action="tk-del-sel" ${Object.keys(st.sel).length ? '' : 'disabled'}>Move to Trash</button>
+            ${canDelete() ? `<button class="btn btn-sm" style="background:rgba(178,58,72,.09);color:var(--bad);border:1px solid rgba(178,58,72,.35)"
+              data-action="tk-del-sel" ${picked ? '' : 'disabled'}>Move to Trash</button>` : ''}
             <button class="btn btn-quiet btn-sm" data-action="tk-sel-off">Cancel</button>`
-          : `${canDelete() ? '<button class="btn btn-quiet btn-sm" data-action="tk-sel-on" title="Pick several tasks to move to the Trash at once">Select</button>' : ''}
+          : `<button class="btn btn-quiet btn-sm" data-action="tk-sel-on" title="Pick several tasks to move to another day${canDelete() ? ', or to the Trash' : ''}">Select</button>
             <button class="btn btn-gold btn-sm" data-action="tk-new">＋ Add task</button>`}
         </div>
+        ${st.sel ? `<div class="list-toolbar tk-move">
+          <span class="tb-word">Move to</span>
+          <input id="tk-move-date" type="date" min="${today}" value="${esc(st.moveTo || '')}">
+          ${U().dateQuick('tk-move-date', st.moveTo || '')}
+          <button class="btn btn-navy btn-sm" data-action="tk-move-sel" ${picked ? '' : 'disabled'}>Move ${picked || ''} ${picked === 1 ? 'task' : 'tasks'}</button>
+        </div>` : ''}
         <div class="list-toolbar tb-wrap">
           ${sel('tk-f-when', whenOpts)}
           ${sel('tk-f-kind', kindOpts)}
@@ -635,6 +642,10 @@ window.RWG = window.RWG || {};
 
     onChange(e) {
       const map = { 'tk-f-when': 'when', 'tk-f-kind': 'kind', 'tk-f-who': 'who', 'tk-f-cat': 'cat' };
+      // Remembered, not repainted: picking rows repaints the screen, and the
+      // day chosen first has to survive that. A repaint here would also
+      // throw the caret out of the date box halfway through typing a year.
+      if (e.target.id === 'tk-move-date') { st.moveTo = e.target.value; return; }
       const key = map[e.target.id];
       if (!key) return;
       st[key] = e.target.value;
@@ -735,19 +746,57 @@ window.RWG = window.RWG || {};
         });
       },
       // ── selection & deletion (partners; everything goes via the Trash) ──
-      'tk-sel-on': () => { st.sel = {}; RWG.app.renderMain(); },
-      'tk-sel-off': () => { st.sel = null; RWG.app.renderMain(); },
+      'tk-sel-on': () => { st.sel = {}; st.moveTo = ''; RWG.app.renderMain(); },
+      'tk-sel-off': () => { st.sel = null; st.moveTo = ''; RWG.app.renderMain(); },
       'tk-sel': (el) => {
         if (!st.sel) return;
         if (st.sel[el.dataset.id]) delete st.sel[el.dataset.id];
         else st.sel[el.dataset.id] = 1;
         RWG.app.renderMain();
       },
+      /* "All shown" means the rows on the screen, read off the screen.
+         It used to take base(), which is the list BEFORE the When slice
+         and the chain filter: on Overdue it picked every open task in the
+         book, future ones included, plus the chained steps nobody can see.
+         Harmless while the only thing to do with a selection was a partner
+         reading a count in a confirm box; not once the same button feeds
+         Move, where nobody is asked twice. A folded group shows no rows,
+         so it contributes none — what you can see is what you get. */
       'tk-sel-all': () => {
         if (!st.sel) return;
-        const eff = RWG.app.effectiveUser ? RWG.app.effectiveUser() : RWG.auth.currentUser();
-        base(eff.id).forEach(t => { st.sel[t.id] = 1; });
+        document.querySelectorAll('.list-row[data-action="tk-sel"][data-id]')
+          .forEach(r => { st.sel[r.dataset.id] = 1; });
         RWG.app.renderMain();
+      },
+      /* Several tasks, one new day. Carlos, 29 Oct '26: "the ability in the
+         Task section to move multiple tasks at once into a future day of my
+         picking."
+
+         Open to everyone, unlike the Trash beside it. Anybody can already
+         re-date a task one at a time from its window, so doing it to five
+         at once is the same power with fewer clicks, not a new one.
+
+         Today or later only: a day already gone would turn every task in
+         the batch overdue the moment it landed, and nobody picks that on
+         purpose. Completed tasks ride along in a selection but are left
+         where they are — moving the due date of finished work only makes
+         its history wrong. */
+      'tk-move-sel': () => {
+        if (!st.sel) return;
+        const day = g('tk-move-date') || st.moveTo || '';
+        if (!day) { U().toast('Pick the day to move them to'); return; }
+        if (day < T().todayKey()) { U().toast('That day has passed — pick today or later'); return; }
+        const sel = Object.keys(st.sel).map(id => T().task(id)).filter(Boolean);
+        const ids = sel.filter(t => t.status !== 'done').map(t => t.id);
+        const skipped = sel.length - ids.length;
+        if (!ids.length) { U().toast('Nothing to move — completed tasks keep their dates'); return; }
+        const when = U().fmtDate(Date.parse(day + 'T12:00:00'));
+        st.sel = null; st.moveTo = '';
+        T().redate(ids, day)
+          .then(() => U().toast('Moved ' + ids.length + (ids.length === 1 ? ' task' : ' tasks') + ' to ' + when
+            + (skipped ? ' (' + skipped + ' completed left alone)' : ''), true))
+          .catch(() => U().toast('Some did not move — check their dates and try again'));
+        RWG.app.renderMain();   // the cache already moved; paint now, settle later
       },
       'tk-del-sel': () => {
         if (!st.sel) return;
