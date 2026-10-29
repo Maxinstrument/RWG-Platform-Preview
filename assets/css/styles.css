@@ -1223,8 +1223,17 @@ input.sc-daycell{width:54px;min-height:34px;text-align:center;padding:6px 4px;ma
    so every card the view concatenated sat flush against the next while the
    one or two that happened to have an ad-hoc margin stood apart. One flow
    container spaces all of them the same, on the same 18px rhythm as .grid,
-   instead of each card remembering to space itself. */
-.rp-flow{display:grid;gap:var(--s4);}
+   instead of each card remembering to space itself.
+
+   minmax(0,1fr) is the same lesson as .main's min-width:0, one level down.
+   Carlos, 29 Oct '26: on a phone the Production tables would not scroll
+   sideways, so the columns past the edge could not be reached. The column
+   this grid makes by default will not shrink below its widest card, so the
+   card holding a ten-column table grew to 938px on a 390px phone: the
+   table-wrap was as wide as its table, had nothing to scroll, and .main
+   clipped the rest. A zero floor keeps every card to the screen, and the
+   table-wrap scrolls the way it does on Leads and Build a report. */
+.rp-flow{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s4);}
 .rp-glance{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
 .rp-total td{border-top:2px solid var(--line-strong);font-weight:700;background:var(--field);}
 
