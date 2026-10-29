@@ -522,8 +522,14 @@ window.RWG = window.RWG || {};
         const on = x ? ' <span class="cell-sub">on ' + esc(x.title || (RWG.scorecard ? RWG.scorecard.productName(x.product) : 'an opportunity')) + '</span>' : '';
         if (t.createdAt) ev.push({ at: t.createdAt, who: t.createdByName || t.assigneeName,
           kind: 'task', txt: 'created the task <b>' + esc(t.title) + '</b>' + on });
+        /* The task's note rides on the line that says it was done.
+           Carlos, 29 Oct '26: "when I press Complete … the task goes away
+           but does not save the new note I placed." It had saved — the
+           window writes the note before it ticks — but the task left
+           Upcoming and the line that replaced it said only "completed",
+           so the why was on the task and nowhere on the person. */
         if (t.status === 'done' && t.doneAt) ev.push({ at: t.doneAt, who: t.assigneeName,
-          kind: 'done', txt: 'completed <b>' + esc(t.title) + '</b>' + on });
+          kind: 'done', txt: 'completed <b>' + esc(t.title) + '</b>' + on, body: t.note || '' });
       });
     }
     historyRows(c).forEach(e => ev.push({ at: e.at, who: e.who, kind: 'stamp', txt: esc(e.t) + (e.s ? ' <span class="cell-sub">· ' + esc(e.s) + '</span>' : '') }));
