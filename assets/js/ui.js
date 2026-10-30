@@ -719,35 +719,62 @@ RWG.ui = (function () {
      last entry — and the Enter that separated them was his to remember.
 
      So the stamp always goes to the very top, whatever was clicked last,
-     and the older notes drop a line. It is the same Enter he was pressing
-     by hand, done by the browser, so the line it makes is the same kind
-     of line and Ctrl+Z still takes it back. The caret then steps back up,
-     to just after the stamp, ready for the words.
+     and the older notes drop a line, with the caret just after the stamp,
+     ready for the words.
 
-     The top is found by walking to the first real text, not by aiming at
-     the editor's own first slot: that slot sits BEFORE the first line's
-     block, and a stamp typed there can end up outside it, a line of its
-     own the next Enter does not split the way it should. An empty editor
-     gets the stamp and nothing else — there is nothing to push down. */
+     Its own line, built rather than typed. Carlos, 29 Oct '26: "sometimes
+     when I press Insert Date it starts in bold, and when I type I continue
+     to be in bold." The first version typed the stamp into the start of
+     the first line, so when that line began in bold — an earlier entry, a
+     pasted heading — the stamp took the bold and so did everything after
+     it. Now the stamp is a new line of its own above everything: the
+     date, time and name in bold so each entry is easy to find, then a
+     plain dash, and the caret after the dash, so typing is plain whatever
+     the old notes look like. The price is that Ctrl+Z no longer takes the
+     stamp back; it is one line, and deleting it by hand is easy. */
   function stampTop(ed) {
-    const sel = window.getSelection();
-    const hadText = !!String(ed.innerText || ed.textContent || '').replace(/ /g, ' ').trim();
-    const walk = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
-      acceptNode: (n) => (n.nodeType === 3 ? n.nodeValue.trim() : n.nodeName === 'BR')
-        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
-    });
-    const first = walk.nextNode();
+    // An emptied box still holds the <br> a browser leaves behind; the
+    // stamp should be the whole of it, not a line above a blank one.
+    if (!String(ed.innerText || ed.textContent || '').replace(/ /g, ' ').trim()) ed.innerHTML = '';
+    const s = dateStamp();                       // "10/29/2026 3:05 PM · Carlos Temperan — "
+    const cut = s.lastIndexOf(' — ');
+    const line = document.createElement('div');
+    const head = document.createElement('b');
+    head.textContent = cut > 0 ? s.slice(0, cut) : s.trim();
+    // The dash and the space after it are plain, and the caret lands after
+    // them, so the words that follow are plain too. A non-breaking space,
+    // because a plain one at the end of a line collapses and the caret
+    // would sit on the dash; unNbsp turns it back into a space on save.
+    const tail = document.createTextNode(' — ');
+    line.appendChild(head); line.appendChild(tail);
+    ed.insertBefore(line, ed.firstChild);
     const at = document.createRange();
-    if (!first) at.setStart(ed, 0);
-    else if (first.nodeType === 3) at.setStart(first, 0);
-    else at.setStartBefore(first);
-    at.collapse(true);
+    at.setStart(tail, tail.length); at.collapse(true);
+    const sel = window.getSelection();
     sel.removeAllRanges(); sel.addRange(at);
-    document.execCommand('insertText', false, dateStamp());
-    if (!hadText) return;
-    document.execCommand('insertParagraph', false, null);
-    if (sel.modify) sel.modify('move', 'backward', 'character');
   }
+
+  /* ── Pasting is words, not someone else's formatting ───────
+     Carlos, 29 Oct '26: "if I Copy and Paste, the Paste does not carry the
+     design from before but to be plain text." A paste from an email or a
+     web page brought its fonts, sizes and colours along, and they stayed
+     in the note for everyone. Now only the words come in, line breaks
+     kept, and they take on whatever the caret is already in — exactly as
+     if they had been typed there.
+
+     A clipboard holding no words at all (a picture on its own) is left to
+     the browser, as it always was. */
+  document.addEventListener('paste', (e) => {
+    const ed = (e.target && e.target.closest) ? e.target.closest('.rt-body[contenteditable="true"]') : null;
+    if (!ed || !e.clipboardData) return;
+    const text = e.clipboardData.getData('text/plain') || '';
+    if (!text) return;
+    e.preventDefault();
+    text.replace(/\r\n?/g, '\n').split('\n').forEach((ln, i) => {
+      if (i) document.execCommand('insertParagraph', false, null);
+      if (ln) document.execCommand('insertText', false, ln);
+    });
+  });
 
   // ── CSV out ───────────────────────────────────────────────
   // One implementation, so every screen that exports produces a file
